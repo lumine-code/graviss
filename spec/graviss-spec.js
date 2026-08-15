@@ -626,6 +626,41 @@ describe("graviss", () => {
     expect(item.renderer.captureCameraState().target).toEqual(moved.target);
   });
 
+  it("keeps every view setting per graphic across switches", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    expect(item.activeGraphic.id).toBe("overview");
+
+    // Give the first graphic a distinct state of every kind.
+    item.toggleSectionRendering();
+    item.setVisibility("nodes", false);
+    item.setAppearance("midnight");
+    expect(item.isSectionRenderingEnabled()).toBe(false);
+
+    // The second graphic keeps its own document state, untouched by the first.
+    item.switchGraphic(1);
+    expect(item.activeGraphic.id).not.toBe("overview");
+    expect(item.isSectionRenderingEnabled()).toBe(true);
+    expect(item.renderer.isSectionRendering()).toBe(true);
+    expect(
+      item.element.querySelector('[data-action="toggle-sections"]').getAttribute("aria-pressed"),
+    ).toBe("true");
+
+    // Returning restores the first graphic's complete state.
+    item.switchGraphic(-1);
+    expect(item.activeGraphic.id).toBe("overview");
+    expect(item.isSectionRenderingEnabled()).toBe(false);
+    expect(item.renderer.isSectionRendering()).toBe(false);
+    expect(item.isVisible("nodes")).toBe(false);
+    expect(item.renderer.activeAppearance).toBe("midnight");
+
+    // The state lives in the document, so it survives serialization too.
+    const graphic = item.viewDocument.getData().graphics.find(({ id }) => id === "overview");
+    expect(graphic.sectionRendering).toBe(false);
+    expect(graphic.visibility.nodes).toBe(false);
+    expect(graphic.appearance).toBe("midnight");
+  });
+
   it("debounces wheel zoom into one camera history snapshot", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(

@@ -7,7 +7,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Engineering viewport**: orbits, pans, zooms, fits, and switches between standard camera views and projection modes.
 - **Model geometry**: switches beam members, shells, nodes, supports, mesh lines, grids, and global or element-local axes independently, in the model's declared coordinate system.
 - **Section profiles**: renders rectangular, circular, tubular, tee, and polygonal beam sections with instanced meshes.
-- **Multiple graphics**: stores several named graphics, independent cameras, visibility, appearance, and the last active graphic in one `.grv` file.
+- **Multiple graphics**: stores several named graphics in one `.grv` file, each with its own camera, visibility, section rendering, and appearance.
 - **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state, and conflicted-save handling.
 - **Document history**: records camera and toolbar changes in a private `TextBuffer` so Undo and Redo cover the complete view document.
 - **Navigation integration**: exposes named graphics to the navigation panel and activates a graphic when its outline entry is selected.

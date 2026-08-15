@@ -292,6 +292,10 @@ describe("GravissViewDocument", () => {
     const missing = clone(EXAMPLES[0].viewDocument);
     missing.activeGraphicId = "missing";
     expect(() => validateViewDocument(missing)).toThrowError(/activeGraphicId/);
+
+    const badSections = clone(EXAMPLES[0].viewDocument);
+    badSections.graphics[0].sectionRendering = "yes";
+    expect(() => validateViewDocument(badSections)).toThrowError(/sectionRendering/);
   });
 });
 
