@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const GravissView = require("../lib/graviss-view");
-const { APPEARANCE_IDS } = require("../lib/appearance");
+const { APPEARANCE_IDS, appearanceDefinition } = require("../lib/appearance");
 const { CAMERA_VIEW_IDS } = require("../lib/camera-navigation");
 const {
   FRAME_MODEL,
@@ -538,11 +538,79 @@ describe("graviss", () => {
         .type,
     ).toBe("BoxGeometry");
 
+    // Rendered members carry their section contours in the mesh-line layer:
+    // the twelve edges of the unit box, stamped by the element's own matrix.
+    expect(item.renderer.memberContours.length).toBe(1);
+    const contours = item.renderer.memberContours[0];
+    expect(contours.isLineSegments).toBe(true);
+    expect(contours.geometry.getAttribute("position").count).toBe(24);
+    expect(contours.visible).toBe(true);
+    item.setVisibility("mesh", false);
+    expect(contours.visible).toBe(false);
+    item.setVisibility("mesh", true);
+    expect(contours.visible).toBe(true);
+
     const matrix = new item.renderer.THREE.Matrix4();
     const position = new item.renderer.THREE.Vector3();
     item.renderer.meshes.nodes.getMatrixAt(0, matrix);
     position.setFromMatrixPosition(matrix);
     expect(position.toArray()).toEqual([0, 0, 0]);
+    item.destroy();
+  });
+
+  it("gives a thick area element its thickness only while sections render", async () => {
+    const geometry = {
+      nodes: [
+        { id: 1, x: 0, y: 0, z: 0 },
+        { id: 2, x: 1, y: 0, z: 0 },
+        { id: 3, x: 1, y: 1, z: 0 },
+        { id: 4, x: 0, y: 1, z: 0 },
+      ],
+      sections: [],
+      elements: [{ id: 20, kind: "shell", nodeIds: [1, 2, 3, 4], thickness: 0.2 }],
+      supports: [],
+    };
+    const session = {
+      async describe() {
+        return {
+          model: {
+            id: "thick-shell",
+            title: "Thick shell",
+            source: "Spec",
+            coordinateSystem: { upAxis: "z", handedness: "right" },
+          },
+          capabilities: { geometry: { elementKinds: ["shell"], supports: false } },
+        };
+      },
+      async getGeometry() {
+        return geometry;
+      },
+      dispose() {},
+    };
+    const item = mainModule.createViewer(session, { title: "Thick shell" });
+    jasmine.attachToDOM(item.element);
+    await conditionPromise(() => item.renderer != null, "the thick-shell scene to initialize");
+
+    const zSpan = () => {
+      const positions = item.renderer.meshes.shells.geometry.getAttribute("position");
+      let minimum = Infinity;
+      let maximum = -Infinity;
+      for (let index = 0; index < positions.count; index += 1) {
+        minimum = Math.min(minimum, positions.getZ(index));
+        maximum = Math.max(maximum, positions.getZ(index));
+      }
+      return maximum - minimum;
+    };
+
+    // Section rendering draws a closed solid: both faces half the thickness
+    // either side, plus a side face for each of the four perimeter edges.
+    expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(36);
+    expect(zSpan()).toBeCloseTo(0.2, 6);
+
+    // Without it the element is its reference surface alone.
+    expect(item.toggleSectionRendering()).toBe("axis");
+    expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(6);
+    expect(zSpan()).toBe(0);
     item.destroy();
   });
 
@@ -856,6 +924,10 @@ describe("graviss", () => {
     expect(item.toggleSectionRendering()).toBe("section");
     expect(item.renderer.meshes.shells.material.visible).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(true);
+    // A rebuild outside applyTheme must not reset the mesh lines to white.
+    expect(item.renderer.meshes.shells.userData.gravissEdges.material.color.getHex()).toBe(
+      appearanceDefinition(item.renderer.activeAppearance).shellEdge,
+    );
   });
 
   it("opens .grv file paths as deduplicated canvas items and restores them", async () => {
