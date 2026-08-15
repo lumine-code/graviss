@@ -661,6 +661,83 @@ describe("graviss", () => {
     expect(graphic.appearance).toBe("midnight");
   });
 
+  it("marks the canvas conflicted when the source is saved under pending edits", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-conflict-"));
+    const viewPath = path.join(directory, "model.grv");
+    fs.writeFileSync(viewPath, `${JSON.stringify(MAIN_EXAMPLE.viewDocument, null, 2)}\n`);
+    const providerDisposable = mainModule.consumeGravissSource({
+      id: "conflict-models",
+      createSession: ({ filePath }) =>
+        filePath === viewPath ? new TestSession(MAIN_EXAMPLE) : null,
+    });
+
+    const item = await lumine.workspace.open(viewPath, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    await item.viewDocument.whenWatcherReady();
+    const editor = await mainModule.openSource(viewPath);
+    expect(item.isModified()).toBe(false);
+    expect(item.isInConflict()).toBe(false);
+
+    // Camera moves make the canvas modified, exactly like typing in an editor.
+    item.renderer.moveCamera("left");
+    item.flushPendingCameraHistory();
+    expect(item.isModified()).toBe(true);
+
+    // Saving the source editor changes the file under those pending edits.
+    const edited = JSON.parse(editor.getText());
+    edited.title = "Edited on disk";
+    editor.setText(`${JSON.stringify(edited, null, 2)}\n`);
+    await editor.save();
+    await conditionPromise(() => item.isInConflict(), "the canvas to report the conflict");
+
+    expect(item.isModified()).toBe(true);
+    expect(item.serialize().viewDocument.conflicted).toBe(true);
+
+    // The pane save flow resolves the conflict the way it does for an editor:
+    // it asks, cancel aborts the save, and overwrite commits the canvas state.
+    lumine.config.set("core.promptOnSaveConflictedFile", true);
+    const pane = lumine.workspace.paneForItem(item);
+    const confirm = spyOn(pane.applicationDelegate, "confirm").and.resolveTo(1);
+    let cancelled = null;
+    await pane.saveItem(item).catch((error) => (cancelled = error));
+    expect(confirm).toHaveBeenCalled();
+    expect(cancelled?.constructor?.name).toBe("SaveConflictedError");
+    expect(JSON.parse(fs.readFileSync(viewPath, "utf8")).title).toBe("Edited on disk");
+    expect(item.isInConflict()).toBe(true);
+
+    confirm.and.resolveTo(0);
+    await pane.saveItem(item);
+    expect(item.isInConflict()).toBe(false);
+    expect(item.isModified()).toBe(false);
+    expect(JSON.parse(fs.readFileSync(viewPath, "utf8")).title).toBe(MAIN_EXAMPLE.title);
+
+    // Deleting the file keeps the canvas open, like an editor tab, and one
+    // plain save writes the document back to its previous path. The settled
+    // state arrives with the did-delete event — the same signal the editor's
+    // interface consumes — not with the raw filesystem check.
+    const deleted = new Promise((resolve) => {
+      const subscription = item.onDidDelete(() => {
+        subscription.dispose();
+        resolve();
+      });
+    });
+    fs.rmSync(viewPath);
+    await deleted;
+    expect(item.isDeleted()).toBe(true);
+    expect(lumine.workspace.paneForItem(item)).toBe(pane);
+    expect(item.isModified()).toBe(false);
+    expect(item.shouldPromptToSave()).toBe(false);
+    lumine.config.set("core.promptOnCloseDeletedFile", true);
+    expect(item.shouldPromptToSave()).toBe(true);
+
+    await item.save();
+    expect(fs.existsSync(viewPath)).toBe(true);
+    expect(item.isDeleted()).toBe(false);
+    expect(JSON.parse(fs.readFileSync(viewPath, "utf8")).title).toBe(MAIN_EXAMPLE.title);
+
+    providerDisposable.dispose();
+  });
+
   it("debounces wheel zoom into one camera history snapshot", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(
