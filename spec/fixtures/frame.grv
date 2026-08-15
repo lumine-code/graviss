@@ -1,0 +1,65 @@
+{
+  "format": "graviss-view",
+  "version": 1,
+  "title": "Three-frame portal building",
+  "activeGraphicId": "overview",
+  "graphics": [
+    {
+      "id": "overview",
+      "title": "3D overview",
+      "camera": {
+        "projection": "perspective",
+        "position": [18.0893602116, -8.71639909982, 17.3058076389],
+        "target": [4, 5, 3.5],
+        "up": [0, 0, 1],
+        "fieldOfView": 42
+      },
+      "appearance": "cloud",
+      "visibility": {
+        "members": true,
+        "nodes": true,
+        "supports": true,
+        "grid": true,
+        "axes": true
+      }
+    },
+    {
+      "id": "plan",
+      "title": "Roof plan",
+      "camera": {
+        "projection": "orthographic",
+        "position": [4, 5, 25],
+        "target": [4, 5, 3.5],
+        "up": [0, 1, 0],
+        "frustumHeight": 15
+      },
+      "appearance": "paper",
+      "visibility": {
+        "members": true,
+        "nodes": false,
+        "supports": false,
+        "grid": true,
+        "axes": true
+      }
+    },
+    {
+      "id": "frame-elevation",
+      "title": "Frame elevation",
+      "camera": {
+        "projection": "orthographic",
+        "position": [4, -20, 3.5],
+        "target": [4, 0, 3.5],
+        "up": [0, 0, 1],
+        "frustumHeight": 10
+      },
+      "appearance": "white",
+      "visibility": {
+        "members": true,
+        "nodes": true,
+        "supports": true,
+        "grid": false,
+        "axes": true
+      }
+    }
+  ]
+}

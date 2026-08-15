@@ -1,0 +1,68 @@
+{
+  "format": "graviss-view",
+  "version": 1,
+  "title": "70 × 70 shell plate",
+  "activeGraphicId": "overview",
+  "graphics": [
+    {
+      "id": "overview",
+      "title": "Shell overview",
+      "camera": {
+        "projection": "perspective",
+        "position": [36.3724004606, -18.7277458452, 49.0275870396],
+        "target": [0, 0, 0],
+        "up": [0, 0, 1],
+        "fieldOfView": 42
+      },
+      "appearance": "cloud",
+      "visibility": {
+        "members": true,
+        "shells": true,
+        "nodes": false,
+        "supports": true,
+        "grid": true,
+        "axes": true
+      }
+    },
+    {
+      "id": "plan",
+      "title": "Full mesh plan",
+      "camera": {
+        "projection": "orthographic",
+        "position": [0, 0, 50],
+        "target": [0, 0, 0],
+        "up": [0, 1, 0],
+        "frustumHeight": 48
+      },
+      "appearance": "paper",
+      "visibility": {
+        "members": false,
+        "shells": true,
+        "nodes": false,
+        "supports": false,
+        "grid": false,
+        "axes": true
+      }
+    },
+    {
+      "id": "mesh-detail",
+      "title": "Center mesh detail",
+      "camera": {
+        "projection": "orthographic",
+        "position": [0, 0, 25],
+        "target": [0, 0, 0],
+        "up": [0, 1, 0],
+        "frustumHeight": 10
+      },
+      "appearance": "white",
+      "visibility": {
+        "members": false,
+        "shells": true,
+        "nodes": true,
+        "supports": false,
+        "grid": false,
+        "axes": false
+      }
+    }
+  ]
+}

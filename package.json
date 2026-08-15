@@ -1,0 +1,76 @@
+{
+  "name": "graviss",
+  "author": "lumine-code",
+  "version": "1.0.0",
+  "description": "Explore finite element models in an interactive engineering viewport.",
+  "keywords": [
+    "fem",
+    "structural-analysis",
+    "grv",
+    "threejs",
+    "engineering",
+    "viewer"
+  ],
+  "repository": "https://github.com/lumine-code/graviss",
+  "bugs": {
+    "url": "https://github.com/lumine-code/graviss/issues"
+  },
+  "homepage": "https://github.com/lumine-code/graviss#readme",
+  "license": "MIT",
+  "main": "./lib/main",
+  "files": [
+    "docs",
+    "keymaps",
+    "lib",
+    "menus",
+    "spec",
+    "styles"
+  ],
+  "engines": {
+    "lumine": "^1.0.0",
+    "node": ">=24"
+  },
+  "backgroundTips": [
+    "You can fit the active FEM model to its viewport with {{ 'graviss:fit-view' | keystroke }}"
+  ],
+  "scripts": {
+    "test": "lumine --test spec",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "deserializers": {
+    "GravissView": "deserialize"
+  },
+  "providedServices": {
+    "navigation.adapter": {
+      "description": "Lists and activates named Graviss graphics in navigation-panel.",
+      "versions": {
+        "1.0.0": "provideNavigationAdapter"
+      }
+    }
+  },
+  "consumedServices": {
+    "graviss.source": {
+      "versions": {
+        "^1.0.0": "consumeGravissSource"
+      }
+    },
+    "tree-view.selection": {
+      "versions": {
+        "^1.0.0": "consumeTreeViewSelection"
+      }
+    }
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-n": "^18.2.2",
+    "globals": "^17.9.0",
+    "prettier": "^3.9.6"
+  }
+}

@@ -1,0 +1,306 @@
+.graviss {
+  --graviss-toolbar-height: 43px;
+  --graviss-glass: color-mix(in srgb, var(--base-background-color) 88%, transparent);
+  --graviss-border: color-mix(in srgb, var(--base-border-color) 82%, transparent);
+  --graviss-axis-x-color: #e5544c;
+  --graviss-axis-y-color: #36a05a;
+  --graviss-axis-z-color: #348ee0;
+
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  color: var(--text-color);
+  background:
+    radial-gradient(
+      circle at 56% 36%,
+      color-mix(in srgb, var(--background-color-info) 8%, transparent),
+      transparent 48%
+    ),
+    var(--base-background-color);
+  user-select: none;
+}
+
+.graviss [hidden] {
+  display: none !important;
+}
+
+.graviss-toolbar {
+  z-index: 4;
+  display: flex;
+  min-height: var(--graviss-toolbar-height);
+  margin-left: 0;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--graviss-border);
+  background: color-mix(in srgb, var(--tool-panel-background-color) 94%, transparent);
+  box-shadow: 0 1px 8px color-mix(in srgb, black 12%, transparent);
+}
+
+.graviss-toolbar > .block {
+  margin-bottom: 0;
+}
+
+.graviss-toolbar-block {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.graviss-toolbar-button.btn {
+  display: inline-flex;
+  width: 36px;
+  min-width: 36px;
+  height: 28px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.75;
+}
+
+.graviss-toolbar-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  overflow: visible;
+  pointer-events: none;
+  vertical-align: middle;
+}
+
+.graviss-toolbar-icon * {
+  vector-effect: non-scaling-stroke;
+}
+
+.graviss-toolbar-icon .graviss-icon-fill {
+  fill: currentColor;
+  opacity: 0.16;
+}
+
+.graviss-toolbar-button.selected .graviss-icon-fill {
+  opacity: 0.24;
+}
+
+.graviss-graphic-counter.btn {
+  display: inline-flex;
+  min-width: 34px;
+  height: 28px;
+  padding: 0 7px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--text-color-subtle);
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.75;
+  text-align: center;
+}
+
+.graviss-background-control {
+  flex: none;
+}
+
+.graviss-performance {
+  flex: none;
+}
+
+.graviss-fps-counter.btn {
+  display: inline-flex;
+  min-width: 56px;
+  height: 28px;
+  padding: 0 7px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-color-subtle);
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.75;
+  text-align: center;
+}
+
+.graviss-fps-counter[data-active="true"] {
+  color: var(--text-color);
+}
+
+.graviss-visibility {
+  flex: 1;
+}
+
+.graviss-workspace {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.graviss-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--base-border-color) 14%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--base-border-color) 14%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 24px 24px;
+}
+
+.graviss-canvas-host,
+.graviss-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.graviss-canvas {
+  outline: none;
+  cursor: grab;
+}
+
+.graviss-canvas:active {
+  cursor: grabbing;
+}
+
+.graviss-status {
+  position: absolute;
+  z-index: 3;
+  inset: 50% auto auto 50%;
+  display: flex;
+  max-width: min(430px, calc(100% - 48px));
+  transform: translate(-50%, -50%);
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 12px 15px;
+  border: 1px solid var(--graviss-border);
+  border-radius: var(--component-border-radius);
+  color: var(--text-color-subtle);
+  background: var(--graviss-glass);
+  box-shadow: 0 10px 32px color-mix(in srgb, black 20%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.graviss-error {
+  flex-direction: column;
+  text-align: center;
+}
+
+.graviss-error strong {
+  color: var(--text-color-error);
+  font-size: 14px;
+}
+
+.graviss-error-message {
+  max-width: 100%;
+  user-select: text;
+}
+
+.graviss-camera-navigator {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 12px;
+  width: 126px;
+  height: 126px;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+}
+
+.graviss-view-cube {
+  display: block;
+  width: 120px;
+  height: 120px;
+  border-radius: 9px;
+  outline: none;
+  filter: drop-shadow(0 4px 7px color-mix(in srgb, var(--text-color) 12%, transparent));
+  touch-action: none;
+}
+
+.graviss-view-cube:focus-visible {
+  outline: 2px solid var(--text-color-info);
+  outline-offset: -2px;
+}
+
+.graviss-axis-gizmo {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  bottom: 9px;
+  width: 84px;
+  height: 84px;
+  pointer-events: none;
+}
+
+.graviss-axis-gizmo svg {
+  display: block;
+  width: 84px;
+  height: 84px;
+  overflow: visible;
+  filter: drop-shadow(0 1px 2px color-mix(in srgb, black 20%, transparent));
+}
+
+.graviss-gizmo-axis line {
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+
+.graviss-gizmo-axis circle,
+.graviss-gizmo-axis text {
+  fill: currentColor;
+}
+
+.graviss-gizmo-axis text {
+  font-family: var(--editor-font-family, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  dominant-baseline: middle;
+  text-anchor: middle;
+}
+
+.graviss-gizmo-axis.is-away {
+  opacity: 0.52;
+}
+
+.graviss-gizmo-axis.is-x {
+  color: var(--graviss-axis-x-color);
+}
+
+.graviss-gizmo-axis.is-y {
+  color: var(--graviss-axis-y-color);
+}
+
+.graviss-gizmo-axis.is-z {
+  color: var(--graviss-axis-z-color);
+}
+
+.graviss-gizmo-origin {
+  fill: var(--text-color);
+  stroke: var(--base-background-color);
+  stroke-width: 1;
+}
+
+@media (max-width: 660px) {
+  .graviss-view-actions button[data-view="right"],
+  .graviss-view-actions button[data-view="front"],
+  .graviss-visibility,
+  .graviss-background-control {
+    display: none;
+  }
+
+  .graviss-camera-navigator {
+    top: 10px;
+    right: 10px;
+    transform: scale(0.84);
+    transform-origin: top right;
+  }
+}

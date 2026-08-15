@@ -1,0 +1,32 @@
+{
+  "menu": [
+    {
+      "label": "Packages",
+      "submenu": [
+        {
+          "label": "Graviss",
+          "submenu": [
+            {
+              "label": "Open Source",
+              "command": "graviss:open-source"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "context-menu": {
+    ".tree-view .file[data-path$=\".grv\"]": [
+      {
+        "type": "separator"
+      },
+      {
+        "label": "Open Source",
+        "command": "graviss:open-source"
+      },
+      {
+        "type": "separator"
+      }
+    ]
+  }
+}
