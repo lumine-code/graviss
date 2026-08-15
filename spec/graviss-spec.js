@@ -176,6 +176,7 @@ describe("graviss", () => {
       "axes",
       "local-axes",
       "background",
+      "open-source",
     ]);
     expect(toolbarButtons.every((button) => !button.getAttribute("title"))).toBe(true);
     for (const button of toolbarButtons) {
@@ -1227,6 +1228,38 @@ describe("graviss", () => {
     expect(await mainModule.openSource(MAIN_EXAMPLE.viewDocumentPath)).toBe(editor);
 
     treeDisposable.dispose();
+    await lumine.workspace.paneForItem(editor).destroyItem(editor, true);
+  });
+
+  it("opens the source of the canvas the toolbar button belongs to", async () => {
+    await lumine.packages.activatePackage("language-json");
+    const canvas = await lumine.workspace.open(MAIN_EXAMPLE.viewDocumentPath, {
+      searchAllPanes: true,
+    });
+    const button = canvas.element.querySelector('[data-action="open-source"]');
+    expect(button).not.toBeNull();
+    expect(button.dataset.command).toBe("graviss:open-source");
+    expect(button.closest(".graviss-source-control")).not.toBeNull();
+
+    // The command lives on the workspace, so a dispatch from inside the canvas
+    // has to reach it by bubbling rather than by a second registration.
+    expect(
+      lumine.commands
+        .findCommands({ target: button })
+        .some(({ name }) => name === "graviss:open-source"),
+    ).toBe(true);
+
+    // Resolved from the dispatch target, so the button opens its own canvas's
+    // source even when the active pane item is something else entirely.
+    const other = await lumine.workspace.open(SHELL_EXAMPLE_URI, { searchAllPanes: true });
+    expect(lumine.workspace.getActivePaneItem()).toBe(other);
+
+    const editor = await mainModule.openSourceCommand({ target: button });
+
+    expect(lumine.workspace.isTextEditor(editor)).toBe(true);
+    expect(editor.getPath()).toBe(MAIN_EXAMPLE.viewDocumentPath);
+    expect(editor.getGrammar().scopeName).toBe("source.json");
+
     await lumine.workspace.paneForItem(editor).destroyItem(editor, true);
   });
 

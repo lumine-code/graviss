@@ -100,6 +100,13 @@
   flex: none;
 }
 
+/* Everything from here sits at the right end of the toolbar, away from the
+   controls that change what the canvas draws. */
+.graviss-source-control {
+  flex: none;
+  margin-left: auto;
+}
+
 .graviss-performance {
   flex: none;
 }
