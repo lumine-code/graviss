@@ -231,22 +231,6 @@
   outline-offset: -2px;
 }
 
-/* The button carries all three levels and shows the one on screen, so the icon
-   reads as the current state rather than the pending action. */
-.graviss-detail-button {
-  position: relative;
-}
-
-.graviss-detail-button .graviss-toolbar-icon {
-  display: none;
-}
-
-.graviss-detail-button[data-detail="axis"] [data-icon="detail-axis"],
-.graviss-detail-button[data-detail="section"] [data-icon="detail-section"],
-.graviss-detail-button[data-detail="full"] [data-icon="detail-full"] {
-  display: block;
-}
-
 .graviss-axis-gizmo {
   position: absolute;
   z-index: 2;

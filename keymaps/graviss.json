@@ -17,7 +17,7 @@
     "g": "graviss:toggle-grid",
     "a": "graviss:toggle-axes",
     "l": "graviss:toggle-local-axes",
-    "d": "graviss:cycle-element-detail",
+    "d": "graviss:toggle-sections",
     "b": "graviss:choose-background",
     "left": "graviss:move-left",
     "right": "graviss:move-right",

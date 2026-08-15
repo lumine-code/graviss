@@ -155,13 +155,7 @@ describe("graviss", () => {
       ),
     ).toBe(true);
     expect(
-      toolbarButtons.map((button) =>
-        // The element-detail button carries one icon per level and shows the
-        // level on screen, so it contributes that icon rather than its first.
-        button.dataset.detail
-          ? `detail-${button.dataset.detail}`
-          : button.querySelector(".graviss-toolbar-icon").dataset.icon,
-      ),
+      toolbarButtons.map((button) => button.querySelector(".graviss-toolbar-icon").dataset.icon),
     ).toEqual([
       "previous-graphic",
       "next-graphic",
@@ -514,22 +508,35 @@ describe("graviss", () => {
     // an opaque section in front of one has to hide it.
     expect(item.renderer.localAxes.material.depthTest).toBe(true);
 
-    // A member is drawn at whichever level the detail cycle is on, and an area
-    // element only gains its thickness at the last one. The toolbar button
-    // shows the level on screen.
-    const detailButton = item.element.querySelector('[data-action="element-detail"]');
+    // The toolbar makes one distinction: line elements either carry their
+    // cross-section or are drawn as lines. `full`, which also gives area
+    // elements their thickness, still counts as rendered.
+    const sectionButton = item.element.querySelector('[data-action="toggle-sections"]');
     expect(item.getElementDetail()).toBe("section");
-    expect(detailButton.dataset.detail).toBe("section");
-    expect(item.cycleElementDetail()).toBe("full");
-    expect(detailButton.dataset.detail).toBe("full");
-    expect(detailButton.getAttribute("aria-label")).toBe("Draw elements as full");
-    expect(item.cycleElementDetail()).toBe("axis");
-    expect(detailButton.dataset.detail).toBe("axis");
+    expect(item.isSectionRenderingEnabled()).toBe(true);
+    expect(sectionButton.getAttribute("aria-pressed")).toBe("true");
+
+    expect(item.setElementDetail("full")).toBe("full");
+    expect(item.isSectionRenderingEnabled()).toBe(true);
+    expect(sectionButton.getAttribute("aria-pressed")).toBe("true");
+
+    expect(item.toggleSectionRendering()).toBe("axis");
+    expect(sectionButton.getAttribute("aria-pressed")).toBe("false");
+    expect(sectionButton.getAttribute("aria-label")).toBe("Draw elements with their sections");
+    // Without section rendering a line element is a line, not a thin solid.
+    const memberLines = item.renderer.pickables.find(
+      (mesh) => mesh.userData.gravissColorKey === "element",
+    );
+    expect(memberLines.isLineSegments).toBe(true);
+    expect(memberLines.geometry.getAttribute("position").count).toBe(2);
+    expect(memberLines.userData.gravissEntityRanges).toEqual([{ start: 0, count: 2 }]);
+
+    expect(item.toggleSectionRendering()).toBe("section");
+    expect(sectionButton.getAttribute("aria-pressed")).toBe("true");
     expect(
       item.renderer.pickables.find((mesh) => mesh.userData.gravissColorKey === "element").geometry
         .type,
-    ).toBe("CylinderGeometry");
-    expect(item.setElementDetail("section")).toBe("section");
+    ).toBe("BoxGeometry");
 
     const matrix = new item.renderer.THREE.Matrix4();
     const position = new item.renderer.THREE.Vector3();
@@ -760,6 +767,7 @@ describe("graviss", () => {
     expect(keystrokesFor("graviss:toggle-grid")).toEqual(["g"]);
     expect(keystrokesFor("graviss:toggle-axes")).toEqual(["a"]);
     expect(keystrokesFor("graviss:toggle-local-axes")).toEqual(["l"]);
+    expect(keystrokesFor("graviss:toggle-sections")).toEqual(["d"]);
     expect(keystrokesFor("graviss:choose-background")).toEqual(["b"]);
 
     const updateCamera = spyOn(item, "updateCamera").and.callThrough();
@@ -836,15 +844,17 @@ describe("graviss", () => {
       "false",
     );
 
-    // At axis level the same segments are the element itself rather than a mesh
-    // drawn over one, so the switch leaves them alone and nothing disappears.
-    expect(item.setElementDetail("axis")).toBe("axis");
-    const axisEdges = item.renderer.meshes.shells.userData.gravissEdges;
-    expect(axisEdges.visible).toBe(true);
-    expect(item.renderer.meshes.shells.material.visible).toBe(false);
-    expect(item.setElementDetail("section")).toBe("section");
+    // Switching section rendering off takes the extrusion away from line
+    // elements. An area element is still drawn as its area, and the mesh-line
+    // switch keeps whatever state it was left in across the rebuild.
+    expect(item.toggleSectionRendering()).toBe("axis");
+    expect(item.renderer.meshes.shells.visible).toBe(true);
+    expect(item.renderer.meshes.shells.material.visible).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(false);
     expect(item.setVisibility("mesh", true)).toBe(true);
+    expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(true);
+    expect(item.toggleSectionRendering()).toBe("section");
+    expect(item.renderer.meshes.shells.material.visible).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(true);
   });
 
