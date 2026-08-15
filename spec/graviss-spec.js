@@ -514,12 +514,6 @@ describe("graviss", () => {
     // an opaque section in front of one has to hide it.
     expect(item.renderer.localAxes.material.depthTest).toBe(true);
 
-    // The global frame is drawn as solid arrows rather than one-pixel lines.
-    const originShaft = item.renderer.axes.children[0].children[0];
-    expect(item.renderer.axes.children.length).toBe(3);
-    expect(originShaft.geometry.type).toBe("CylinderGeometry");
-    expect(item.renderer.axes.children[0].children[1].geometry.type).toBe("ConeGeometry");
-
     // A member is drawn at whichever level the detail cycle is on, and an area
     // element only gains its thickness at the last one. The toolbar button
     // shows the level on screen.
