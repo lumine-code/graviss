@@ -166,7 +166,7 @@ describe("graviss", () => {
       "right",
       "perspective",
       "orthographic",
-      "detail-section",
+      "sections",
       "members",
       "shells",
       "nodes",
@@ -508,19 +508,13 @@ describe("graviss", () => {
     // an opaque section in front of one has to hide it.
     expect(item.renderer.localAxes.material.depthTest).toBe(true);
 
-    // The toolbar makes one distinction: line elements either carry their
-    // cross-section or are drawn as lines. `full`, which also gives area
-    // elements their thickness, still counts as rendered.
+    // There are two display modes: line elements either carry their extruded
+    // cross-section or are drawn as lines.
     const sectionButton = item.element.querySelector('[data-action="toggle-sections"]');
-    expect(item.getElementDetail()).toBe("section");
     expect(item.isSectionRenderingEnabled()).toBe(true);
     expect(sectionButton.getAttribute("aria-pressed")).toBe("true");
 
-    expect(item.setElementDetail("full")).toBe("full");
-    expect(item.isSectionRenderingEnabled()).toBe(true);
-    expect(sectionButton.getAttribute("aria-pressed")).toBe("true");
-
-    expect(item.toggleSectionRendering()).toBe("axis");
+    expect(item.toggleSectionRendering()).toBe(false);
     expect(sectionButton.getAttribute("aria-pressed")).toBe("false");
     expect(sectionButton.getAttribute("aria-label")).toBe("Draw elements with their sections");
     // Without section rendering a line element is a line, not a thin solid.
@@ -531,7 +525,7 @@ describe("graviss", () => {
     expect(memberLines.geometry.getAttribute("position").count).toBe(2);
     expect(memberLines.userData.gravissEntityRanges).toEqual([{ start: 0, count: 2 }]);
 
-    expect(item.toggleSectionRendering()).toBe("section");
+    expect(item.toggleSectionRendering()).toBe(true);
     expect(sectionButton.getAttribute("aria-pressed")).toBe("true");
     expect(
       item.renderer.pickables.find((mesh) => mesh.userData.gravissColorKey === "element").geometry
@@ -608,10 +602,28 @@ describe("graviss", () => {
     expect(zSpan()).toBeCloseTo(0.2, 6);
 
     // Without it the element is its reference surface alone.
-    expect(item.toggleSectionRendering()).toBe("axis");
+    expect(item.toggleSectionRendering()).toBe(false);
     expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(6);
     expect(zSpan()).toBe(0);
     item.destroy();
+  });
+
+  it("returns to a graphic with the camera it holds now, not the one it opened with", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+
+    const original = item.renderer.captureCameraState();
+    item.renderer.moveCamera("left");
+    item.renderer.moveCamera("up");
+    const moved = item.renderer.captureCameraState();
+    expect(moved.position).not.toEqual(original.position);
+
+    item.switchGraphic(1);
+    item.switchGraphic(-1);
+
+    expect(item.activeGraphic.id).toBe("overview");
+    expect(item.renderer.captureCameraState().position).toEqual(moved.position);
+    expect(item.renderer.captureCameraState().target).toEqual(moved.target);
   });
 
   it("debounces wheel zoom into one camera history snapshot", async () => {
@@ -915,13 +927,13 @@ describe("graviss", () => {
     // Switching section rendering off takes the extrusion away from line
     // elements. An area element is still drawn as its area, and the mesh-line
     // switch keeps whatever state it was left in across the rebuild.
-    expect(item.toggleSectionRendering()).toBe("axis");
+    expect(item.toggleSectionRendering()).toBe(false);
     expect(item.renderer.meshes.shells.visible).toBe(true);
     expect(item.renderer.meshes.shells.material.visible).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(false);
     expect(item.setVisibility("mesh", true)).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(true);
-    expect(item.toggleSectionRendering()).toBe("section");
+    expect(item.toggleSectionRendering()).toBe(true);
     expect(item.renderer.meshes.shells.material.visible).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(true);
     // A rebuild outside applyTheme must not reset the mesh lines to white.

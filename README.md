@@ -12,7 +12,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Document history**: records camera and toolbar changes in a private `TextBuffer` so Undo and Redo cover the complete view document.
 - **Navigation integration**: exposes named graphics to the navigation panel and activates a graphic when its outline entry is selected.
 - **Live sources**: rebuilds the scene when a source reports that its geometry changed, keeping the camera the view document holds.
-- **Element detail**: draws line and area elements as their reference line, their cross-section, or their full rendered thickness, from a toolbar button that shows the level on screen.
+- **Section rendering**: switches between extruded cross-sections with closed area-element solids and plain lines with reference surfaces.
 
 ## Installation
 
@@ -65,10 +65,7 @@ Commands available in `.graviss`:
 - `graviss:toggle-grid`: show or hide the engineering grid,
 - `graviss:toggle-axes`: show or hide the global axes,
 - `graviss:toggle-local-axes`: show or hide element-local axes,
-- `graviss:cycle-element-detail`: step to the next element detail level,
-- `graviss:element-detail-axis`: draw elements as their reference line,
-- `graviss:element-detail-section`: draw elements as their cross-section,
-- `graviss:element-detail-full`: draw elements at their full rendered thickness,
+- `graviss:toggle-sections`: switch between rendered sections and plain lines and surfaces,
 - `graviss:background-auto`: follow the active theme for the background,
 - `graviss:background-cloud`: use the Cloud appearance,
 - `graviss:background-midnight`: use the Midnight appearance,
