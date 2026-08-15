@@ -250,24 +250,24 @@
 .graviss-axis-gizmo {
   position: absolute;
   z-index: 2;
-  left: 10px;
-  bottom: 7px;
-  width: 116px;
-  height: 116px;
+  left: 12px;
+  bottom: 9px;
+  width: 84px;
+  height: 84px;
   pointer-events: none;
 }
 
 .graviss-axis-gizmo svg {
   display: block;
-  width: 116px;
-  height: 116px;
+  width: 84px;
+  height: 84px;
   overflow: visible;
   filter: drop-shadow(0 1px 2px color-mix(in srgb, black 20%, transparent));
 }
 
 .graviss-gizmo-axis line {
   stroke: currentColor;
-  stroke-width: 2.6;
+  stroke-width: 1.7;
 }
 
 .graviss-gizmo-axis circle,
@@ -275,21 +275,16 @@
   fill: currentColor;
 }
 
-/* The paint order puts the halo stroke behind the glyph so a label stays
-   readable wherever it crosses the model. */
 .graviss-gizmo-axis text {
-  stroke: var(--base-background-color);
-  stroke-width: 3.4;
-  paint-order: stroke;
   font-family: var(--editor-font-family, monospace);
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
   dominant-baseline: middle;
   text-anchor: middle;
 }
 
 .graviss-gizmo-axis.is-away {
-  opacity: 0.6;
+  opacity: 0.52;
 }
 
 .graviss-gizmo-axis.is-x {
