@@ -5,14 +5,15 @@ Explore finite element models in an interactive engineering viewport.
 ## Features
 
 - **Engineering viewport**: orbits, pans, zooms, fits, and switches between standard camera views and projection modes.
-- **Model geometry**: displays beam members, shells, nodes, supports, grids, and global or element-local axes in the model's declared coordinate system.
+- **Model geometry**: displays beam members, shells, nodes, supports, mesh lines, grids, and global or element-local axes in the model's declared coordinate system.
 - **Section profiles**: renders rectangular, circular, tubular, tee, and polygonal beam sections with instanced meshes.
 - **Multiple graphics**: stores several named graphics, independent cameras, visibility, appearance, and the last active graphic in one `.grv` file.
 - **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state, and conflicted-save handling.
 - **Document history**: records camera and toolbar changes in a private `TextBuffer` so Undo and Redo cover the complete view document.
 - **Navigation integration**: exposes named graphics to the navigation panel and activates a graphic when its outline entry is selected.
 - **Live sources**: rebuilds the scene when a source reports that its geometry changed, keeping the camera the view document holds.
-- **Element detail**: draws line and area elements as their reference line, their cross-section, or their full rendered thickness.
+- **Element detail**: draws line and area elements as their reference line, their cross-section, or their full rendered thickness, from a toolbar button that shows the level on screen.
+- **Independent layers**: switches mesh lines, element-local axes, and every entity kind on their own, with opaque bodies occluding whatever sits behind them.
 
 ## Installation
 
@@ -61,6 +62,7 @@ Commands available in `.graviss`:
 - `graviss:toggle-shells`: show or hide shells,
 - `graviss:toggle-nodes`: show or hide nodes,
 - `graviss:toggle-supports`: show or hide support symbols,
+- `graviss:toggle-mesh`: show or hide the mesh lines over shell surfaces,
 - `graviss:toggle-grid`: show or hide the engineering grid,
 - `graviss:toggle-axes`: show or hide the global axes,
 - `graviss:toggle-local-axes`: show or hide element-local axes,

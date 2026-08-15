@@ -231,27 +231,43 @@
   outline-offset: -2px;
 }
 
+/* The button carries all three levels and shows the one on screen, so the icon
+   reads as the current state rather than the pending action. */
+.graviss-detail-button {
+  position: relative;
+}
+
+.graviss-detail-button .graviss-toolbar-icon {
+  display: none;
+}
+
+.graviss-detail-button[data-detail="axis"] [data-icon="detail-axis"],
+.graviss-detail-button[data-detail="section"] [data-icon="detail-section"],
+.graviss-detail-button[data-detail="full"] [data-icon="detail-full"] {
+  display: block;
+}
+
 .graviss-axis-gizmo {
   position: absolute;
   z-index: 2;
-  left: 12px;
-  bottom: 9px;
-  width: 84px;
-  height: 84px;
+  left: 10px;
+  bottom: 7px;
+  width: 116px;
+  height: 116px;
   pointer-events: none;
 }
 
 .graviss-axis-gizmo svg {
   display: block;
-  width: 84px;
-  height: 84px;
+  width: 116px;
+  height: 116px;
   overflow: visible;
   filter: drop-shadow(0 1px 2px color-mix(in srgb, black 20%, transparent));
 }
 
 .graviss-gizmo-axis line {
   stroke: currentColor;
-  stroke-width: 1.7;
+  stroke-width: 2.6;
 }
 
 .graviss-gizmo-axis circle,
@@ -259,16 +275,21 @@
   fill: currentColor;
 }
 
+/* The paint order puts the halo stroke behind the glyph so a label stays
+   readable wherever it crosses the model. */
 .graviss-gizmo-axis text {
+  stroke: var(--base-background-color);
+  stroke-width: 3.4;
+  paint-order: stroke;
   font-family: var(--editor-font-family, monospace);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   dominant-baseline: middle;
   text-anchor: middle;
 }
 
 .graviss-gizmo-axis.is-away {
-  opacity: 0.52;
+  opacity: 0.6;
 }
 
 .graviss-gizmo-axis.is-x {

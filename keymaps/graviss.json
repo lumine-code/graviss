@@ -13,6 +13,7 @@
     "s": "graviss:toggle-shells",
     "n": "graviss:toggle-nodes",
     "u": "graviss:toggle-supports",
+    "w": "graviss:toggle-mesh",
     "g": "graviss:toggle-grid",
     "a": "graviss:toggle-axes",
     "l": "graviss:toggle-local-axes",

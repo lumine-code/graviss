@@ -155,7 +155,13 @@ describe("graviss", () => {
       ),
     ).toBe(true);
     expect(
-      toolbarButtons.map((button) => button.querySelector(".graviss-toolbar-icon").dataset.icon),
+      toolbarButtons.map((button) =>
+        // The element-detail button carries one icon per level and shows the
+        // level on screen, so it contributes that icon rather than its first.
+        button.dataset.detail
+          ? `detail-${button.dataset.detail}`
+          : button.querySelector(".graviss-toolbar-icon").dataset.icon,
+      ),
     ).toEqual([
       "previous-graphic",
       "next-graphic",
@@ -166,10 +172,12 @@ describe("graviss", () => {
       "right",
       "perspective",
       "orthographic",
+      "detail-section",
       "members",
       "shells",
       "nodes",
       "supports",
+      "mesh",
       "grid",
       "axes",
       "local-axes",
@@ -451,6 +459,17 @@ describe("graviss", () => {
       sections: 1,
     });
     expect(memberMesh.geometry.type).toBe("BoxGeometry");
+    // An instanced geometry carries no colour attribute. Declaring vertex
+    // colours anyway makes the vertex shader read that missing attribute as
+    // black and swallow the instance colour, which renders every member, node
+    // and support as a black silhouette.
+    for (const mesh of [memberMesh, item.renderer.meshes.nodes, item.renderer.meshes.supports]) {
+      if (!mesh) continue;
+      expect(mesh.isInstancedMesh).toBe(true);
+      expect(mesh.geometry.getAttribute("color")).toBeUndefined();
+      expect(mesh.material.vertexColors).toBe(false);
+      expect(mesh.instanceColor).not.toBeNull();
+    }
     const sectionCases = [
       [{ kind: "tube", diameter: 0.4, thickness: 0.02 }, [1, 0.4, 0.4]],
       [
@@ -491,12 +510,27 @@ describe("graviss", () => {
     expect(item.element.querySelector('[data-visible="localAxes"]').classList).toContain(
       "selected",
     );
+    // Local axes sit at the element centres and are geometry like any other, so
+    // an opaque section in front of one has to hide it.
+    expect(item.renderer.localAxes.material.depthTest).toBe(true);
+
+    // The global frame is drawn as solid arrows rather than one-pixel lines.
+    const originShaft = item.renderer.axes.children[0].children[0];
+    expect(item.renderer.axes.children.length).toBe(3);
+    expect(originShaft.geometry.type).toBe("CylinderGeometry");
+    expect(item.renderer.axes.children[0].children[1].geometry.type).toBe("ConeGeometry");
 
     // A member is drawn at whichever level the detail cycle is on, and an area
-    // element only gains its thickness at the last one.
+    // element only gains its thickness at the last one. The toolbar button
+    // shows the level on screen.
+    const detailButton = item.element.querySelector('[data-action="element-detail"]');
     expect(item.getElementDetail()).toBe("section");
+    expect(detailButton.dataset.detail).toBe("section");
     expect(item.cycleElementDetail()).toBe("full");
+    expect(detailButton.dataset.detail).toBe("full");
+    expect(detailButton.getAttribute("aria-label")).toBe("Draw elements as full");
     expect(item.cycleElementDetail()).toBe("axis");
+    expect(detailButton.dataset.detail).toBe("axis");
     expect(
       item.renderer.pickables.find((mesh) => mesh.userData.gravissColorKey === "element").geometry
         .type,
@@ -728,6 +762,7 @@ describe("graviss", () => {
     expect(keystrokesFor("graviss:toggle-shells")).toEqual(["s"]);
     expect(keystrokesFor("graviss:toggle-nodes")).toEqual(["n"]);
     expect(keystrokesFor("graviss:toggle-supports")).toEqual(["u"]);
+    expect(keystrokesFor("graviss:toggle-mesh")).toEqual(["w"]);
     expect(keystrokesFor("graviss:toggle-grid")).toEqual(["g"]);
     expect(keystrokesFor("graviss:toggle-axes")).toEqual(["a"]);
     expect(keystrokesFor("graviss:toggle-local-axes")).toEqual(["l"]);
@@ -795,6 +830,28 @@ describe("graviss", () => {
     expect(item.element.querySelector('[data-visible="shells"]').getAttribute("aria-pressed")).toBe(
       "true",
     );
+
+    // Mesh lines are a layer of their own over the surfaces they describe.
+    const edges = item.renderer.meshes.shells.userData.gravissEdges;
+    expect(item.renderer.meshes.mesh).toBe(edges);
+    expect(edges.visible).toBe(true);
+    expect(item.setVisibility("mesh", false)).toBe(false);
+    expect(edges.visible).toBe(false);
+    expect(item.renderer.meshes.shells.visible).toBe(true);
+    expect(item.element.querySelector('[data-visible="mesh"]').getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+
+    // At axis level the same segments are the element itself rather than a mesh
+    // drawn over one, so the switch leaves them alone and nothing disappears.
+    expect(item.setElementDetail("axis")).toBe("axis");
+    const axisEdges = item.renderer.meshes.shells.userData.gravissEdges;
+    expect(axisEdges.visible).toBe(true);
+    expect(item.renderer.meshes.shells.material.visible).toBe(false);
+    expect(item.setElementDetail("section")).toBe("section");
+    expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(false);
+    expect(item.setVisibility("mesh", true)).toBe(true);
+    expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(true);
   });
 
   it("opens .grv file paths as deduplicated canvas items and restores them", async () => {
