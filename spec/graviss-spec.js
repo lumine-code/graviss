@@ -1610,9 +1610,16 @@ describe("graviss", () => {
     // Measured afresh, because the fit above moved the camera.
     const refitted = item.autoSelectPrintRegion();
     const bordered = item.autoSelectPrintRegion(0.02);
-    const margin = Math.max(refitted.width, refitted.height) * 0.02;
-    expect(bordered.width).toBeCloseTo(Math.min(refitted.width + margin * 2, 1), 6);
-    expect(bordered.x).toBeCloseTo(Math.max(refitted.x - margin, 0), 6);
+    // The margin is one distance, so it is the same number of pixels on every
+    // side rather than the same fraction of two axes of different length.
+    const viewport = renderer.viewportPixels();
+    const margin =
+      Math.max(refitted.width * viewport.width, refitted.height * viewport.height) * 0.02;
+    expect(bordered.width).toBeCloseTo(
+      Math.min(refitted.width + (margin * 2) / viewport.width, 1),
+      6,
+    );
+    expect(bordered.x).toBeCloseTo(Math.max(refitted.x - margin / viewport.width, 0), 6);
     expect(item.getPrintRegion()).toEqual(bordered);
   });
 
