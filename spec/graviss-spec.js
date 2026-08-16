@@ -176,6 +176,8 @@ describe("graviss", () => {
       "axes",
       "local-axes",
       "background",
+      "save-image",
+      "copy-image",
       "open-source",
     ]);
     expect(toolbarButtons.every((button) => !button.getAttribute("title"))).toBe(true);
@@ -1261,6 +1263,406 @@ describe("graviss", () => {
     expect(editor.getGrammar().scopeName).toBe("source.json");
 
     await lumine.workspace.paneForItem(editor).destroyItem(editor, true);
+  });
+
+  it("covers the whole model when a print is requested without a region", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+
+    expect(item.getPrintRegion()).toBeNull();
+    expect(item.element.querySelector(".graviss-print-region").hidden).toBe(true);
+
+    // Without a region an image covers the whole model plus a margin, measured
+    // from what is drawn rather than from where the nodes are, and regardless
+    // of what the viewport is cropping away.
+    const extent = renderer.projectedModelExtent();
+    // The frame is centred on the middle of what the model projects to, which
+    // under perspective is not quite the middle of the model itself — that is
+    // what keeps the margins even rather than lopsided.
+    const drawn = renderer.visibleModelBounds();
+    const boxCenter = drawn.getCenter(new renderer.THREE.Vector3());
+    expect(new renderer.THREE.Vector3(...extent.center).distanceTo(boxCenter)).toBeLessThan(
+      drawn.getSize(new renderer.THREE.Vector3()).length(),
+    );
+    const derived = renderer.resolvePrintRegion(null);
+    expect(derived.center).toEqual(extent.center);
+    const margin = Math.max(extent.width, extent.height) * 0.02;
+    expect(derived.width).toBeCloseTo(extent.width + margin * 2, 6);
+    expect(derived.height).toBeCloseTo(extent.height + margin * 2, 6);
+
+    // The derived region contains the model whatever the window is doing, so
+    // resizing the viewport cannot change what a print covers.
+    renderer.host.style.width = "1200px";
+    renderer.host.style.height = "300px";
+    renderer.resize();
+    const wideExtent = renderer.projectedModelExtent();
+    expect(wideExtent.width).toBeCloseTo(extent.width, 6);
+    expect(wideExtent.height).toBeCloseTo(extent.height, 6);
+
+    // A stored region is used exactly as it stands.
+    const region = item.setPrintRegionFromView();
+    expect(region).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+    expect(item.getPrintRegion()).toEqual(region);
+    expect(item.element.querySelector(".graviss-print-region").hidden).toBe(false);
+    expect(
+      item.viewDocument.getData().graphics.find(({ id }) => id === "overview").printRegion,
+    ).toEqual(region);
+
+    expect(item.clearPrintRegion()).toBe(true);
+    expect(item.getPrintRegion()).toBeNull();
+    expect(item.element.querySelector(".graviss-print-region").hidden).toBe(true);
+  });
+
+  it("keeps the drawn rectangle where it was drawn and composes through it", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    renderer.host.style.width = "800px";
+    renderer.host.style.height = "400px";
+    renderer.resize();
+    const targetBefore = renderer.controls.target.clone();
+
+    // The rectangle is held in fractions of the viewport it was drawn over.
+    const drawn = renderer.regionForScreenRect({ x: 200, y: 100 }, { x: 600, y: 300 });
+    expect(drawn).toEqual({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 });
+    // Drawing it moves no camera; it is a frame over the viewport, not a pick.
+    expect(renderer.controls.target.distanceTo(targetBefore)).toBeCloseTo(0, 9);
+
+    // A drag too small to have been meant as a rectangle sets nothing.
+    expect(renderer.regionForScreenRect({ x: 300, y: 150 }, { x: 304, y: 250 })).toBeNull();
+
+    // The whole gesture, through the command the palette offers.
+    expect(item.getPrintRegion()).toBeNull();
+    expect(item.selectPrintRegion()).toBe(true);
+    expect(renderer.controls.enabled).toBe(false);
+    renderer.endRegionSelection(drawn);
+    expect(renderer.controls.enabled).toBe(true);
+    expect(item.getPrintRegion()).toEqual(drawn);
+
+    const overlay = item.element.querySelector(".graviss-print-region");
+    expect(overlay.hidden).toBe(false);
+    expect(overlay.style.left).toBe("25%");
+    expect(overlay.style.width).toBe("50%");
+
+    // Half the viewport across and down covers a quarter of what it shows.
+    const visible = renderer.visibleExtentAtTarget();
+    const covered = renderer.resolvePrintRegion(drawn);
+    expect(covered.width).toBeCloseTo(visible.width / 2, 6);
+    expect(covered.height).toBeCloseTo(visible.height / 2, 6);
+
+    // The rectangle stays put through the wheel; only what falls inside it
+    // changes, which is how a view is composed through the frame.
+    renderer.zoomCamera("in");
+    expect(item.getPrintRegion()).toEqual(drawn);
+    expect(overlay.style.left).toBe("25%");
+    expect(overlay.style.width).toBe("50%");
+    const zoomed = renderer.resolvePrintRegion(drawn);
+    expect(zoomed.width).toBeLessThan(covered.width);
+
+    // Escaping a selection leaves the region the graphic already had.
+    expect(item.selectPrintRegion()).toBe(true);
+    renderer.endRegionSelection(null);
+    expect(item.getPrintRegion()).toEqual(drawn);
+  });
+
+  it("keeps every frame gesture behind the command modifier", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const viewport = item.element.querySelector(".graviss-viewport");
+    const overlay = item.element.querySelector(".graviss-print-region");
+    viewport.style.width = "800px";
+    viewport.style.height = "400px";
+    item.renderer.resize();
+
+    // Nothing the frame draws can stand between the pointer and the model.
+    expect(overlay.children.length).toBe(0);
+    expect(getComputedStyle(overlay).pointerEvents).toBe("none");
+
+    const start = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+    expect(item.selectPrintRegion()).toBe(true);
+    item.renderer.endRegionSelection(start);
+    expect(item.getPrintRegion()).toEqual(start);
+
+    const bounds = viewport.getBoundingClientRect();
+    const at = (x, y) => ({ clientX: bounds.left + x, clientY: bounds.top + y });
+    const modifier = process.platform === "darwin" ? { metaKey: true } : { ctrlKey: true };
+    const drag = (from, to, held = modifier) => {
+      viewport.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, button: 0, ...held, ...from }),
+      );
+      window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, ...held, ...to }));
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, ...held, ...to }));
+    };
+
+    // Without the modifier the frame ignores the gesture entirely; the model
+    // keeps it.
+    drag(at(400, 200), at(480, 240), {});
+    expect(item.getPrintRegion()).toEqual(start);
+
+    // Held, a press in the middle moves the frame and keeps its size.
+    drag(at(400, 200), at(480, 240));
+    const moved = item.getPrintRegion();
+    expect(moved.x).toBeCloseTo(0.35, 6);
+    expect(moved.y).toBeCloseTo(0.35, 6);
+    expect(moved.width).toBeCloseTo(0.5, 6);
+
+    // A press on a corner resizes, leaving the opposite corner where it was.
+    const corner = { x: moved.x * 800, y: moved.y * 400 };
+    drag(at(corner.x, corner.y), at(corner.x + 40, corner.y + 20));
+    const resized = item.getPrintRegion();
+    expect(resized.x).toBeCloseTo(0.4, 6);
+    expect(resized.x + resized.width).toBeCloseTo(moved.x + moved.width, 6);
+    expect(resized.y + resized.height).toBeCloseTo(moved.y + moved.height, 6);
+
+    // One gesture is one undo step, not one per pointer event.
+    item.undo();
+    expect(item.getPrintRegion()).toEqual(moved);
+    item.redo();
+    expect(item.getPrintRegion()).toEqual(resized);
+
+    // Held and pressed outside the frame, the gesture draws a new one.
+    drag(at(40, 40), at(240, 140));
+    const drawn = item.getPrintRegion();
+    expect(drawn.x).toBeCloseTo(0.05, 6);
+    expect(drawn.width).toBeCloseTo(0.25, 6);
+    expect(drawn.height).toBeCloseTo(0.25, 6);
+
+    // The cursor names the gesture the modifier would start, and follows the
+    // modifier itself rather than only the pointer: pressing it without moving
+    // has to change the answer.
+    const hover = (x, y, held = modifier) =>
+      viewport.dispatchEvent(
+        new PointerEvent("pointermove", { bubbles: true, ...held, ...at(x, y) }),
+      );
+    const middle = { x: (drawn.x + drawn.width / 2) * 800, y: (drawn.y + drawn.height / 2) * 400 };
+    hover(middle.x, middle.y, {});
+    expect(viewport.dataset.regionCursor).toBeUndefined();
+    hover(middle.x, middle.y);
+    expect(viewport.dataset.regionCursor).toBe("move");
+    hover(drawn.x * 800, drawn.y * 400);
+    expect(viewport.dataset.regionCursor).toBe("nw");
+    hover(760, 380);
+    expect(viewport.dataset.regionCursor).toBe("create");
+
+    // Releasing the modifier without moving the pointer clears it.
+    window.dispatchEvent(
+      new KeyboardEvent("keyup", {
+        bubbles: true,
+        key: process.platform === "darwin" ? "Meta" : "Control",
+      }),
+    );
+    expect(viewport.dataset.regionCursor).toBeUndefined();
+
+    // A held press outside the frame that never moves is a click, and a click
+    // outside drops the frame.
+    drag(at(760, 380), at(760, 380));
+    expect(item.getPrintRegion()).toBeNull();
+    expect(item.selectPrintRegion()).toBe(true);
+    item.renderer.endRegionSelection(drawn);
+    expect(item.getPrintRegion()).toEqual(drawn);
+
+    // Holding the modifier is selection mode for as long as it is down, so the
+    // frame shows its grips while a gesture is available.
+    const modifierKey = process.platform === "darwin" ? "Meta" : "Control";
+    expect(item.element.dataset.selectionMode).toBeUndefined();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: modifierKey, ...modifier }),
+    );
+    expect(item.element.dataset.selectionMode).toBe("true");
+    expect(item.isInSelectionMode()).toBe(false);
+    window.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: modifierKey }));
+    expect(item.element.dataset.selectionMode).toBeUndefined();
+
+    // The wheel belongs to the frame's context in selection mode, so the model
+    // does not move out from under a frame being placed.
+    const wheelReaches = () => {
+      const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
+      viewport.dispatchEvent(event);
+      return !event.defaultPrevented;
+    };
+    expect(wheelReaches()).toBe(true);
+    item.setSelectionMode(true);
+    expect(wheelReaches()).toBe(false);
+    item.setSelectionMode(false);
+    expect(wheelReaches()).toBe(true);
+
+    // Selection mode latches the same thing on, so the gestures work with no
+    // key held; leaving it hands every pointer back to the model.
+    expect(item.isInSelectionMode()).toBe(false);
+    item.setSelectionMode(true);
+    expect(item.element.dataset.selectionMode).toBe("true");
+    const inside = () => {
+      const region = item.getPrintRegion();
+      return { x: (region.x + region.width / 2) * 800, y: (region.y + region.height / 2) * 400 };
+    };
+    const held = inside();
+    drag(at(held.x, held.y), at(held.x + 40, held.y), {});
+    expect(item.getPrintRegion().x).toBeCloseTo(drawn.x + 0.05, 6);
+
+    item.setSelectionMode(false);
+    expect(item.element.dataset.selectionMode).toBeUndefined();
+    const latched = item.getPrintRegion();
+    const free = inside();
+    drag(at(free.x, free.y), at(free.x + 40, free.y), {});
+    expect(item.getPrintRegion()).toEqual(latched);
+
+    // Right-clicking it, held, drops it; without the modifier it survives.
+    const centre = {
+      x: (latched.x + latched.width / 2) * 800,
+      y: (latched.y + latched.height / 2) * 400,
+    };
+    viewport.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, ...at(centre.x, centre.y) }),
+    );
+    expect(item.getPrintRegion()).toEqual(latched);
+    viewport.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        ...modifier,
+        ...at(centre.x, centre.y),
+      }),
+    );
+    expect(item.getPrintRegion()).toBeNull();
+    expect(overlay.hidden).toBe(true);
+  });
+
+  it("exports the region as the very pixels the viewport shows there", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    renderer.host.style.width = "800px";
+    renderer.host.style.height = "500px";
+    renderer.resize();
+    expect(renderer.camera.isPerspectiveCamera).toBe(true);
+
+    // A frame far off in a corner is where a head-on render and the oblique one
+    // the viewport shows disagree most under perspective. The export crops the
+    // view it is already in, so the two agree exactly.
+    const region = { x: 0.02, y: 0.02, width: 0.34, height: 0.34 };
+    const image = renderer.renderPrintImage(region, { maxEdge: 272 });
+
+    expect(image.width).toBe(272);
+    expect(image.height).toBe(170);
+    expect(image.region).toEqual({ width: 0.34 * 800, height: 0.34 * 500 });
+
+    // The camera is not moved to take the crop; an off-axis frustum is what
+    // makes it the same view rather than a new one aimed at the frame.
+    expect(renderer.camera.view?.enabled).toBeFalsy();
+  });
+
+  it("frames the structure itself, with and without a border", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    renderer.host.style.width = "800px";
+    renderer.host.style.height = "500px";
+    renderer.resize();
+
+    const tight = item.autoSelectPrintRegion();
+    expect(item.getPrintRegion()).toEqual(tight);
+    expect(tight.x).toBeGreaterThanOrEqual(0);
+    expect(tight.width).toBeGreaterThan(0);
+    expect(tight.x + tight.width).toBeLessThanOrEqual(1.0001);
+
+    // The frame is measured from the structure, not from the reference grid,
+    // which spreads well beyond it.
+    expect(renderer.grid.userData.gravissGridSize).toBeGreaterThan(renderer.bounds.radius * 2);
+    expect(tight.width).toBeLessThan(1);
+
+    // It is measured from what is drawn rather than from where the nodes are.
+    // A rendered section stands off its own centre line, and a support symbol
+    // hangs below its node, so a frame taken from the node envelope alone would
+    // cut both off.
+    const drawn = renderer.visibleModelBounds();
+    const nodes = new renderer.THREE.Box3(
+      new renderer.THREE.Vector3(...renderer.bounds.min),
+      new renderer.THREE.Vector3(...renderer.bounds.max),
+    );
+    expect(drawn.containsBox(nodes)).toBe(true);
+    expect(drawn.min.z).toBeLessThan(nodes.min.z);
+    expect(drawn.max.x).toBeGreaterThan(nodes.max.x);
+
+    // Hiding a kind of element frees the room it was taking.
+    item.setVisibility("supports", false);
+    expect(renderer.visibleModelBounds().min.z).toBeGreaterThan(drawn.min.z);
+    item.setVisibility("supports", true);
+
+    // A structure reaching past the viewport gives a frame that stops at its
+    // edge rather than one that describes a rectangle no view could hold.
+    renderer.zoomCamera("in");
+    renderer.zoomCamera("in");
+    renderer.zoomCamera("in");
+    const raw = renderer.modelScreenRect();
+    expect(raw.x < 0 || raw.y < 0 || raw.x + raw.width > 1 || raw.y + raw.height > 1).toBe(true);
+    const clipped = item.autoSelectPrintRegion(0.02);
+    expect(clipped.x).toBeGreaterThanOrEqual(0);
+    expect(clipped.y).toBeGreaterThanOrEqual(0);
+    expect(clipped.x + clipped.width).toBeLessThanOrEqual(1.0001);
+    expect(clipped.y + clipped.height).toBeLessThanOrEqual(1.0001);
+    expect(item.getPrintRegion()).toEqual(clipped);
+    item.clearPrintRegion();
+    item.dispatchCommand("graviss:fit-view");
+    await conditionPromise(() => renderer.modelScreenRect().width < 1, "the fitted view");
+
+    // With a border it grows by two per cent of its longer side on each side.
+    // Measured afresh, because the fit above moved the camera.
+    const refitted = item.autoSelectPrintRegion();
+    const bordered = item.autoSelectPrintRegion(0.02);
+    const margin = Math.max(refitted.width, refitted.height) * 0.02;
+    expect(bordered.width).toBeCloseTo(Math.min(refitted.width + margin * 2, 1), 6);
+    expect(bordered.x).toBeCloseTo(Math.max(refitted.x - margin, 0), 6);
+    expect(item.getPrintRegion()).toEqual(bordered);
+  });
+
+  it("frames the whole model without moving the camera", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    renderer.host.style.width = "700px";
+    renderer.host.style.height = "440px";
+    renderer.resize();
+    renderer.moveCamera("left");
+    renderer.zoomCamera("in");
+    expect(renderer.camera.isPerspectiveCamera).toBe(true);
+
+    // Moving the camera to aim at the model would change the perspective, so an
+    // image with no region reaches past the edges of the view instead of being
+    // taken from somewhere the viewport never was.
+    const before = renderer.captureCameraState();
+    expect(item.getPrintRegion()).toBeNull();
+    const image = renderer.renderPrintImage(null, { maxEdge: 400 });
+
+    expect(image.dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+    expect(renderer.captureCameraState()).toEqual(before);
+    expect(renderer.camera.view?.enabled).toBeFalsy();
+  });
+
+  it("renders a print at the region's shape and leaves the viewport as it was", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    renderer.host.style.width = "640px";
+    renderer.host.style.height = "480px";
+    renderer.resize();
+    const before = renderer.captureCameraState();
+    const beforeSize = renderer.canvasRenderer.getSize(new renderer.THREE.Vector2());
+
+    const image = renderer.renderPrintImage(
+      { x: 0, y: 0.25, width: 1, height: 0.5 },
+      {
+        maxEdge: 800,
+      },
+    );
+
+    expect(image.dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+    // The raster keeps the shape of what the region covers.
+    expect(image.width / image.height).toBeCloseTo(image.region.width / image.region.height, 3);
+
+    // Printing from the viewport must not disturb it.
+    expect(renderer.captureCameraState()).toEqual(before);
+    expect(renderer.canvasRenderer.getSize(new renderer.THREE.Vector2())).toEqual(beforeSize);
   });
 
   it("declares its workspace commands and tree-view context menu", () => {

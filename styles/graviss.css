@@ -100,6 +100,59 @@
   flex: none;
 }
 
+/* The rectangle being dragged out, in canvas pixels. */
+.graviss-region-marquee {
+  position: absolute;
+  z-index: 3;
+  border: 1px solid var(--text-color-info);
+  background: color-mix(in srgb, var(--text-color-info) 12%, transparent);
+  pointer-events: none;
+}
+
+.graviss-canvas.is-selecting-region {
+  cursor: crosshair;
+}
+
+/* The rectangle the user drew over the viewport. It takes no pointer events at
+   all, so orbiting, panning, picking and the wheel reach the model through it;
+   its own gestures are claimed from the viewport's capture phase behind the
+   command modifier. */
+.graviss-print-region {
+  --graviss-region-line: var(--text-color-info);
+  --graviss-region-grip: 7px;
+
+  position: absolute;
+  z-index: 2;
+  border: 2px dashed var(--graviss-region-line);
+  pointer-events: none;
+}
+
+/* In selection mode the frame can be grabbed, and it says so: the dashes close
+   into a solid line and the corner grips appear. They are painted rather than
+   placed, so the frame keeps no children a pointer could land on. */
+.graviss[data-selection-mode] .graviss-print-region {
+  border-style: solid;
+  background:
+    linear-gradient(var(--graviss-region-line) 0 0) 0 0 / var(--graviss-region-grip)
+      var(--graviss-region-grip) no-repeat,
+    linear-gradient(var(--graviss-region-line) 0 0) 100% 0 / var(--graviss-region-grip)
+      var(--graviss-region-grip) no-repeat,
+    linear-gradient(var(--graviss-region-line) 0 0) 0 100% / var(--graviss-region-grip)
+      var(--graviss-region-grip) no-repeat,
+    linear-gradient(var(--graviss-region-line) 0 0) 100% 100% / var(--graviss-region-grip)
+      var(--graviss-region-grip) no-repeat;
+}
+
+.graviss-print-region.is-dragging {
+  --graviss-region-line: color-mix(in srgb, var(--text-color-info) 80%, white);
+}
+
+/* The canvas sets its own cursor and sits inside the viewport, so a cursor for
+   a frame gesture has to be aimed at the canvas to win. */
+.graviss-viewport[data-region-cursor] .graviss-canvas {
+  cursor: var(--graviss-region-cursor);
+}
+
 /* Everything from here sits at the right end of the toolbar, away from the
    controls that change what the canvas draws. */
 .graviss-source-control {

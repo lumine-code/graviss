@@ -7,7 +7,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Engineering viewport**: orbits, pans, zooms, fits, and switches between standard camera views and projection modes.
 - **Model geometry**: switches beam members, shells, nodes, supports, mesh lines, grids, and global or element-local axes independently, in the model's declared coordinate system.
 - **Section profiles**: renders rectangular, circular, tubular, tee, and polygonal beam sections with instanced meshes.
-- **Multiple graphics**: stores several named graphics in one `.grv` file, each with its own camera, visibility, section rendering, and appearance.
+- **Multiple graphics**: stores several named graphics in one `.grv` file, each with its own camera, visibility, section rendering, appearance, and print region.
 - **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state, and conflicted-save handling.
 - **Document history**: records camera and toolbar changes in a private `TextBuffer` so Undo and Redo cover the complete view document.
 - **Navigation integration**: exposes named graphics to the navigation panel and activates a graphic when its outline entry is selected.
@@ -66,6 +66,15 @@ Commands available in `.graviss`:
 - `graviss:toggle-axes`: show or hide the global axes,
 - `graviss:toggle-local-axes`: show or hide element-local axes,
 - `graviss:toggle-sections`: switch between rendered sections and plain lines and surfaces,
+- `graviss:save-as-image`: render the active graphic and save it as a PNG,
+- `graviss:copy-image`: render the active graphic and copy it to the clipboard,
+- `graviss:select-print-region`: drag a rectangle over the canvas to set the print region,
+- `graviss:set-print-region-from-view`: use what the viewport currently covers as the print region,
+- `graviss:auto-select`: frame the structure exactly,
+- `graviss:auto-select-with-border`: frame the structure with a margin of two per cent of its longer side,
+- `graviss:enter-selection-mode`: work the print region without holding the modifier,
+- `graviss:exit-selection-mode`: hand every pointer back to the model,
+- `graviss:clear-print-region`: drop the print region and cover the whole model again,
 - `graviss:background-auto`: follow the active theme for the background,
 - `graviss:background-cloud`: use the Cloud appearance,
 - `graviss:background-midnight`: use the Midnight appearance,
@@ -93,6 +102,8 @@ A `.grv` document stores view configuration and an optional source path. When th
 The canvas keeps its canonical JSON in a private `TextBuffer`, without creating or registering a hidden text editor. Clean external changes reload immediately. Changes that overlap unsaved work remain conflicted until the normal Lumine save flow resolves them.
 
 Graviss owns the canvas and every command. Source packages provide the `graviss.source` service and own only recognition, file or database access, translation, and session disposal — no package but Graviss creates a viewer or registers an opener.
+
+A rendered image covers the active graphic's print region: a rectangle drawn over the viewport, held in fractions of it so it survives a resize and stays where it was drawn. Moving, rotating and zooming the camera change what falls inside it, which is how a view is composed through it. Every gesture on the frame is held behind the command modifier — Command on macOS, Control elsewhere — so the model keeps every unmodified pointer: orbit, pan, pick and the wheel all reach it through the frame. Held, a press inside the frame moves it, on an edge or a corner resizes it, outside it draws a new one, and a right-click drops it. One gesture is one undo step. **Enter Selection Mode** latches the modifier on for anyone who would rather not hold a key. Without one the image covers the whole model with a margin of two per cent of its longer side — the whole of it, including whatever the viewport is cropping away, and measured from what is drawn rather than from where the nodes are, so a rendered section is never cut off. It is still the view on screen, reaching past its edges: the camera never moves, because moving it would change the perspective and the image would be taken from somewhere the viewport never was.
 
 Each session describes its capabilities before Graviss asks for geometry, and a source may report that its data changed so Graviss rebuilds the scene. Values are SI: lengths in metres, forces in newtons. See the [service contract](docs/graviss.source.md) for the normalized model interface.
 
