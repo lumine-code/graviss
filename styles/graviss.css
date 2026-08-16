@@ -5,6 +5,11 @@
   --graviss-axis-x-color: #e5544c;
   --graviss-axis-y-color: #36a05a;
   --graviss-axis-z-color: #348ee0;
+  /* The region frames take their line from the editor theme but sit on a
+     background the appearance chooses, from White through Midnight. A light
+     theme's info colour over a light appearance leaves nothing to see, so
+     every frame carries a dark hairline outside it. */
+  --graviss-region-halo: color-mix(in srgb, black 30%, transparent);
 
   display: flex;
   min-width: 0;
@@ -105,6 +110,7 @@
   position: absolute;
   z-index: 3;
   border: 1px solid var(--text-color-info);
+  box-shadow: 0 0 0 1px var(--graviss-region-halo);
   background: color-mix(in srgb, var(--text-color-info) 12%, transparent);
   pointer-events: none;
 }
@@ -124,6 +130,7 @@
   position: absolute;
   z-index: 2;
   border: 2px dashed var(--graviss-region-line);
+  box-shadow: 0 0 0 1px var(--graviss-region-halo);
   pointer-events: none;
 }
 
