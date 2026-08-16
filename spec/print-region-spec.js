@@ -1,4 +1,6 @@
 const {
+  EXPORT_MAX_EDGE,
+  EXPORT_MAX_PIXELS,
   MINIMUM_REGION_FRACTION,
   PRINT_MARGIN_FRACTION,
   resizePrintRegion,
@@ -50,6 +52,20 @@ describe("print regions", () => {
     expect(() => validatePrintRegion({ x: 0, y: 0, width: 0, height: 0.4 })).toThrowError(
       /inside the viewport/,
     );
+  });
+
+  it("exports at a resolution worth looking at, bounded by what fits", () => {
+    // A square asks for four times the area of the edge limit, so the area cap
+    // is what actually bounds the allocation.
+    expect(EXPORT_MAX_EDGE).toBe(8192);
+    const square = printPixelSize({ width: 10, height: 10 });
+    expect(square.width).toBe(square.height);
+    expect(square.width * square.height).toBeLessThanOrEqual(EXPORT_MAX_PIXELS + 1);
+    expect(square.width).toBeGreaterThan(3500);
+
+    // A long thin region reaches the edge limit instead.
+    const strip = printPixelSize({ width: 400, height: 10 });
+    expect(strip.width).toBe(EXPORT_MAX_EDGE);
   });
 
   it("keeps the region's shape in the raster it prints from", () => {
