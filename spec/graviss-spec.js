@@ -133,8 +133,13 @@ describe("graviss", () => {
     expect(
       [...toolbar.querySelectorAll("button")].every((button) => !button.textContent.trim()),
     ).toBe(true);
-    expect(toolbar.querySelector("input")).toBeNull();
+    // The toolbar takes no typing: every control is a button, a picker, or the
+    // one slider that sizes the symbols.
+    expect(toolbar.querySelector('input:not([type="range"])')).toBeNull();
     expect(toolbar.querySelector(".graviss-graphic-title")).toBeNull();
+    const symbolSlider = toolbar.querySelector(".graviss-symbol-slider");
+    expect(symbolSlider).not.toBeNull();
+    expect(symbolSlider.getAttribute("aria-label")).toBe("Symbol size");
     const toolbarButtons = [...toolbar.querySelectorAll("button")];
     const perspectiveButton = toolbar.querySelector('[data-projection="perspective"]');
     const orthographicButton = toolbar.querySelector('[data-projection="orthographic"]');
@@ -386,7 +391,15 @@ describe("graviss", () => {
       supportPosition.setFromMatrixPosition(supportMatrix);
       expect(supportPosition.x).toBe(0);
       expect(supportPosition.y).toBe(0);
-      expect(supportPosition.z).toBeCloseTo(0.27, 6);
+      // Hung below the node along the model's own up axis, which points down
+      // here — and hung by its own size rather than by a fixed distance, so it
+      // meets the node at whatever size the symbols are drawn.
+      expect(supportPosition.z).toBeGreaterThan(0);
+      const hung = supportPosition.z;
+      item.renderer.setSymbolScale(item.renderer.getSymbolScale() * 2);
+      item.renderer.meshes.supports.getMatrixAt(0, supportMatrix);
+      supportPosition.setFromMatrixPosition(supportMatrix);
+      expect(supportPosition.z).toBeCloseTo(hung * 2, 6);
     } finally {
       item.destroy();
     }
@@ -2300,6 +2313,52 @@ describe("graviss", () => {
     providerDisposable.dispose();
     fs.rmSync(directory, { recursive: true, force: true });
     fs.rmSync(other, { recursive: true, force: true });
+  });
+
+  it("sizes every symbol from one slider, against the model rather than the metre", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const slider = item.element.querySelector(".graviss-symbol-slider");
+
+    // Symbols used to be fixed world sizes, so a small structure was buried
+    // under its own nodes and a large one showed none you could find. They are
+    // taken from the model now.
+    expect(renderer.symbolRadius()).toBeCloseTo(renderer.bounds.radius * 0.01, 9);
+    expect(Number(slider.value)).toBe(1);
+
+    const nodeMatrix = new renderer.THREE.Matrix4();
+    const nodeScale = new renderer.THREE.Vector3();
+    const radiusOf = (mesh) => {
+      mesh.getMatrixAt(0, nodeMatrix);
+      return nodeScale.setFromMatrixScale(nodeMatrix).x;
+    };
+    const nodeBefore = radiusOf(renderer.meshes.nodes);
+    const supportBefore = radiusOf(renderer.meshes.supports);
+
+    // One slider, and everything drawn as a mark moves with it together.
+    slider.value = "2";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(renderer.getSymbolScale()).toBe(2);
+    expect(radiusOf(renderer.meshes.nodes)).toBeCloseTo(nodeBefore * 2, 6);
+    expect(radiusOf(renderer.meshes.supports)).toBeCloseTo(supportBefore * 2, 6);
+
+    // Held to what it will actually draw, so a document cannot ask for a size
+    // that is no size at all.
+    expect(renderer.setSymbolScale(1000)).toBe(4);
+    expect(renderer.setSymbolScale(0)).toBe(0.25);
+    expect(renderer.setSymbolScale(Number.NaN)).toBe(1);
+
+    // It belongs to the graphic, like every other thing the toolbar sets, so
+    // undo puts back the size the graphic held before — and the slider follows
+    // the document rather than the other way round.
+    slider.value = "1.5";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(item.viewDocument.getData().graphics[0].symbolScale).toBe(1.5);
+    item.undo();
+    expect(item.viewDocument.getData().graphics[0].symbolScale).toBe(2);
+    expect(renderer.getSymbolScale()).toBe(2);
+    expect(Number(slider.value)).toBe(2);
   });
 
   it("draws an area element where it sits, not where its nodes are", async () => {
