@@ -1655,24 +1655,34 @@ describe("graviss", () => {
     const world = hit.point.toArray();
     const anchored = screenOf(world);
     const distanceBefore = renderer.camera.position.distanceTo(renderer.controls.target);
+    const positionBefore = renderer.camera.position.clone();
+    const depth = new renderer.THREE.Vector3(0, 0, -1)
+      .applyQuaternion(renderer.camera.quaternion)
+      .dot(hit.point.clone().sub(renderer.camera.position));
 
     wheel(under, -240);
     expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeLessThan(
       distanceBefore,
+    );
+    // The step is a fraction of the gap to the surface, not of the gap to the
+    // camera target: two notches close it to 0.8 squared of what it was.
+    expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeCloseTo(
+      depth * 0.64,
+      6,
     );
 
     // The contract: whatever the wheel was over has not moved under it.
     const held = screenOf(world);
     expect(Math.hypot(held.x - anchored.x, held.y - anchored.y)).toBeLessThan(0.01);
 
-    // And back out again, still anchored.
+    // And back out again, still anchored, and back where it started. The
+    // target does not come back to where it was, because it no longer marks
+    // the middle of the model — it marks what the pointer is over.
     wheel(under, 240);
     const returned = screenOf(world);
     expect(Math.hypot(returned.x - anchored.x, returned.y - anchored.y)).toBeLessThan(0.01);
-    expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeCloseTo(
-      distanceBefore,
-      6,
-    );
+    expect(renderer.camera.position.distanceTo(positionBefore)).toBeLessThan(1e-9);
+    expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeCloseTo(depth, 6);
 
     // Turned off, the wheel pulls toward the middle and the point drifts.
     lumine.config.set("graviss.zoomTowardPointer", false);
@@ -1717,10 +1727,24 @@ describe("graviss", () => {
     const floor = renderer.controls.minDistance;
     expect(floor).toBeGreaterThan(renderer.camera.near);
 
+    const aimedAt = () =>
+      renderer.intersectionAt({
+        clientX: bounds.left + Math.round(seen.x),
+        clientY: bounds.top + Math.round(seen.y),
+      });
+    expect(aimedAt()).not.toBeNull();
+
     // Zoom scales the distance rather than subtracting from it, so a few dozen
     // clicks are enough to decay it by six orders of magnitude.
     for (let step = 0; step < 300; step += 1) wheel(-120);
     expect(distance()).toBeGreaterThanOrEqual(floor - 1e-9);
+
+    // And the camera is still on this side of what it was aimed at. Scaling the
+    // step by the camera target instead walked it the target's whole distance
+    // along the ray, straight through anything nearer than the target.
+    const surface = aimedAt();
+    expect(surface).not.toBeNull();
+    expect(surface.distance).toBeGreaterThanOrEqual(floor - 1e-9);
     // The point of the floor: never inside the near plane, which is fixed when
     // the view is framed and does not follow the camera in.
     expect(distance()).toBeGreaterThan(renderer.camera.near);
