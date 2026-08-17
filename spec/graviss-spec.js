@@ -656,6 +656,65 @@ describe("graviss", () => {
     item.destroy();
   });
 
+  it("closes only the exposed perimeter of a run of thick elements", async () => {
+    const buildViewer = async (thicknesses) => {
+      const geometry = {
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+          { id: 5, x: 2, y: 0, z: 0 },
+          { id: 6, x: 2, y: 1, z: 0 },
+        ],
+        sections: [],
+        elements: [
+          { id: 30, kind: "shell", nodeIds: [1, 2, 3, 4], thickness: thicknesses[0] },
+          { id: 31, kind: "shell", nodeIds: [2, 5, 6, 3], thickness: thicknesses[1] },
+        ],
+        supports: [],
+      };
+      const session = {
+        async describe() {
+          return {
+            model: {
+              id: "shell-run",
+              title: "Shell run",
+              source: "Spec",
+              coordinateSystem: { upAxis: "z", handedness: "right" },
+            },
+            capabilities: { geometry: { elementKinds: ["shell"], supports: false } },
+          };
+        },
+        async getGeometry() {
+          return geometry;
+        },
+        dispose() {},
+      };
+      const item = mainModule.createViewer(session, { title: "Shell run" });
+      jasmine.attachToDOM(item.element);
+      await conditionPromise(() => item.renderer != null, "the shell-run scene to initialize");
+      return item;
+    };
+
+    // Two elements continuing through their seam: the walls either would put
+    // there coincide exactly, twins the depth buffer cannot order, so neither
+    // is drawn — three exposed side faces each beside the four parallel-face
+    // triangles, thirty vertices per element.
+    const continuous = await buildViewer([0.2, 0.2]);
+    expect(continuous.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(60);
+    continuous.destroy();
+
+    // A genuine step keeps both walls: its corners differ by the length of the
+    // step, so each element still closes its own body with all four.
+    const stepped = await buildViewer([
+      [0.2, 0.2, 0.2, 0.2],
+      [0.3, 0.3, 0.3, 0.3],
+    ]);
+    expect(stepped.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(72);
+    stepped.destroy();
+  });
+
   it("returns to a graphic with the camera it holds now, not the one it opened with", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
