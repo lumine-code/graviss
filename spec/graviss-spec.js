@@ -116,6 +116,24 @@ describe("graviss", () => {
       memberFill.polygonOffsetFactor,
       memberFill.polygonOffsetUnits,
     ]).toEqual([true, 1, 1]);
+    // Bodies draw after the mesh lines of other bodies, and lines write
+    // depth: a member in front of a slab's lines paints over the sliver its
+    // sunk fill would let pierce, while lines genuinely in front keep their
+    // pixels. Its own arrises draw last, on top of its fill.
+    const memberMeshes = item.renderer.meshes.members.children.filter(
+      (child) => child.isInstancedMesh,
+    );
+    expect(memberMeshes.length).toBeGreaterThan(0);
+    expect(memberMeshes.every((mesh) => mesh.renderOrder === 2)).toBe(true);
+    expect(item.renderer.memberContours.length).toBeGreaterThan(0);
+    expect(
+      item.renderer.memberContours.every(
+        (contours) =>
+          contours.renderOrder === 3 &&
+          contours.material.transparent === false &&
+          contours.material.depthWrite === true,
+      ),
+    ).toBe(true);
     spyOn(item.renderer, "pick").and.callThrough();
     item.renderer.canvasRenderer.domElement.dispatchEvent(new MouseEvent("pointermove"));
     expect(item.renderer.pick).not.toHaveBeenCalled();
@@ -1274,8 +1292,15 @@ describe("graviss", () => {
     );
 
     // Mesh lines are a layer of their own over the surfaces they describe.
+    // Opaque and depth-writing: a translucent line would render after every
+    // opaque body, where nothing can be drawn back over it — softness comes
+    // from the mixed ink instead, and the depth lets a nearer body cover
+    // exactly the lines it stands in front of.
     const edges = item.renderer.meshes.shells.userData.gravissEdges;
     expect(item.renderer.meshes.mesh).toBe(edges);
+    expect(edges.material.transparent).toBe(false);
+    expect(edges.material.depthWrite).toBe(true);
+    expect(edges.renderOrder).toBe(1);
     expect(edges.visible).toBe(true);
     expect(item.setVisibility("mesh", false)).toBe(false);
     expect(edges.visible).toBe(false);
@@ -1297,8 +1322,9 @@ describe("graviss", () => {
     expect(item.renderer.meshes.shells.material.visible).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEdges.visible).toBe(true);
     // A rebuild outside applyTheme must not reset the mesh lines to white.
+    const definition = appearanceDefinition(item.renderer.activeAppearance);
     expect(item.renderer.meshes.shells.userData.gravissEdges.material.color.getHex()).toBe(
-      appearanceDefinition(item.renderer.activeAppearance).shellEdge,
+      item.renderer.mixedLineColor(definition.shellEdge, definition.shell),
     );
   });
 
