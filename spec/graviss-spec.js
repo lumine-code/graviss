@@ -715,22 +715,31 @@ describe("graviss", () => {
     stepped.destroy();
 
     // Depth resolution does not fall as the camera backs away: from outside
-    // the scene the near plane rides its front — held under a third of far so
-    // the camera-centred sky keeps a shell to sit in — instead of trailing at
-    // a thousandth of the target distance.
+    // everything drawable the near plane rides up to its front instead of
+    // trailing at a thousandth of the target distance. The front is a box, not
+    // a sphere — hovering over the middle of a long deck is outside the box by
+    // exactly the height above it.
     const viewer = await buildViewer([0.2, 0.2]);
     const renderer = viewer.renderer;
-    const { center, radius } = renderer.sceneSphere;
-    renderer.camera.position.set(center.x + 500, center.y, center.z);
-    renderer.controls.target.copy(center);
+    const box = renderer.computeSceneBox();
+    const middle = box.getCenter(new renderer.THREE.Vector3());
+    renderer.controls.target.copy(middle);
+    renderer.camera.position.set(middle.x, middle.y, box.max.z + 5);
     renderer.updateDepthRange();
-    const far = 500 + renderer.bounds.radius * 20;
-    expect(renderer.camera.far).toBeCloseTo(far, 5);
-    expect(renderer.camera.near).toBeCloseTo(Math.min((500 - radius) * 0.9, far / 3), 5);
+    let distance = renderer.camera.position.distanceTo(renderer.controls.target);
+    expect(renderer.camera.far).toBeCloseTo(distance + renderer.bounds.radius * 20, 5);
+    expect(renderer.camera.near).toBeCloseTo(5 * 0.9, 5);
+
+    // Far out the ride is held under a third of far, so the camera-centred sky
+    // keeps a shell between the planes to sit in.
+    renderer.camera.position.set(middle.x, middle.y, box.max.z + 500);
+    renderer.updateDepthRange();
+    distance = renderer.camera.position.distanceTo(renderer.controls.target);
+    expect(renderer.camera.near).toBeCloseTo((distance + renderer.bounds.radius * 20) / 3, 5);
     expect(renderer.camera.near * 2).toBeLessThan(renderer.camera.far);
 
-    // Inside the scene nothing rides: the old floor keeps close work unclipped.
-    renderer.camera.position.set(center.x + radius * 0.5, center.y, center.z);
+    // Inside the box nothing rides: the old floor keeps close work unclipped.
+    renderer.camera.position.set(middle.x + 0.2, middle.y, middle.z);
     renderer.updateDepthRange();
     const inside = renderer.camera.position.distanceTo(renderer.controls.target);
     const insideFar = inside + renderer.bounds.radius * 20;
