@@ -713,6 +713,30 @@ describe("graviss", () => {
     ]);
     expect(stepped.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(72);
     stepped.destroy();
+
+    // Depth resolution does not fall as the camera backs away: from outside
+    // the scene the near plane rides its front — held under a third of far so
+    // the camera-centred sky keeps a shell to sit in — instead of trailing at
+    // a thousandth of the target distance.
+    const viewer = await buildViewer([0.2, 0.2]);
+    const renderer = viewer.renderer;
+    const { center, radius } = renderer.sceneSphere;
+    renderer.camera.position.set(center.x + 500, center.y, center.z);
+    renderer.controls.target.copy(center);
+    renderer.updateDepthRange();
+    const far = 500 + renderer.bounds.radius * 20;
+    expect(renderer.camera.far).toBeCloseTo(far, 5);
+    expect(renderer.camera.near).toBeCloseTo(Math.min((500 - radius) * 0.9, far / 3), 5);
+    expect(renderer.camera.near * 2).toBeLessThan(renderer.camera.far);
+
+    // Inside the scene nothing rides: the old floor keeps close work unclipped.
+    renderer.camera.position.set(center.x + radius * 0.5, center.y, center.z);
+    renderer.updateDepthRange();
+    const inside = renderer.camera.position.distanceTo(renderer.controls.target);
+    const insideFar = inside + renderer.bounds.radius * 20;
+    expect(renderer.camera.far).toBeCloseTo(insideFar, 6);
+    expect(renderer.camera.near).toBeCloseTo(Math.max(insideFar / 10000, inside / 1000), 6);
+    viewer.destroy();
   });
 
   it("returns to a graphic with the camera it holds now, not the one it opened with", async () => {
@@ -1947,7 +1971,6 @@ describe("graviss", () => {
       );
     const distance = () => renderer.camera.position.distanceTo(renderer.controls.target);
     const floor = renderer.controls.minDistance;
-    expect(floor).toBeGreaterThan(renderer.camera.near);
 
     const aimedAt = () =>
       renderer.intersectionAt({
@@ -1970,8 +1993,9 @@ describe("graviss", () => {
     const surface = aimedAt();
     expect(surface).not.toBeNull();
     expect(surface.distance).toBeGreaterThanOrEqual(floor - 1e-9);
-    // The point of the floor: never inside the near plane, which is fixed when
-    // the view is framed and does not follow the camera in.
+    // The point of the floor: never inside the near plane. The depth range
+    // follows the camera, so at the closest the wheel can rest the plane has
+    // come back down below the surface being approached.
     expect(distance()).toBeGreaterThan(renderer.camera.near);
 
     // Everything still moves down there, in the world and not just on paper.
