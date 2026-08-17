@@ -2052,6 +2052,52 @@ describe("graviss", () => {
     expect(renderer.captureCameraState().target.every(Number.isFinite)).toBe(true);
   });
 
+  it("reveals and crops on resize instead of rescaling the framed view", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const viewport = item.element.querySelector(".graviss-viewport");
+    viewport.style.width = "800px";
+    viewport.style.height = "400px";
+    renderer.resize();
+
+    // A structure someone framed must stay exactly where it is on screen when
+    // the pane changes height: more of the world appears above and below it,
+    // rather than the same picture squeezed to the new height.
+    const node = renderer.geometry.nodes[0];
+    const centreOffset = () => {
+      const seen = renderer.projectToScreen([node.x, node.y, node.z]);
+      return {
+        x: seen.x - renderer.host.clientWidth / 2,
+        y: seen.y - renderer.host.clientHeight / 2,
+      };
+    };
+    const before = centreOffset();
+    const fovBefore = renderer.perspectiveCamera.fov;
+    viewport.style.height = "800px";
+    renderer.resize();
+    const after = centreOffset();
+    expect(after.x).toBeCloseTo(before.x, 3);
+    expect(after.y).toBeCloseTo(before.y, 3);
+    // The vertical angle follows the height, which is what holds the world a
+    // pixel covers.
+    expect(Math.tan((renderer.perspectiveCamera.fov * Math.PI) / 360)).toBeCloseTo(
+      Math.tan((fovBefore * Math.PI) / 360) * 2,
+      6,
+    );
+
+    // The orthographic projection holds its scale the same way.
+    renderer.setProjection("orthographic");
+    const orthoBefore = centreOffset();
+    const heightBefore = renderer.orthographicHeight;
+    viewport.style.height = "400px";
+    renderer.resize();
+    expect(renderer.orthographicHeight).toBeCloseTo(heightBefore / 2, 9);
+    const orthoAfter = centreOffset();
+    expect(orthoAfter.x).toBeCloseTo(orthoBefore.x, 3);
+    expect(orthoAfter.y).toBeCloseTo(orthoBefore.y, 3);
+  });
+
   it("keeps a floor under the camera however long the wheel is turned", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
