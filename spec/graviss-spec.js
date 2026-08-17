@@ -119,22 +119,31 @@ describe("graviss", () => {
     const memberFill = item.renderer.memberMaterial;
     expect(memberFill.polygonOffset).toBe(false);
     expect(memberFill.depthFunc).toBe(item.renderer.THREE.LessEqualDepth);
-    // The tie chain, resolved by draw order with no epsilon anywhere: member
-    // fills draw after the ordinary lines and win their ties, member contours
-    // draw after their fill and tie back over it — bit-exact, both baked on
-    // the CPU from the same matrices — and the shell fill draws last, losing
-    // ties to everything while covering whatever it strictly hides.
+    // The visibility chain, resolved with no epsilon anywhere: member fills
+    // draw after the ordinary lines and win their ties, marking the pixels
+    // they visibly claim in the stencil; the shell fill draws after them,
+    // losing ties to its own lines and taking the mark back wherever it wins
+    // a pixel; and the member contours draw last, only on marks that
+    // survived — so an arris finishes exactly where the visible member
+    // surface does, however thin a sliver of the body protrudes.
     const memberMeshes = item.renderer.meshes.members.children.filter((child) => child.isMesh);
     expect(memberMeshes.length).toBeGreaterThan(0);
     expect(memberMeshes.every((mesh) => mesh.renderOrder === 2)).toBe(true);
     expect(memberMeshes.every((mesh) => !mesh.isInstancedMesh)).toBe(true);
+    expect(memberFill.stencilWrite).toBe(true);
+    expect(memberFill.stencilRef).toBe(1);
+    expect(memberFill.stencilZPass).toBe(item.renderer.THREE.ReplaceStencilOp);
     expect(item.renderer.memberContours.length).toBeGreaterThan(0);
     expect(
       item.renderer.memberContours.every(
         (contours) =>
-          contours.renderOrder === 3 &&
+          contours.renderOrder === 5 &&
           contours.material.transparent === false &&
-          contours.material.depthWrite === true,
+          contours.material.depthWrite === true &&
+          contours.material.stencilWrite === true &&
+          contours.material.stencilWriteMask === 0 &&
+          contours.material.stencilFunc === item.renderer.THREE.EqualStencilFunc &&
+          contours.material.stencilRef === 1,
       ),
     ).toBe(true);
     spyOn(item.renderer, "pick").and.callThrough();
@@ -754,6 +763,11 @@ describe("graviss", () => {
     const shellFill = continuous.renderer.meshes.shells.material;
     expect(shellFill.polygonOffset).toBe(false);
     expect(shellFill.depthFunc).toBe(continuous.renderer.THREE.LessDepth);
+    // Winning a pixel takes the member mark away, so no arris outlives the
+    // surface that hid its member.
+    expect(shellFill.stencilWrite).toBe(true);
+    expect(shellFill.stencilRef).toBe(0);
+    expect(shellFill.stencilZPass).toBe(continuous.renderer.THREE.ReplaceStencilOp);
     continuous.destroy();
 
     // A genuine step keeps both walls: its corners differ by the length of the
