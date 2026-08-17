@@ -2302,6 +2302,66 @@ describe("graviss", () => {
     fs.rmSync(other, { recursive: true, force: true });
   });
 
+  it("draws an area element where it sits, not where its nodes are", async () => {
+    // A SOFiSTiK quad can be eccentric: a slab meshed at its top face, a deck
+    // sitting on beams. The nodes stay where the analysis put them, so the
+    // element has to carry the offset itself — nodes are shared between
+    // elements that offset differently and cannot be moved for one of them.
+    const square = [
+      { id: 1, x: 0, y: 0, z: 0 },
+      { id: 2, x: 1, y: 0, z: 0 },
+      { id: 3, x: 1, y: 1, z: 0 },
+      { id: 4, x: 0, y: 1, z: 0 },
+    ];
+    const model = {
+      id: "offset-quad",
+      title: "Offset quad",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: square,
+        // Wound counter-clockwise in the XY plane, so the element normal is +Z
+        // and a positive offset lifts it.
+        elements: [{ id: 1, kind: "shell", nodeIds: [1, 2, 3, 4], thickness: 0.2, offset: 0.5 }],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      const bounds = new renderer.THREE.Box3().setFromObject(renderer.meshes.shells);
+      // Half the thickness either side of a mid-surface half a metre up. Six
+      // places, because positions are held in a Float32Array.
+      expect(bounds.min.z).toBeCloseTo(0.4, 6);
+      expect(bounds.max.z).toBeCloseTo(0.6, 6);
+      // Only along the normal: the element keeps the footprint its nodes gave it.
+      expect(bounds.min.x).toBeCloseTo(0, 6);
+      expect(bounds.max.x).toBeCloseTo(1, 6);
+
+      // The offset is the element's own, so it holds without a thickness too —
+      // an offset flat surface is still offset.
+      renderer.setSectionRendering(false);
+      const flat = new renderer.THREE.Box3().setFromObject(renderer.meshes.shells);
+      expect(flat.min.z).toBeCloseTo(0.5, 6);
+      expect(flat.max.z).toBeCloseTo(0.5, 6);
+
+      // And it moves the mesh lines with it, or they would float off the face.
+      expect(renderer.meshes.shells.visible).toBe(true);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("opens a hand-written document that repeats a graphic name", async () => {
     // The reported failure: a file written by hand names two graphics the same
     // and the whole document was refused, with the error thrown out of the

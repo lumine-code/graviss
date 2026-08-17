@@ -92,6 +92,7 @@ type Element = {
   nodeIds: [Id, Id] | [Id, Id, Id] | [Id, Id, Id, Id];
   sectionId?: Id;
   thickness?: number;
+  offset?: number;
   localAxes?: { x: Vector3; y: Vector3; z: Vector3 };
 };
 
@@ -134,6 +135,8 @@ Graviss draws line and area elements at one of three levels, and the user switch
 | `full`    | its cross-section, extruded | extruded to its real thickness | the above, plus `thickness` on area elements                          |
 
 A provider that supplies no section falls back to a thin centreline, and one that supplies no thickness draws its area elements flat. Neither is an error: the model is drawn as completely as it was described.
+
+`offset` moves an area element off the nodes it was meshed on, along its own normal — the right-handed normal of its node order, so the sign follows the order the nodes were given in. It is the distance from that plane to the element's mid-surface, in metres, and it may be negative. A slab modelled at its top face and a deck sitting on beams both mesh at nodes the element does not physically occupy; the analysis keeps the nodes where it put them and Graviss draws the element where it is. Nodes are shared between elements that offset differently, so this belongs to the element and never to the node, and a provider must not fold it into node coordinates. It applies at every level, with or without a thickness: an offset flat surface is still offset. Line elements ignore it.
 
 ### Units
 
