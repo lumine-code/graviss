@@ -951,8 +951,8 @@ describe("graviss", () => {
     expect(keystrokesFor("graviss:view-top")).toEqual(["t"]);
     expect(keystrokesFor("graviss:view-front")).toEqual(["e"]);
     expect(keystrokesFor("graviss:view-right")).toEqual(["r"]);
-    expect(keystrokesFor("graviss:projection-perspective")).toEqual(["p"]);
-    expect(keystrokesFor("graviss:projection-orthographic")).toEqual(["o"]);
+    expect(keystrokesFor("graviss:perspective-projection")).toEqual(["p"]);
+    expect(keystrokesFor("graviss:orthographic-projection")).toEqual(["o"]);
     expect(keystrokesFor("graviss:toggle-members")).toEqual(["m"]);
     expect(keystrokesFor("graviss:toggle-shells")).toEqual(["s"]);
     expect(keystrokesFor("graviss:toggle-nodes")).toEqual(["n"]);
@@ -961,7 +961,7 @@ describe("graviss", () => {
     expect(keystrokesFor("graviss:toggle-grid")).toEqual(["g"]);
     expect(keystrokesFor("graviss:toggle-axes")).toEqual(["a"]);
     expect(keystrokesFor("graviss:toggle-local-axes")).toEqual(["l"]);
-    expect(keystrokesFor("graviss:toggle-sections")).toEqual(["d"]);
+    expect(keystrokesFor("graviss:toggle-section-rendering")).toEqual(["d"]);
     expect(keystrokesFor("graviss:choose-background")).toEqual(["b"]);
 
     const updateCamera = spyOn(item, "updateCamera").and.callThrough();
