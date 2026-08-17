@@ -112,9 +112,13 @@ describe("graviss", () => {
     // graze — a tail of foreign mesh lines past the intersection, stretching
     // as the view flattens along it. Lines draw first and write true depth,
     // so the strict test is all a fill needs.
+    // Members alone WIN ties: an eccentric girder's face lies exactly in the
+    // slab's plane, where no strict test can put the flange over the slab's
+    // mesh lines — and where the tie happens, the member is the physical
+    // thing being looked at.
     const memberFill = item.renderer.memberMaterial;
     expect(memberFill.polygonOffset).toBe(false);
-    expect(memberFill.depthFunc).toBe(item.renderer.THREE.LessDepth);
+    expect(memberFill.depthFunc).toBe(item.renderer.THREE.LessEqualDepth);
     // Every line draws before every fill. Lines write true depth and fills
     // are sunk by their offset, so a fill fails against its own lines and
     // stays behind them, while a fill in front of a foreign line — a slab
@@ -1298,7 +1302,9 @@ describe("graviss", () => {
     expect(edges.material.transparent).toBe(false);
     expect(edges.material.depthWrite).toBe(true);
     expect(edges.renderOrder).toBe(1);
-    expect(item.renderer.meshes.shells.renderOrder).toBe(2);
+    // After the member fills, whose flush faces must claim their band before
+    // the tie-losing shell fill arrives.
+    expect(item.renderer.meshes.shells.renderOrder).toBe(3);
     expect(edges.visible).toBe(true);
     expect(item.setVisibility("mesh", false)).toBe(false);
     expect(edges.visible).toBe(false);
