@@ -139,9 +139,9 @@ describe("graviss", () => {
     expect(toolbar.querySelector(".graviss-graphic-title")).toBeNull();
     const symbolInput = toolbar.querySelector(".graviss-symbol-input");
     expect(symbolInput).not.toBeNull();
-    expect(symbolInput.getAttribute("aria-label")).toBe("Symbol size in metres");
+    expect(symbolInput.getAttribute("aria-label")).toBe("Symbol size in millimetres");
     expect(symbolInput.min).toBe("0");
-    expect(symbolInput.max).toBe("1");
+    expect(symbolInput.max).toBe("1000");
     const toolbarButtons = [...toolbar.querySelectorAll("button")];
     const perspectiveButton = toolbar.querySelector('[data-projection="perspective"]');
     const orthographicButton = toolbar.querySelector('[data-projection="orthographic"]');
@@ -2419,7 +2419,8 @@ describe("graviss", () => {
     // a small structure was buried under its own nodes. A graphic that has said
     // nothing takes a size from the model, and it is a real length either way.
     expect(renderer.getSymbolSize()).toBeCloseTo(renderer.bounds.radius / 500, 9);
-    expect(Number(field.value)).toBeCloseTo(renderer.bounds.radius / 500, 4);
+    // The field is millimetres; everything behind it is metres.
+    expect(Number(field.value)).toBeCloseTo((renderer.bounds.radius / 500) * 1000, 1);
 
     const scaleMatrix = new renderer.THREE.Matrix4();
     const scaleVector = new renderer.THREE.Vector3();
@@ -2431,7 +2432,7 @@ describe("graviss", () => {
 
     // One field, and everything drawn as a mark takes its length from it.
     const supportBefore = radiusOf(renderer.meshes.supports);
-    field.value = "0.5";
+    field.value = "500";
     field.dispatchEvent(new Event("input", { bubbles: true }));
     expect(renderer.getSymbolSize()).toBe(0.5);
     expect(radiusOf(renderer.meshes.nodes)).toBeCloseTo(0.5, 6);
@@ -2453,7 +2454,7 @@ describe("graviss", () => {
 
     // The wheel over the field turns the length, which is how anyone reaches
     // for a size, and it steps by what the field itself steps by.
-    const step = Number(field.step);
+    const step = Number(field.step) / 1000;
     const before = renderer.getSymbolSize();
     field.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 }));
     expect(renderer.getSymbolSize()).toBeCloseTo(before + step, 9);
