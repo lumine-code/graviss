@@ -1625,7 +1625,7 @@ describe("graviss", () => {
 
     const canvas = renderer.canvasRenderer.domElement;
     const bounds = canvas.getBoundingClientRect();
-    const wheel = (point, deltaY) =>
+    const spin = (point, deltaY) =>
       canvas.dispatchEvent(
         new WheelEvent("wheel", {
           bubbles: true,
@@ -1635,6 +1635,12 @@ describe("graviss", () => {
           clientY: bounds.top + point.y,
         }),
       );
+    // The camera eases onto the depth a notch asks for, so a spec that measures
+    // where it ended up has to let it get there.
+    const wheel = async (point, deltaY) => {
+      spin(point, deltaY);
+      await conditionPromise(() => renderer.dollyFlight == null, "the zoom to settle");
+    };
     const screenOf = (world) => {
       renderer.camera.updateMatrixWorld(true);
       return renderer.projectToScreen(world);
@@ -1660,7 +1666,15 @@ describe("graviss", () => {
       .applyQuaternion(renderer.camera.quaternion)
       .dot(hit.point.clone().sub(renderer.camera.position));
 
-    wheel(under, -240);
+    // A notch does not arrive on the frame it is turned: the camera eases onto
+    // the depth it asked for.
+    spin(under, -240);
+    expect(renderer.dollyFlight).not.toBeNull();
+    expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeGreaterThan(
+      depth * 0.64,
+    );
+    await conditionPromise(() => renderer.dollyFlight == null, "the zoom to settle");
+
     expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeLessThan(
       distanceBefore,
     );
@@ -1678,7 +1692,7 @@ describe("graviss", () => {
     // And back out again, still anchored, and back where it started. The
     // target does not come back to where it was, because it no longer marks
     // the middle of the model — it marks what the pointer is over.
-    wheel(under, 240);
+    await wheel(under, 240);
     const returned = screenOf(world);
     expect(Math.hypot(returned.x - anchored.x, returned.y - anchored.y)).toBeLessThan(0.01);
     expect(renderer.camera.position.distanceTo(positionBefore)).toBeLessThan(1e-9);
@@ -1688,7 +1702,7 @@ describe("graviss", () => {
     lumine.config.set("graviss.zoomTowardPointer", false);
     expect(renderer.controls.zoomToCursor).toBe(false);
     const centred = screenOf(world);
-    wheel(under, -240);
+    await wheel(under, -240);
     const drifted = screenOf(world);
     expect(Math.hypot(drifted.x - centred.x, drifted.y - centred.y)).toBeGreaterThan(1);
 
@@ -1696,7 +1710,7 @@ describe("graviss", () => {
     // measure has to leave the zoom unanchored rather than aim it at infinity.
     lumine.config.set("graviss.zoomTowardPointer", true);
     viewport.style.height = "0px";
-    wheel(under, -240);
+    spin(under, -240);
     expect(renderer.captureCameraState().position.every(Number.isFinite)).toBe(true);
     expect(renderer.captureCameraState().target.every(Number.isFinite)).toBe(true);
   });
@@ -1710,6 +1724,10 @@ describe("graviss", () => {
     viewport.style.height = "400px";
     renderer.resize();
     const canvas = renderer.canvasRenderer.domElement;
+    // A dispatched pointer is not an active one, so the capture the controls
+    // take on it would throw. Nothing here depends on it.
+    canvas.setPointerCapture = () => {};
+    canvas.releasePointerCapture = () => {};
     const bounds = canvas.getBoundingClientRect();
     const node = renderer.geometry.nodes[0];
     const seen = renderer.projectToScreen([node.x, node.y, node.z]);
@@ -1735,8 +1753,11 @@ describe("graviss", () => {
     expect(aimedAt()).not.toBeNull();
 
     // Zoom scales the distance rather than subtracting from it, so a few dozen
-    // clicks are enough to decay it by six orders of magnitude.
+    // clicks are enough to decay it by six orders of magnitude. Turned this
+    // fast they compound onto one another rather than each starting again from
+    // wherever the easing has got to.
     for (let step = 0; step < 300; step += 1) wheel(-120);
+    await conditionPromise(() => renderer.dollyFlight == null, "the zoom to settle");
     expect(distance()).toBeGreaterThanOrEqual(floor - 1e-9);
 
     // And the camera is still on this side of what it was aimed at. Scaling the
@@ -1756,7 +1777,18 @@ describe("graviss", () => {
     expect(renderer.camera.position.distanceTo(beforePan)).toBeGreaterThan(floor * 0.1);
     const beforeOut = distance();
     wheel(240);
+    await conditionPromise(() => renderer.dollyFlight == null, "the zoom to settle");
     expect(distance()).toBeGreaterThan(beforeOut);
+
+    // A drag takes the camera over from a zoom still settling, rather than
+    // orbiting against a view that has not come to rest.
+    wheel(-120);
+    expect(renderer.dollyFlight).not.toBeNull();
+    canvas.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, pointerId: 1 }),
+    );
+    expect(renderer.dollyFlight).toBeNull();
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 1 }));
 
     // A camera that collapsed before there was a floor is pulled back out by
     // the restore, so an already-saved document is not stuck for good.
