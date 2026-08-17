@@ -2248,4 +2248,70 @@ describe("graviss", () => {
     expect(session.getGeometry).not.toHaveBeenCalled();
     expect(session.dispose).toHaveBeenCalled();
   });
+
+  it("loads a pane restored before its source package registered", async () => {
+    // What restoring a window does: the panes are rebuilt first and the
+    // packages' services are wired afterwards, so the viewer is built while
+    // nothing can source it.
+    sourceProviderDisposable.dispose();
+    const restored = mainModule.deserialize({ uri: MAIN_EXAMPLE_URI });
+    expect(restored).not.toBeNull();
+    const error = restored.element.querySelector(".graviss-error");
+    await conditionPromise(() => !error.hidden, "the missing source to be reported");
+    expect(error.querySelector(".graviss-error-message").textContent).toMatch(/No source provider/);
+    expect(restored.renderer).toBeNull();
+
+    // The provider arrives moments later, and the pane that was waiting on it
+    // loads without being closed and opened again.
+    const unresolved = restored.session;
+    sourceProviderDisposable = mainModule.consumeGravissSource({
+      id: "spec-models",
+      createSession({ filePath }) {
+        const model = TEST_MODELS.find(({ viewDocumentPath }) => viewDocumentPath === filePath);
+        return model ? new TestSession(model) : null;
+      },
+    });
+    await conditionPromise(() => restored.renderer != null, "the restored pane to load");
+    expect(error.hidden).toBe(true);
+    expect(restored.session).not.toBe(unresolved);
+    // The placeholder is closed behind it rather than left holding on.
+    expect(unresolved.disposed).toBe(true);
+
+    // The camera the document held is what it comes back at, which is the
+    // reason for reloading the pane rather than replacing it.
+    expect(restored.renderer.captureCameraState().projection).toBe("perspective");
+    restored.destroy();
+  });
+
+  it("leaves a viewer alone when a late provider cannot source it", async () => {
+    sourceProviderDisposable.dispose();
+    const restored = mainModule.deserialize({ uri: MAIN_EXAMPLE_URI });
+    const error = restored.element.querySelector(".graviss-error");
+    await conditionPromise(() => !error.hidden, "the missing source to be reported");
+    const unresolved = restored.session;
+
+    // A provider that handles nothing here leaves the pane as it was.
+    const idle = mainModule.consumeGravissSource({
+      id: "spec-handles-nothing",
+      createSession: () => null,
+    });
+    expect(restored.session).toBe(unresolved);
+    expect(error.hidden).toBe(false);
+    idle.dispose();
+
+    // One that throws is reported on the pane it was asked about, and not out
+    // of the registration that would carry it into another package's activate.
+    const angry = mainModule.consumeGravissSource({
+      id: "spec-throws",
+      createSession() {
+        throw new Error("The engineering database is unavailable.");
+      },
+    });
+    expect(error.querySelector(".graviss-error-message").textContent).toMatch(
+      /database is unavailable/,
+    );
+    expect(restored.session).toBe(unresolved);
+    angry.dispose();
+    restored.destroy();
+  });
 });
