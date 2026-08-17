@@ -2436,21 +2436,29 @@ describe("graviss", () => {
     const direction = new renderer.THREE.Vector3();
     let zenith = null;
     let nadir = null;
+    let horizon = null;
     for (let index = 0; index < position.count; index += 1) {
       direction.fromBufferAttribute(position, index).normalize();
       const height = direction.dot(renderer.worldUp);
       const value = colors.getX(index) + colors.getY(index) + colors.getZ(index);
       if (zenith === null || height > zenith.height) zenith = { height, value };
       if (nadir === null || height < nadir.height) nadir = { height, value };
+      if (horizon === null || Math.abs(height) < Math.abs(horizon.height)) {
+        horizon = { height, value };
+      }
     }
-    expect(zenith.value).toBeGreaterThan(nadir.value);
 
-    // The bottom of it is the appearance's own colour, so the sky is that
-    // colour lit from above rather than a second scheme.
+    // A lit ceiling over a floor in shadow, meeting at the colour the
+    // appearance chose — one grade each way rather than one across the whole,
+    // so the horizon is the scheme and neither half is a second one.
     const flat = new renderer.THREE.Color(
       appearanceDefinition(renderer.activeAppearance).background,
     );
-    expect(nadir.value).toBeCloseTo(flat.r + flat.g + flat.b, 5);
+    const base = flat.r + flat.g + flat.b;
+    expect(horizon.height).toBeCloseTo(0, 6);
+    expect(horizon.value).toBeCloseTo(base, 5);
+    expect(zenith.value).toBeGreaterThan(base);
+    expect(nadir.value).toBeLessThan(base);
 
     // It follows the camera, so it is a sky and not something the camera can
     // leave behind or fly through.
