@@ -1159,11 +1159,10 @@ describe("graviss", () => {
     expect(keystrokesFor("graviss:move-right")).toEqual(["right"]);
     expect(keystrokesFor("graviss:move-up")).toEqual(["up"]);
     expect(keystrokesFor("graviss:move-down")).toEqual(["down"]);
-    const commandModifier = process.platform === "darwin" ? "cmd" : "ctrl";
-    expect(keystrokesFor("graviss:rotate-left")).toEqual([`${commandModifier}-left`]);
-    expect(keystrokesFor("graviss:rotate-right")).toEqual([`${commandModifier}-right`]);
-    expect(keystrokesFor("graviss:rotate-up")).toEqual([`${commandModifier}-up`]);
-    expect(keystrokesFor("graviss:rotate-down")).toEqual([`${commandModifier}-down`]);
+    expect(keystrokesFor("graviss:rotate-left")).toEqual(["alt-left"]);
+    expect(keystrokesFor("graviss:rotate-right")).toEqual(["alt-right"]);
+    expect(keystrokesFor("graviss:rotate-up")).toEqual(["alt-up"]);
+    expect(keystrokesFor("graviss:rotate-down")).toEqual(["alt-down"]);
     expect(keystrokesFor("graviss:zoom-in")).toEqual(["+", "="]);
     expect(keystrokesFor("graviss:zoom-out")).toEqual(["-", "_"]);
     expect(keystrokesFor("graviss:previous-graphic")).toEqual(["["]);
@@ -1185,6 +1184,31 @@ describe("graviss", () => {
     expect(keystrokesFor("graviss:toggle-local-axes")).toEqual(["l"]);
     expect(keystrokesFor("graviss:toggle-section-rendering")).toEqual(["d"]);
     expect(keystrokesFor("graviss:choose-background")).toEqual(["b"]);
+
+    // A binding that exists is not yet a binding that fires: core resolves
+    // every arrow under .native-key-bindings to native! at higher specificity
+    // than the package keymap, so that class on the root killed the camera
+    // keys while findKeyBindings still reported them. The root must stay
+    // clear of it; the symbol field carries it alone, keeping its own arrows
+    // native while it has focus.
+    expect(item.element.classList.contains("native-key-bindings")).toBe(false);
+    expect(
+      item.element.querySelector(".graviss-symbol-input").classList.contains("native-key-bindings"),
+    ).toBe(true);
+    const pressOnRoot = (key) => {
+      const event = lumine.keymaps.constructor.buildKeydownEvent(key, {
+        target: item.element,
+      });
+      lumine.keymaps.handleKeyboardEvent(event);
+    };
+    const targetBeforeArrow = item.renderer.controls.target.clone();
+    pressOnRoot("left");
+    expect(item.renderer.controls.target.equals(targetBeforeArrow)).toBe(false);
+    const positionBeforeAltArrow = item.renderer.camera.position.clone();
+    const targetBeforeAltArrow = item.renderer.controls.target.clone();
+    pressOnRoot("alt-left");
+    expect(item.renderer.controls.target.distanceTo(targetBeforeAltArrow)).toBeLessThan(1e-8);
+    expect(item.renderer.camera.position.distanceTo(positionBeforeAltArrow)).toBeGreaterThan(0.1);
 
     const updateCamera = spyOn(item, "updateCamera").and.callThrough();
     const initialOffset = item.renderer.camera.position.clone().sub(item.renderer.controls.target);

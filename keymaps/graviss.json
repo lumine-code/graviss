@@ -1,4 +1,8 @@
 {
+  // Bound on the pane item itself, which is where focus lands when the canvas
+  // is clicked. The root must never carry native-key-bindings: core resolves
+  // every arrow under that class to native! at higher specificity than these,
+  // which findKeyBindings cannot see — the keys exist and simply never fire.
   ".graviss": {
     "[": "graviss:previous-graphic",
     "]": "graviss:next-graphic",
@@ -23,10 +27,10 @@
     "right": "graviss:move-right",
     "up": "graviss:move-up",
     "down": "graviss:move-down",
-    "cmdorctrl-left": "graviss:rotate-left",
-    "cmdorctrl-right": "graviss:rotate-right",
-    "cmdorctrl-up": "graviss:rotate-up",
-    "cmdorctrl-down": "graviss:rotate-down",
+    "alt-left": "graviss:rotate-left",
+    "alt-right": "graviss:rotate-right",
+    "alt-up": "graviss:rotate-up",
+    "alt-down": "graviss:rotate-down",
     "+": "graviss:zoom-in",
     "=": "graviss:zoom-in",
     "-": "graviss:zoom-out",

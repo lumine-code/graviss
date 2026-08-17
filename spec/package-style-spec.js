@@ -50,7 +50,12 @@ describe("graviss package conventions", () => {
   });
 
   it("keeps pane actions local and exposes public style properties", () => {
-    const keymap = JSON.parse(fs.readFileSync(path.join(root, "keymaps", "graviss.json"), "utf8"));
+    // Read the way the keymap loader reads it: comments are welcome in a
+    // keymap file, and this spec must not be the one place that refuses them.
+    const keymapText = fs
+      .readFileSync(path.join(root, "keymaps", "graviss.json"), "utf8")
+      .replace(/^\s*\/\/.*$/gm, "");
+    const keymap = JSON.parse(keymapText);
     expect(Object.keys(keymap)).toEqual([".graviss"]);
     expect(Object.keys(keymap[".graviss"]).some((stroke) => /^ctrl-/.test(stroke))).toBe(false);
     const styles = fs.readFileSync(path.join(root, "styles", "graviss.css"), "utf8");
