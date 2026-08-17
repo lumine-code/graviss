@@ -151,6 +151,11 @@ describe("graviss", () => {
     expect(symbolInput.getAttribute("aria-label")).toBe("Symbol size in millimetres");
     expect(symbolInput.min).toBe("0");
     expect(symbolInput.max).toBe("1000");
+    // "any", not a number: a step constrains what counts as a valid value, and
+    // a mark sized from the model is any length at all — a numeric step left
+    // the field sitting in the browser's red :invalid state.
+    expect(symbolInput.step).toBe("any");
+    expect(symbolInput.validity.valid).toBe(true);
     const toolbarButtons = [...toolbar.querySelectorAll("button")];
     const perspectiveButton = toolbar.querySelector('[data-projection="perspective"]');
     const orthographicButton = toolbar.querySelector('[data-projection="orthographic"]');
@@ -2701,8 +2706,10 @@ describe("graviss", () => {
     // a small structure was buried under its own nodes. A graphic that has said
     // nothing takes a size from the model, and it is a real length either way.
     expect(renderer.getSymbolSize()).toBeCloseTo(renderer.bounds.radius / 500, 9);
-    // The field is millimetres; everything behind it is metres.
+    // The field is millimetres; everything behind it is metres — and whatever
+    // length the model suggests is a valid value of its own field.
     expect(Number(field.value)).toBeCloseTo((renderer.bounds.radius / 500) * 1000, 1);
+    expect(field.validity.valid).toBe(true);
 
     const scaleMatrix = new renderer.THREE.Matrix4();
     const scaleVector = new renderer.THREE.Vector3();
@@ -2735,8 +2742,9 @@ describe("graviss", () => {
     expect(renderer.meshes.nodes.visible).toBe(true);
 
     // The wheel over the field turns the length, which is how anyone reaches
-    // for a size, and it steps by what the field itself steps by.
-    const step = Number(field.step) / 1000;
+    // for a size: five millimetres a notch, decoupled from the step attribute
+    // the field no longer constrains values by.
+    const step = 0.005;
     const before = renderer.getSymbolSize();
     field.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 }));
     expect(renderer.getSymbolSize()).toBeCloseTo(before + step, 9);
