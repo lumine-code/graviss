@@ -120,6 +120,77 @@
   flex: none;
 }
 
+/* Every colour the canvas draws with, as a custom property. The renderer reads
+   these rather than carrying the numbers itself, so a theme or a stylesheet of
+   your own can move one without a new scheme being shipped — and so that
+   colouring by material, by type or by group has somewhere to hang. The values
+   in `lib/appearance.js` stay as fallbacks, for a canvas that renders before
+   its stylesheet is attached. */
+
+.graviss[data-appearance="cloud"] {
+  --graviss-background: #dcedfa;
+  --graviss-member: #5e8bb1;
+  --graviss-shell: #85b2d7;
+  --graviss-shell-edge: #2a4359;
+  --graviss-node: #61b571;
+  --graviss-support: #3dbeee;
+  --graviss-spring: #76c043;
+  --graviss-coupling: #e08a4a;
+  --graviss-grid: #a3bcca;
+  --graviss-grid-center: #6d8a9a;
+  --graviss-cube-face: #f4f9fd;
+  --graviss-cube-border: #4a7ea6;
+  --graviss-cube-text: #1d4b6d;
+}
+
+.graviss[data-appearance="midnight"] {
+  --graviss-background: #101b24;
+  --graviss-member: #aad2ef;
+  --graviss-shell: #6995b6;
+  --graviss-shell-edge: #c4dbe9;
+  --graviss-node: #85e2a6;
+  --graviss-support: #57caee;
+  --graviss-spring: #9ad86a;
+  --graviss-coupling: #f3a86a;
+  --graviss-grid: #3a4c58;
+  --graviss-grid-center: #5f7a89;
+  --graviss-cube-face: #2b3f4c;
+  --graviss-cube-border: #7fa8c2;
+  --graviss-cube-text: #dcecf5;
+}
+
+.graviss[data-appearance="paper"] {
+  --graviss-background: #eee9df;
+  --graviss-member: #5c809d;
+  --graviss-shell: #84aecb;
+  --graviss-shell-edge: #304956;
+  --graviss-node: #61aa73;
+  --graviss-support: #3d9cbe;
+  --graviss-spring: #6aad3c;
+  --graviss-coupling: #d07a38;
+  --graviss-grid: #b3b1a6;
+  --graviss-grid-center: #7d8378;
+  --graviss-cube-face: #f3efe6;
+  --graviss-cube-border: #4f7288;
+  --graviss-cube-text: #27485c;
+}
+
+.graviss[data-appearance="white"] {
+  --graviss-background: #ffffff;
+  --graviss-member: #5e8bb1;
+  --graviss-shell: #85b2d7;
+  --graviss-shell-edge: #2a4359;
+  --graviss-node: #61b571;
+  --graviss-support: #3dbeee;
+  --graviss-spring: #76c043;
+  --graviss-coupling: #e08a4a;
+  --graviss-grid: #c3d2da;
+  --graviss-grid-center: #8ba2ae;
+  --graviss-cube-face: #fbfdfe;
+  --graviss-cube-border: #4a7ea6;
+  --graviss-cube-text: #1d4b6d;
+}
+
 /* The rectangle being dragged out, in canvas pixels. */
 .graviss-region-marquee {
   position: absolute;
