@@ -2602,6 +2602,136 @@ describe("graviss", () => {
     }
   });
 
+  it("meets neighbouring thicknesses and offsets at their mean, not at a step", async () => {
+    // A plate whose thickness varies continuously is meshed as a run of
+    // elements each carrying one number, and its eccentricity with them. Taken
+    // at face value the run is a stair; the surface those elements describe
+    // between them meets at the mean at every shared node, which is what the
+    // source's own viewer draws.
+    const model = {
+      id: "stepped",
+      title: "Stepped plates",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 2, y: 0, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+          { id: 5, x: 1, y: 1, z: 0 },
+          { id: 6, x: 2, y: 1, z: 0 },
+        ],
+        elements: [
+          { id: "A", kind: "shell", nodeIds: [1, 2, 5, 4], thickness: 0.2, offset: 0.1 },
+          { id: "B", kind: "shell", nodeIds: [2, 3, 6, 5], thickness: 0.4, offset: 0.2 },
+        ],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      const position = renderer.meshes.shells.geometry.getAttribute("position");
+      const seam = [];
+      for (let index = 0; index < position.count; index += 1) {
+        if (Math.abs(position.getX(index) - 1) < 1e-6) seam.push(position.getZ(index));
+      }
+      // Both elements sit on their nodes, so the node face stays put — and the
+      // far faces meet at the mean of the two thicknesses, not at either one.
+      expect(seam.length).toBeGreaterThan(0);
+      expect(Math.min(...seam)).toBeCloseTo(0, 5);
+      expect(Math.max(...seam)).toBeCloseTo(0.3, 5);
+      expect(seam.some((z) => Math.abs(z - 0.2) < 1e-3 || Math.abs(z - 0.4) < 1e-3)).toBe(false);
+
+      // The corners nothing is shared with keep their own element's numbers.
+      const box = new renderer.THREE.Box3().setFromObject(renderer.meshes.shells);
+      expect(box.max.z).toBeCloseTo(0.4, 5);
+      expect(box.min.z).toBeCloseTo(0, 5);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("extrudes a warped quad along each corner's own normal", async () => {
+    // A quad's four base nodes need not lie on one plane. Displacing every
+    // corner along one element normal flattens the extrusion onto the plane of
+    // the first three corners, which is a different element than the one the
+    // mesh describes.
+    const model = {
+      id: "warped",
+      title: "Warped quad",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 1 },
+          { id: 4, x: 0, y: 1, z: 0 },
+        ],
+        elements: [{ id: 1, kind: "shell", nodeIds: [1, 2, 3, 4], thickness: 0.2 }],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      // The normal at the lifted corner, from the two edges meeting there.
+      const lifted = { x: 1, y: 1, z: 1 };
+      const next = { x: 0, y: 1, z: 0 };
+      const previous = { x: 1, y: 0, z: 0 };
+      const a = [next.x - lifted.x, next.y - lifted.y, next.z - lifted.z];
+      const b = [previous.x - lifted.x, previous.y - lifted.y, previous.z - lifted.z];
+      const cross = [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+      ];
+      const length = Math.hypot(...cross);
+      const expected = {
+        x: lifted.x + (cross[0] / length) * 0.1,
+        y: lifted.y + (cross[1] / length) * 0.1,
+        z: lifted.z + (cross[2] / length) * 0.1,
+      };
+      const position = renderer.meshes.shells.geometry.getAttribute("position");
+      let found = false;
+      for (let index = 0; index < position.count; index += 1) {
+        if (
+          Math.abs(position.getX(index) - expected.x) < 1e-4 &&
+          Math.abs(position.getY(index) - expected.y) < 1e-4 &&
+          Math.abs(position.getZ(index) - expected.z) < 1e-4
+        ) {
+          found = true;
+          break;
+        }
+      }
+      expect(found).toBe(true);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("draws an area element where it sits, not where its nodes are", async () => {
     // A SOFiSTiK quad can be eccentric: a slab meshed at its top face, a deck
     // sitting on beams. The nodes stay where the analysis put them, so the
