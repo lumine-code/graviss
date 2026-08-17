@@ -124,6 +124,43 @@ describe("Graviss model validation", () => {
     expect(validateGeometry(geometry)).toBe(geometry);
     geometry.sections[1].shape.points[2] = [0, Number.NaN];
     expect(() => validateGeometry(geometry)).toThrowError(/two finite coordinates/);
+
+    // A composed section is several parts, each an outline with its own holes.
+    geometry.sections[1].shape = {
+      kind: "polygon",
+      parts: [
+        {
+          points: [
+            [-1, -0.12],
+            [1, -0.12],
+            [1, 0],
+            [-1, 0],
+          ],
+          holes: [
+            [
+              [-0.5, -0.09],
+              [0.5, -0.09],
+              [0, -0.03],
+            ],
+          ],
+        },
+        {
+          points: [
+            [-0.13, 0],
+            [0.13, 0],
+            [0.16, 0.72],
+            [-0.16, 0.72],
+          ],
+        },
+      ],
+    };
+    expect(validateGeometry(geometry)).toBe(geometry);
+    // Never both spellings at once.
+    geometry.sections[1].shape.points = geometry.sections[1].shape.parts[0].points;
+    expect(() => validateGeometry(geometry)).toThrowError(/not both/);
+    delete geometry.sections[1].shape.points;
+    geometry.sections[1].shape.parts[1].points = [[0, 0]];
+    expect(() => validateGeometry(geometry)).toThrowError(/at least three/);
     geometry.sections.pop();
     geometry.elements[0].localAxes.z = [0, 0, 0];
     expect(() => validateGeometry(geometry)).toThrowError(/must not be zero/);

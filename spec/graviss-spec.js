@@ -2602,6 +2602,38 @@ describe("graviss", () => {
     }
   });
 
+  it("extrudes every part of a composed section", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const plate = [
+      [-1, -0.12],
+      [1, -0.12],
+      [1, 0],
+      [-1, 0],
+    ];
+    const web = [
+      [-0.13, 0],
+      [0.13, 0],
+      [0.16, 0.72],
+      [-0.16, 0.72],
+    ];
+    const single = renderer.createSectionGeometry({ kind: "polygon", points: plate });
+    const composed = renderer.createSectionGeometry({
+      kind: "polygon",
+      parts: [{ points: plate }, { points: web }],
+    });
+    // Both areas are in the one extrusion, so the composed section carries
+    // more geometry than either area alone — a section that kept only its
+    // last area was the bug this pins.
+    expect(single.getAttribute("position").count).toBeGreaterThan(0);
+    expect(composed.getAttribute("position").count).toBeGreaterThan(
+      single.getAttribute("position").count,
+    );
+    single.dispose();
+    composed.dispose();
+  });
+
   it("meets neighbouring thicknesses and offsets at their mean, not at a step", async () => {
     // A plate whose thickness varies continuously is meshed as a run of
     // elements each carrying one number, and its eccentricity with them. Taken

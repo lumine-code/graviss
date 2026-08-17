@@ -120,7 +120,8 @@ type Section = {
         flangeWidth: number;
         flangeThickness: number;
       }
-    | { kind: "polygon"; points: [number, number][]; holes?: [number, number][][] };
+    | { kind: "polygon"; points: [number, number][]; holes?: [number, number][][] }
+    | { kind: "polygon"; parts: { points: [number, number][]; holes?: [number, number][][] }[] };
 };
 ```
 
