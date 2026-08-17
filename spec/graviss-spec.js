@@ -116,10 +116,11 @@ describe("graviss", () => {
       memberFill.polygonOffsetFactor,
       memberFill.polygonOffsetUnits,
     ]).toEqual([true, 1, 1]);
-    // Bodies draw after the mesh lines of other bodies, and lines write
-    // depth: a member in front of a slab's lines paints over the sliver its
-    // sunk fill would let pierce, while lines genuinely in front keep their
-    // pixels. Its own arrises draw last, on top of its fill.
+    // Every line draws before every fill. Lines write true depth and fills
+    // are sunk by their offset, so a fill fails against its own lines and
+    // stays behind them, while a fill in front of a foreign line — a slab
+    // over a beam's arris, a beam over a slab's mesh lines — paints over
+    // exactly what it hides.
     const memberMeshes = item.renderer.meshes.members.children.filter(
       (child) => child.isInstancedMesh,
     );
@@ -129,7 +130,7 @@ describe("graviss", () => {
     expect(
       item.renderer.memberContours.every(
         (contours) =>
-          contours.renderOrder === 3 &&
+          contours.renderOrder === 1 &&
           contours.material.transparent === false &&
           contours.material.depthWrite === true,
       ),
@@ -1301,6 +1302,7 @@ describe("graviss", () => {
     expect(edges.material.transparent).toBe(false);
     expect(edges.material.depthWrite).toBe(true);
     expect(edges.renderOrder).toBe(1);
+    expect(item.renderer.meshes.shells.renderOrder).toBe(2);
     expect(edges.visible).toBe(true);
     expect(item.setVisibility("mesh", false)).toBe(false);
     expect(edges.visible).toBe(false);
