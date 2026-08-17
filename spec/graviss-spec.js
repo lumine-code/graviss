@@ -1698,6 +1698,35 @@ describe("graviss", () => {
     expect(renderer.camera.position.distanceTo(positionBefore)).toBeLessThan(1e-9);
     expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeCloseTo(depth, 6);
 
+    // A wheel carrying the command modifier belongs to the frame, not the
+    // camera. A trackpad pinch arrives as exactly that with no key ever
+    // pressed, so what decides it is the event and not the tracked key state.
+    const settled = renderer.captureCameraState();
+    const pinch = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -240,
+      ctrlKey: true,
+      clientX: bounds.left + under.x,
+      clientY: bounds.top + under.y,
+    });
+    canvas.dispatchEvent(pinch);
+    expect(pinch.defaultPrevented).toBe(true);
+    expect(renderer.dollyFlight).toBeNull();
+    expect(renderer.captureCameraState()).toEqual(settled);
+
+    // Without the easing a notch lands on the frame it is turned.
+    lumine.config.set("graviss.smoothZoom", false);
+    const stepped = renderer.camera.position.distanceTo(renderer.controls.target);
+    spin(under, -120);
+    expect(renderer.dollyFlight).toBeNull();
+    expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeCloseTo(
+      stepped * 0.8,
+      6,
+    );
+    lumine.config.set("graviss.smoothZoom", true);
+    await wheel(under, 120);
+
     // Turned off, the wheel pulls toward the middle and the point drifts.
     lumine.config.set("graviss.zoomTowardPointer", false);
     expect(renderer.controls.zoomToCursor).toBe(false);
