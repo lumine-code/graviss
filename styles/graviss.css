@@ -106,13 +106,15 @@
 }
 
 /* Everything drawn as a mark rather than as structure is sized from here, so
-   the control is one slider and not one per kind of mark. */
-.graviss-symbol-slider {
-  display: block;
-  width: 84px;
+   the control is one field and not one per kind of mark. It states a length, so
+   it is a field rather than a slider — and the wheel over it turns the length,
+   which is the way anyone actually reaches for a size. */
+.graviss-symbol-input.input-text {
+  width: 72px;
   height: 28px;
-  margin: 0;
-  vertical-align: middle;
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.75;
 }
 
 .graviss-background-control {

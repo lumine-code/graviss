@@ -141,7 +141,7 @@ A provider that supplies no section falls back to a thin centreline, and one tha
 
 A `spring` and a `coupling` join two nodes without being structure, so Graviss draws them as marks rather than as members: a coil for a spring, a link with a tick across each end for a coupling. A spring may instead name a single node and a `direction`, which is how a spring between a node and the ground is expressed — it is then drawn reaching out that way from the node it holds. Neither takes a section or a thickness.
 
-Everything Graviss draws as a mark rather than as structure — nodes, supports, springs, couplings — is sized from the model and from one control the user holds, so a provider says where these are and never how big they should look.
+Everything Graviss draws as a mark rather than as structure — nodes, supports, springs, couplings — is sized by one length the user holds, taken from the model until they say otherwise, so a provider says where these are and never how big they should look.
 
 ### Units
 

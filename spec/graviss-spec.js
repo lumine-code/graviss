@@ -133,13 +133,15 @@ describe("graviss", () => {
     expect(
       [...toolbar.querySelectorAll("button")].every((button) => !button.textContent.trim()),
     ).toBe(true);
-    // The toolbar takes no typing: every control is a button, a picker, or the
-    // one slider that sizes the symbols.
-    expect(toolbar.querySelector('input:not([type="range"])')).toBeNull();
+    // The toolbar takes no free text: every control is a button, a picker, or
+    // the one number that sizes the marks.
+    expect(toolbar.querySelector('input:not([type="number"])')).toBeNull();
     expect(toolbar.querySelector(".graviss-graphic-title")).toBeNull();
-    const symbolSlider = toolbar.querySelector(".graviss-symbol-slider");
-    expect(symbolSlider).not.toBeNull();
-    expect(symbolSlider.getAttribute("aria-label")).toBe("Symbol size");
+    const symbolInput = toolbar.querySelector(".graviss-symbol-input");
+    expect(symbolInput).not.toBeNull();
+    expect(symbolInput.getAttribute("aria-label")).toBe("Symbol size in metres");
+    expect(symbolInput.min).toBe("0");
+    expect(symbolInput.max).toBe("1");
     const toolbarButtons = [...toolbar.querySelectorAll("button")];
     const perspectiveButton = toolbar.querySelector('[data-projection="perspective"]');
     const orthographicButton = toolbar.querySelector('[data-projection="orthographic"]');
@@ -398,7 +400,7 @@ describe("graviss", () => {
       // meets the node at whatever size the symbols are drawn.
       expect(supportPosition.z).toBeGreaterThan(0);
       const hung = supportPosition.z;
-      item.renderer.setSymbolScale(item.renderer.getSymbolScale() * 2);
+      item.renderer.setSymbolSize(item.renderer.getSymbolSize() * 2);
       item.renderer.meshes.supports.getMatrixAt(0, supportMatrix);
       supportPosition.setFromMatrixPosition(supportMatrix);
       expect(supportPosition.z).toBeCloseTo(hung * 2, 6);
@@ -2379,9 +2381,9 @@ describe("graviss", () => {
       // it was told to, rather than joining anything.
       expect(springs.max.x).toBeCloseTo(8, 5);
 
-      // Both are marks, so the one slider sizes them with the nodes.
+      // Both are marks, so the one size covers them with the nodes.
       const before = spread(renderer.meshes.springs).y;
-      renderer.setSymbolScale(renderer.getSymbolScale() * 2);
+      renderer.setSymbolSize(renderer.getSymbolSize() * 2);
       expect(spread(renderer.meshes.springs).y).toBeCloseTo(before * 2, 5);
 
       // And both can be put away on their own.
@@ -2393,50 +2395,64 @@ describe("graviss", () => {
     }
   });
 
-  it("sizes every symbol from one slider, against the model rather than the metre", async () => {
+  it("sizes every mark from one field, as the length it is", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
     const renderer = item.renderer;
-    const slider = item.element.querySelector(".graviss-symbol-slider");
+    const field = item.element.querySelector(".graviss-symbol-input");
 
-    // Symbols used to be fixed world sizes, so a small structure was buried
-    // under its own nodes and a large one showed none you could find. They are
-    // taken from the model now.
-    expect(renderer.symbolRadius()).toBeCloseTo(renderer.bounds.radius * 0.01, 9);
-    expect(Number(slider.value)).toBe(1);
+    // Marks used to be fixed world sizes chosen for no model in particular, so
+    // a small structure was buried under its own nodes. A graphic that has said
+    // nothing takes a size from the model, and it is a real length either way.
+    expect(renderer.getSymbolSize()).toBeCloseTo(renderer.bounds.radius / 500, 9);
+    expect(Number(field.value)).toBeCloseTo(renderer.bounds.radius / 500, 4);
 
-    const nodeMatrix = new renderer.THREE.Matrix4();
-    const nodeScale = new renderer.THREE.Vector3();
+    const scaleMatrix = new renderer.THREE.Matrix4();
+    const scaleVector = new renderer.THREE.Vector3();
     const radiusOf = (mesh) => {
-      mesh.getMatrixAt(0, nodeMatrix);
-      return nodeScale.setFromMatrixScale(nodeMatrix).x;
+      mesh.getMatrixAt(0, scaleMatrix);
+      return scaleVector.setFromMatrixScale(scaleMatrix).x;
     };
-    const nodeBefore = radiusOf(renderer.meshes.nodes);
+    expect(radiusOf(renderer.meshes.nodes)).toBeCloseTo(renderer.getSymbolSize(), 6);
+
+    // One field, and everything drawn as a mark takes its length from it.
     const supportBefore = radiusOf(renderer.meshes.supports);
+    field.value = "0.5";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(renderer.getSymbolSize()).toBe(0.5);
+    expect(radiusOf(renderer.meshes.nodes)).toBeCloseTo(0.5, 6);
+    expect(radiusOf(renderer.meshes.supports)).toBeGreaterThan(supportBefore);
 
-    // One slider, and everything drawn as a mark moves with it together.
-    slider.value = "2";
-    slider.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(renderer.getSymbolScale()).toBe(2);
-    expect(radiusOf(renderer.meshes.nodes)).toBeCloseTo(nodeBefore * 2, 6);
-    expect(radiusOf(renderer.meshes.supports)).toBeCloseTo(supportBefore * 2, 6);
+    // Nothing at all up to a metre: past a metre a mark is a shape in front of
+    // the structure rather than a mark on it.
+    expect(renderer.setSymbolSize(9)).toBe(1);
+    expect(renderer.setSymbolSize(-3)).toBe(0);
 
-    // Held to what it will actually draw, so a document cannot ask for a size
-    // that is no size at all.
-    expect(renderer.setSymbolScale(1000)).toBe(4);
-    expect(renderer.setSymbolScale(0)).toBe(0.25);
-    expect(renderer.setSymbolScale(Number.NaN)).toBe(1);
+    // And a size of nothing puts every mark away, whatever its own switch says.
+    expect(renderer.setSymbolSize(0)).toBe(0);
+    expect(renderer.meshes.nodes.visible).toBe(false);
+    expect(renderer.meshes.supports.visible).toBe(false);
+    // The structure is untouched by it.
+    expect(renderer.meshes.members.visible).toBe(true);
+    renderer.setSymbolSize(0.02);
+    expect(renderer.meshes.nodes.visible).toBe(true);
 
-    // It belongs to the graphic, like every other thing the toolbar sets, so
-    // undo puts back the size the graphic held before — and the slider follows
-    // the document rather than the other way round.
-    slider.value = "1.5";
-    slider.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(item.viewDocument.getData().graphics[0].symbolScale).toBe(1.5);
-    item.undo();
-    expect(item.viewDocument.getData().graphics[0].symbolScale).toBe(2);
-    expect(renderer.getSymbolScale()).toBe(2);
-    expect(Number(slider.value)).toBe(2);
+    // The wheel over the field turns the length, which is how anyone reaches
+    // for a size, and it steps by what the field itself steps by.
+    const step = Number(field.step);
+    const before = renderer.getSymbolSize();
+    field.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 }));
+    expect(renderer.getSymbolSize()).toBeCloseTo(before + step, 9);
+    field.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 }));
+    expect(renderer.getSymbolSize()).toBeCloseTo(before, 9);
+    // Held, it steps ten times as far, for a size worth being fussy about.
+    field.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100, shiftKey: true }),
+    );
+    expect(renderer.getSymbolSize()).toBeCloseTo(before + step * 10, 9);
+
+    // It belongs to the graphic, like every other thing the toolbar sets.
+    expect(item.viewDocument.getData().graphics[0].symbolSize).toBeCloseTo(before + step * 10, 9);
   });
 
   it("draws an area element where it sits, not where its nodes are", async () => {

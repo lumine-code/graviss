@@ -12,7 +12,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Document history**: records camera and toolbar changes in a private `TextBuffer` so Undo and Redo cover the complete view document.
 - **Navigation integration**: exposes named graphics to the navigation panel and activates a graphic when its outline entry is selected.
 - **Live sources**: rebuilds the scene when a source reports that its geometry changed, keeping the camera the view document holds.
-- **Symbols and connectors**: draws springs as coils and couplings as ticked links, and sizes every mark from the model with one slider.
+- **Symbols and connectors**: draws springs as coils and couplings as ticked links, and sizes every mark with one length in metres, scrollable and zeroable.
 
 ## Installation
 
