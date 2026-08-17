@@ -122,7 +122,7 @@ The canvas keeps its canonical JSON in a private `TextBuffer`, without creating 
 
 Graviss owns the canvas and every command. Source packages provide the `graviss.source` service and own only recognition, file or database access, translation, and session disposal — no package but Graviss creates a viewer or registers an opener.
 
-The toolbar is laid out by the scope a control acts at: first the set of graphics — paging, adding, deleting — then the picture the active graphic composes (camera, projection, background, image output), then its layers (what is drawn and how it is marked), and, held to the far end, what belongs to the document and the renderer rather than to any graphic. Every control stays on screen whatever the document holds; what cannot be done right now is disabled rather than gone.
+The toolbar is laid out by the scope a control acts at: first the set of graphics — paging, adding, deleting — then the picture the active graphic composes (camera, projection, background), then its layers (what is drawn and how it is marked), and, held to the far end, the picture output beside what belongs to the document and the renderer. Every control stays on screen whatever the document holds; what cannot be done right now is disabled rather than gone.
 
 Dragging with the left button turns the model about whatever is under the pointer when the drag begins, so the detail being examined stays where it was rather than swinging out of frame. A mark shows the pinned point for as long as the drag runs. Started over empty space, where there is nothing to pin to, the drag turns about the camera target as it always did. The wheel is anchored the same way, moving along the ray under the pointer so that whatever it is over stays where it is.
 

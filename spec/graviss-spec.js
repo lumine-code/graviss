@@ -177,8 +177,6 @@ describe("graviss", () => {
       "orthographic",
       "gradient",
       "background",
-      "save-image",
-      "copy-image",
       "sections",
       "members",
       "shells",
@@ -190,6 +188,8 @@ describe("graviss", () => {
       "grid",
       "axes",
       "local-axes",
+      "save-image",
+      "copy-image",
       "open-source",
     ]);
     // The bar is split by the scope a control acts at — the set of graphics,
@@ -199,15 +199,15 @@ describe("graviss", () => {
       [...toolbar.querySelectorAll(":scope > .graviss-toolbar-region")].map((region) =>
         region.getAttribute("aria-label"),
       ),
-    ).toEqual(["Graphics", "Picture", "Layers", "Document and renderer"]);
+    ).toEqual(["Graphics", "Picture", "Layers", "Output, document and renderer"]);
     const regionOf = (selector) =>
       toolbar.querySelector(selector).closest(".graviss-toolbar-region").getAttribute("aria-label");
     expect(regionOf('[data-action="add-graphic"]')).toBe("Graphics");
-    expect(regionOf('[data-action="save-as-image"]')).toBe("Picture");
     expect(regionOf('[data-action="background"]')).toBe("Picture");
     expect(regionOf('[data-visible="members"]')).toBe("Layers");
     expect(regionOf(".graviss-symbol-input")).toBe("Layers");
-    expect(regionOf('[data-action="open-source"]')).toBe("Document and renderer");
+    expect(regionOf('[data-action="save-as-image"]')).toBe("Output, document and renderer");
+    expect(regionOf('[data-action="open-source"]')).toBe("Output, document and renderer");
     expect(toolbar.querySelector(".graviss-toolbar-tail .graviss-fps-counter")).not.toBeNull();
     expect(toolbarButtons.every((button) => !button.getAttribute("title"))).toBe(true);
     for (const button of toolbarButtons) {
