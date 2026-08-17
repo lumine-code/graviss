@@ -99,13 +99,17 @@ Commands available in `lumine-workspace`:
 
 A `.grv` document stores view configuration and an optional source path. When the source is omitted, registered providers can resolve a supported model with the same basename. Graviss opens the view as a canvas; **Open Source** opens the same file in a normal JSON editor.
 
-Everything in a `.grv` file is optional — the extension is what makes it a view — and a file holds only what someone set. What is left out is worked out: a pane is named after its file, a graphic after its position, a view with no camera frames the model. A change writes down itself and nothing else, so a file kept short stays short. What a document does state still has to be true: a `format` or `version` naming something Graviss does not know is refused rather than read hopefully.
+These files are meant to be written by hand and by other tools, so everything in one is optional — the extension is what makes it a view — and a file holds only what someone set. What is left out is worked out: a pane is named after its file, a graphic after its position, a view with no camera frames the model. A change writes down itself and nothing else, so a file kept short stays short.
 
 The narrowest complete document is therefore `{}`, and a useful one is little more:
 
 ```json
 { "source": "model.dat" }
 ```
+
+A graphic is identified by where it sits in `graphics`, and by nothing else, so nothing about it can collide or be misspelt. `activeGraphic` names the one to show as a position, counting from zero. It may carry an `id` and be named by that instead, which is easier to write by hand; an `id` is an alias rather than an identity, so two graphics may share one and the first wins.
+
+Anything a graphic states is taken when it can be read and replaced by what leaving it out would have meant when it cannot — a camera that does not parse frames the model, an unknown appearance follows the theme. Only two things make a document unreadable rather than merely incomplete: a `format` or `version` naming something Graviss does not know, where reading it hopefully would be guessing. Such a file is not opened as a canvas at all; it opens as text, which is where it can be fixed.
 
 A `title` names the model when someone wants it named, and most documents have no reason to: without one the pane is named after its file, extension included, exactly as the source of the same file is named. The two tabs then read alike and the icon is what tells the render from the source.
 

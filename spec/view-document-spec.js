@@ -36,19 +36,19 @@ describe("GravissViewDocument", () => {
     document.onDidSave((event) => savedEvents.push(event));
 
     document.update((data) => {
-      data.activeGraphicId = "plan";
+      data.activeGraphic = 1;
     });
 
     expect(document.isModified()).toBe(true);
     expect(document.isInConflict()).toBe(false);
-    expect(document.serialize().data.activeGraphicId).toBe("plan");
+    expect(document.serialize().data.activeGraphic).toBe(1);
     await document.save();
 
     expect(document.isModified()).toBe(false);
     expect(document.isDeleted()).toBe(false);
     expect(modifiedStates).toEqual([true, false]);
     expect(savedEvents).toEqual([{ path: filePath }]);
-    expect(JSON.parse(fs.readFileSync(filePath, "utf8")).activeGraphicId).toBe("plan");
+    expect(JSON.parse(fs.readFileSync(filePath, "utf8")).activeGraphic).toBe(1);
   });
 
   it("keeps its history buffer private and out of every editor registry", () => {
@@ -83,7 +83,7 @@ describe("GravissViewDocument", () => {
       jasmine.objectContaining({ format: "graviss-view", version: 1 }),
     );
     expect(document.getData().graphics.length).toBe(1);
-    expect(document.getData().activeGraphicId).toBe(document.getData().graphics[0].id);
+    expect(document.getData().activeGraphic).toBe(0);
     // A title is a name someone chose. A document made up for a blank file has
     // nobody to have chosen one, and the file's own name is not data.
     expect("title" in document.getData()).toBe(false);
@@ -138,9 +138,9 @@ describe("GravissViewDocument", () => {
     expect(sourceBuffer instanceof TextBuffer).toBe(true);
 
     document.update((data) => {
-      data.activeGraphicId = "plan";
+      data.activeGraphic = 1;
     }, "active-graphic");
-    expect(JSON.parse(sourceBuffer.getText()).activeGraphicId).toBe("plan");
+    expect(JSON.parse(sourceBuffer.getText()).activeGraphic).toBe(1);
     document.update((data) => {
       data.graphics[0].appearance = "midnight";
     }, "appearance");
@@ -148,15 +148,15 @@ describe("GravissViewDocument", () => {
     expect(document.canUndo()).toBe(true);
     expect(document.canRedo()).toBe(false);
     expect(document.undo()).toBe(true);
-    expect(document.getData().activeGraphicId).toBe("plan");
+    expect(document.getData().activeGraphic).toBe(1);
     expect(document.getData().graphics[0].appearance).toBe("cloud");
     expect(document.undo()).toBe(true);
-    expect(document.getData().activeGraphicId).toBe("overview");
+    expect(document.getData().activeGraphic).toBe(0);
     expect(document.isModified()).toBe(false);
     expect(document.undo()).toBe(false);
 
     expect(document.redo()).toBe(true);
-    expect(document.getData().activeGraphicId).toBe("plan");
+    expect(document.getData().activeGraphic).toBe(1);
     document.update((data) => {
       data.graphics[1].visibility.grid = false;
     }, "visibility");
@@ -169,7 +169,7 @@ describe("GravissViewDocument", () => {
   it("tracks the saved revision through undo and redo and restores serialized history", async () => {
     document = GravissViewDocument.load(filePath);
     document.update((data) => {
-      data.activeGraphicId = "plan";
+      data.activeGraphic = 1;
     });
     await document.save();
 
@@ -187,7 +187,7 @@ describe("GravissViewDocument", () => {
     expect(document.canUndo()).toBe(false);
     expect(document.canRedo()).toBe(true);
     expect(document.redo()).toBe(true);
-    expect(document.getData().activeGraphicId).toBe("plan");
+    expect(document.getData().activeGraphic).toBe(1);
     expect(document.isModified()).toBe(false);
   });
 
@@ -312,41 +312,75 @@ describe("GravissViewDocument", () => {
     expect(fs.existsSync(renamedPath)).toBe(true);
   });
 
-  it("validates serialized document identity and active graphic references", () => {
+  it("takes what a hand-written document can be read to mean", () => {
+    // Position is the identity, so a repeated name is not a conflict — an `id`
+    // is an alias, and the first graphic wearing it wins. This used to refuse
+    // the whole document, which is how a file written by hand failed to open.
     const duplicate = clone(EXAMPLES[0].viewDocument);
     duplicate.graphics[1].id = duplicate.graphics[0].id;
-    expect(() => validateViewDocument(duplicate)).toThrowError(/duplicated/);
+    duplicate.activeGraphic = duplicate.graphics[0].id;
+    expect(normalizeViewDocument(duplicate).activeGraphic).toBe(0);
 
-    const missing = clone(EXAMPLES[0].viewDocument);
-    missing.activeGraphicId = "missing";
-    expect(() => validateViewDocument(missing)).toThrowError(/activeGraphicId/);
+    // An alias names a graphic without counting; a position names it without
+    // naming it. Neither can be out of range once read.
+    expect(
+      normalizeViewDocument({ ...clone(EXAMPLES[0].viewDocument), activeGraphic: "plan" })
+        .activeGraphic,
+    ).toBe(1);
+    const positions = { graphics: [{}, {}, {}] };
+    expect(normalizeViewDocument({ ...positions, activeGraphic: 2 }).activeGraphic).toBe(2);
+    expect(normalizeViewDocument({ ...positions, activeGraphic: 9 }).activeGraphic).toBe(2);
+    expect(normalizeViewDocument({ ...positions, activeGraphic: -3 }).activeGraphic).toBe(0);
+    expect(normalizeViewDocument({ ...positions, activeGraphic: "nobody" }).activeGraphic).toBe(0);
+    expect(normalizeViewDocument({ ...positions, activeGraphic: 1.5 }).activeGraphic).toBe(0);
 
-    const badSections = clone(EXAMPLES[0].viewDocument);
-    badSections.graphics[0].sectionRendering = "yes";
-    expect(() => validateViewDocument(badSections)).toThrowError(/sectionRendering/);
+    // A value that cannot be read is replaced by what leaving it out would have
+    // meant, rather than refusing to draw the model over it.
+    const bad = normalizeViewDocument({
+      graphics: [
+        {
+          title: "  ",
+          id: 7,
+          camera: { projection: "perspective", position: "over there" },
+          appearance: "chartreuse",
+          sectionRendering: "yes",
+          visibility: { grid: "off", axes: true },
+          printRegion: { x: -1, y: 0, width: 4, height: 4 },
+        },
+      ],
+    });
+    expect(bad.graphics[0].title).toBe("Graphic 1");
+    expect("id" in bad.graphics[0]).toBe(false);
+    expect("camera" in bad.graphics[0]).toBe(false);
+    expect("appearance" in bad.graphics[0]).toBe(false);
+    expect("sectionRendering" in bad.graphics[0]).toBe(false);
+    expect("visibility" in bad.graphics[0]).toBe(false);
+    expect("printRegion" in bad.graphics[0]).toBe(false);
 
-    // A document need not name itself — the pane is then named after its file.
-    // Naming itself nothing is a different thing, and not allowed.
-    const untitled = clone(EXAMPLES[0].viewDocument);
-    delete untitled.title;
-    expect(validateViewDocument(untitled)).toBe(untitled);
+    // What it can be read to mean, it keeps.
+    const good = normalizeViewDocument({
+      graphics: [{ id: "plan", title: "Roof plan", appearance: "paper", sectionRendering: false }],
+    });
+    expect(good.graphics[0]).toEqual(
+      jasmine.objectContaining({
+        id: "plan",
+        title: "Roof plan",
+        appearance: "paper",
+        sectionRendering: false,
+      }),
+    );
 
-    const blankTitle = clone(EXAMPLES[0].viewDocument);
-    blankTitle.title = "";
-    expect(() => validateViewDocument(blankTitle)).toThrowError(/title/);
+    // Graphics that are not graphics are not graphics, and a document with none
+    // left still has the one that saying nothing means.
+    expect(normalizeViewDocument({ graphics: [null, 7, "x"] }).graphics.length).toBe(1);
+    expect(normalizeViewDocument({ graphics: "no" }).graphics.length).toBe(1);
 
-    // A graphic that names neither itself nor its position is named after
-    // where it sits, and only its neighbours can make that ambiguous.
-    const bareGraphics = { graphics: [{}, {}] };
-    expect(validateViewDocument(bareGraphics)).toBe(bareGraphics);
-    const normalized = normalizeViewDocument(bareGraphics);
-    expect(normalized.graphics.map(({ id }) => id)).toEqual(["graphic-1", "graphic-2"]);
-    expect(normalized.graphics.map(({ title }) => title)).toEqual(["Graphic 1", "Graphic 2"]);
-    expect(normalized.activeGraphicId).toBe("graphic-1");
-
-    // A derived name never collides with one that was chosen.
-    const mixed = normalizeViewDocument({ graphics: [{}, { id: "graphic-1" }] });
-    expect(mixed.graphics.map(({ id }) => id)).toEqual(["graphic-2", "graphic-1"]);
+    // The two things that still make a document unreadable rather than merely
+    // incomplete, because reading them hopefully would be guessing.
+    expect(() => validateViewDocument({ format: "something-else" })).toThrowError(/format/);
+    expect(() => validateViewDocument({ version: 2 })).toThrowError(/version/);
+    expect(() => validateViewDocument([])).toThrowError(/must be an object/);
+    expect(validateViewDocument({})).toEqual({});
   });
 });
 

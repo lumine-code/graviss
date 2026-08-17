@@ -2,7 +2,7 @@
   "format": "graviss-view",
   "version": 1,
   "title": "Three-frame portal building",
-  "activeGraphicId": "overview",
+  "activeGraphic": "overview",
   "graphics": [
     {
       "id": "overview",

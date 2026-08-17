@@ -2,7 +2,7 @@
   "format": "graviss-view",
   "version": 1,
   "title": "70 × 70 shell plate",
-  "activeGraphicId": "overview",
+  "activeGraphic": "overview",
   "graphics": [
     {
       "id": "overview",

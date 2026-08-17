@@ -45,7 +45,7 @@ describe("graviss", () => {
       title: model.title,
       restorable: true,
       viewDocument,
-      activeGraphicId: options.activeGraphicId || viewDocument.getData().activeGraphicId,
+      activeGraphic: options.activeGraphic ?? viewDocument.getData().activeGraphic,
     });
   }
 
@@ -78,7 +78,7 @@ describe("graviss", () => {
       jasmine.objectContaining({
         deserializer: "GravissView",
         uri: MAIN_EXAMPLE_URI,
-        activeGraphicId: "overview",
+        activeGraphic: 0,
         viewDocument: jasmine.objectContaining({
           filePath: MAIN_EXAMPLE.viewDocumentPath,
           modified: false,
@@ -227,15 +227,15 @@ describe("graviss", () => {
     ).toBe(true);
 
     previousGraphic.click();
-    expect(item.activeGraphic.id).toBe("frame-elevation");
+    expect(item.activeGraphic.title).toBe("Frame elevation");
     expect(graphicCounter.textContent).toBe("3/3");
     expect(item.element.querySelector(".graviss-graphic-actions").getAttribute("aria-label")).toBe(
       "Frame elevation, graphic 3 of 3",
     );
     nextGraphic.click();
-    expect(item.activeGraphic.id).toBe("overview");
+    expect(item.activeGraphic.title).toBe("3D overview");
     nextGraphic.click();
-    expect(item.activeGraphic.id).toBe("plan");
+    expect(item.activeGraphic.title).toBe("Roof plan");
     expect(graphicCounter.textContent).toBe("2/3");
     expect(item.element.querySelector(".graviss-graphic-actions").getAttribute("aria-label")).toBe(
       "Roof plan, graphic 2 of 3",
@@ -308,14 +308,14 @@ describe("graviss", () => {
     ).toBe(true);
     expect(item.isModified()).toBe(true);
     expect(item.shouldPromptToSave()).toBe(true);
-    expect(item.serialize().viewDocument.data.activeGraphicId).toBe("plan");
+    expect(item.serialize().viewDocument.data.activeGraphic).toBe(1);
     expect(item.serialize().viewDocument.data.graphics[1].camera.projection).toBe("perspective");
 
     const restored = mainModule.deserialize(item.serialize());
     expect(restored instanceof GravissView).toBe(true);
     expect(restored.getURI()).toBe(MAIN_EXAMPLE_URI);
-    expect(restored.activeGraphic.id).toBe("plan");
-    expect(restored.serialize().activeGraphicId).toBe("plan");
+    expect(restored.activeGraphic.title).toBe("Roof plan");
+    expect(restored.serialize().activeGraphic).toBe(1);
     expect(restored.isModified()).toBe(true);
     restored.destroy();
   });
@@ -624,7 +624,7 @@ describe("graviss", () => {
     item.switchGraphic(1);
     item.switchGraphic(-1);
 
-    expect(item.activeGraphic.id).toBe("overview");
+    expect(item.activeGraphic.title).toBe("3D overview");
     expect(item.renderer.captureCameraState().position).toEqual(moved.position);
     expect(item.renderer.captureCameraState().target).toEqual(moved.target);
   });
@@ -632,7 +632,7 @@ describe("graviss", () => {
   it("keeps every view setting per graphic across switches", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
-    expect(item.activeGraphic.id).toBe("overview");
+    expect(item.activeGraphic.title).toBe("3D overview");
 
     // Give the first graphic a distinct state of every kind.
     item.toggleSectionRendering();
@@ -642,7 +642,7 @@ describe("graviss", () => {
 
     // The second graphic keeps its own document state, untouched by the first.
     item.switchGraphic(1);
-    expect(item.activeGraphic.id).not.toBe("overview");
+    expect(item.activeGraphic.title).not.toBe("3D overview");
     expect(item.isSectionRenderingEnabled()).toBe(true);
     expect(item.renderer.isSectionRendering()).toBe(true);
     expect(
@@ -651,7 +651,7 @@ describe("graviss", () => {
 
     // Returning restores the first graphic's complete state.
     item.switchGraphic(-1);
-    expect(item.activeGraphic.id).toBe("overview");
+    expect(item.activeGraphic.title).toBe("3D overview");
     expect(item.isSectionRenderingEnabled()).toBe(false);
     expect(item.renderer.isSectionRendering()).toBe(false);
     expect(item.isVisible("nodes")).toBe(false);
@@ -879,7 +879,7 @@ describe("graviss", () => {
     expect(workspaceCommandNames).not.toContain("graviss:next-graphic");
 
     lumine.commands.dispatch(lumine.workspace.getElement(), "graviss:next-graphic");
-    expect(item.activeGraphic.id).toBe("overview");
+    expect(item.activeGraphic.title).toBe("3D overview");
     const escapedCommand = jasmine.createSpy("escapedCommand");
     const outerCommand = lumine.commands.add(
       "lumine-workspace",
@@ -889,7 +889,7 @@ describe("graviss", () => {
     const dispatchCommand = spyOn(item, "dispatchCommand").and.callThrough();
     item.element.querySelector('[data-action="next-graphic"]').click();
     expect(dispatchCommand).toHaveBeenCalledWith("graviss:next-graphic");
-    expect(item.activeGraphic.id).toBe("plan");
+    expect(item.activeGraphic.title).toBe("Roof plan");
     expect(escapedCommand).not.toHaveBeenCalled();
     outerCommand.dispose();
 
@@ -910,10 +910,9 @@ describe("graviss", () => {
     expect(cameraOffset.y).toBeCloseTo(1, 10);
     expect(cameraOffset.z).toBeCloseTo(0, 10);
     expect(updateCamera).toHaveBeenCalledTimes(1);
-    expect(
-      item.serialize().viewDocument.data.graphics.find(({ id }) => id === item.activeGraphic.id)
-        .camera,
-    ).toEqual(item.renderer.captureCameraState());
+    expect(item.serialize().viewDocument.data.graphics[item.activeGraphicIndex].camera).toEqual(
+      item.renderer.captureCameraState(),
+    );
     lumine.commands.dispatch(item.element, "graviss:toggle-nodes");
     expect(item.renderer.meshes.nodes.visible).toBe(true);
     lumine.commands.dispatch(item.element, "graviss:background-midnight");
@@ -1129,13 +1128,13 @@ describe("graviss", () => {
 
   it("uses the last active graphic stored by the view document when reopening", () => {
     const first = createFixtureViewer(MAIN_EXAMPLE);
-    first.activateGraphic("plan");
+    first.activateGraphic(1);
     const viewDocumentState = first.serialize().viewDocument;
     first.destroy();
 
     const reopened = createFixtureViewer(MAIN_EXAMPLE, { viewDocumentState });
-    expect(reopened.activeGraphic.id).toBe("plan");
-    expect(reopened.serialize().viewDocument.data.activeGraphicId).toBe("plan");
+    expect(reopened.activeGraphic.title).toBe("Roof plan");
+    expect(reopened.serialize().viewDocument.data.activeGraphic).toBe(1);
     reopened.destroy();
   });
 
@@ -1151,13 +1150,13 @@ describe("graviss", () => {
     expect(pane.getPendingItem()).toBe(item);
     expect(item.isModified()).toBe(false);
 
-    item.activateGraphic("plan");
+    item.activateGraphic(1);
 
     expect(item.isModified()).toBe(true);
     expect(pane.getPendingItem()).toBeNull();
     expect(didTerminate).toHaveBeenCalledTimes(1);
 
-    item.activateGraphic("frame-elevation");
+    item.activateGraphic(2);
     expect(didTerminate).toHaveBeenCalledTimes(1);
   });
 
@@ -1166,18 +1165,18 @@ describe("graviss", () => {
       searchAllPanes: true,
     });
 
-    expect(item.activeGraphic.id).toBe("overview");
-    item.activateGraphic("plan");
-    expect(item.activeGraphic.id).toBe("plan");
+    expect(item.activeGraphic.title).toBe("3D overview");
+    item.activateGraphic(1);
+    expect(item.activeGraphic.title).toBe("Roof plan");
     expect(item.canUndo()).toBe(true);
 
     lumine.commands.dispatch(item.element, "core:undo");
-    expect(item.activeGraphic.id).toBe("overview");
+    expect(item.activeGraphic.title).toBe("3D overview");
     expect(item.isModified()).toBe(false);
     expect(item.canRedo()).toBe(true);
 
     lumine.commands.dispatch(item.element, "core:redo");
-    expect(item.activeGraphic.id).toBe("plan");
+    expect(item.activeGraphic.title).toBe("Roof plan");
     expect(item.isModified()).toBe(true);
   });
 
@@ -2189,9 +2188,7 @@ describe("graviss", () => {
       "Roof plan",
       "Frame elevation",
     ]);
-    expect(updates[0].headers.find(({ currentCount }) => currentCount === 1).graphicId).toBe(
-      "overview",
-    );
+    expect(updates[0].headers.find(({ currentCount }) => currentCount === 1).graphicIndex).toBe(0);
 
     spyOn(viewer, "focus");
     const dispatchCommand = spyOn(viewer, "dispatchCommand").and.callThrough();
@@ -2199,22 +2196,22 @@ describe("graviss", () => {
     expect(dispatchCommand).toHaveBeenCalled();
     const [commandName, detail] = dispatchCommand.calls.mostRecent().args;
     expect(commandName).toBe("graviss:activate-graphic");
-    expect(detail.graphicId).toBe("plan");
+    expect(detail.graphicIndex).toBe(1);
     expect(detail.activated).toBe(true);
-    expect(viewer.activeGraphic.id).toBe("plan");
+    expect(viewer.activeGraphic.title).toBe("Roof plan");
     expect(viewer.focus).not.toHaveBeenCalled();
-    expect(updates.at(-1).headers.find(({ currentCount }) => currentCount === 1).graphicId).toBe(
-      "plan",
+    expect(updates.at(-1).headers.find(({ currentCount }) => currentCount === 1).graphicIndex).toBe(
+      1,
     );
 
     expect(adapter.navigateTo(viewer, updates[0].headers[2])).toBe(true);
-    expect(viewer.activeGraphic.id).toBe("frame-elevation");
+    expect(viewer.activeGraphic.title).toBe("Frame elevation");
     expect(viewer.focus).toHaveBeenCalled();
-    expect(adapter.navigateTo(viewer, { graphicId: "missing" })).toBe(false);
+    expect(adapter.navigateTo(viewer, { graphicIndex: 99 })).toBe(false);
 
     const updateCount = updates.length;
     disposable.dispose();
-    viewer.activateGraphic("overview");
+    viewer.activateGraphic(0);
     expect(updates.length).toBe(updateCount);
     viewer.destroy();
   });
@@ -2303,6 +2300,46 @@ describe("graviss", () => {
     providerDisposable.dispose();
     fs.rmSync(directory, { recursive: true, force: true });
     fs.rmSync(other, { recursive: true, force: true });
+  });
+
+  it("opens a hand-written document that repeats a graphic name", async () => {
+    // The reported failure: a file written by hand names two graphics the same
+    // and the whole document was refused, with the error thrown out of the
+    // opener where nothing caught it, so clicking the file did nothing at all.
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-by-hand-"));
+    const viewPath = path.join(directory, "model.grv");
+    fs.writeFileSync(
+      viewPath,
+      JSON.stringify({
+        graphics: [
+          { id: "overview", title: "First" },
+          { id: "overview", title: "Second" },
+        ],
+        activeGraphic: "overview",
+      }),
+    );
+    const providerDisposable = mainModule.consumeGravissSource({
+      id: "by-hand",
+      createSession: ({ filePath }) =>
+        filePath === viewPath ? new TestSession(MAIN_EXAMPLE) : null,
+    });
+    try {
+      const item = await lumine.workspace.open(viewPath, { searchAllPanes: true });
+      expect(item instanceof GravissView).toBe(true);
+      await conditionPromise(() => item.renderer != null, "the hand-written view to load");
+      // A graphic is where it is, so both survive; the repeated alias picks the
+      // first one wearing it, which is an answer rather than a refusal.
+      expect(item.graphics.map(({ title }) => title)).toEqual(["First", "Second"]);
+      expect(item.activeGraphicIndex).toBe(0);
+      // Nothing was posed, so the model is framed rather than restored, and the
+      // file is left exactly as it was written.
+      expect(item.usesFittedCamera()).toBe(true);
+      expect(item.isModified()).toBe(false);
+      await lumine.workspace.paneForItem(item)?.destroyItem(item, true);
+    } finally {
+      providerDisposable.dispose();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("loads a pane restored before its source package registered", async () => {
