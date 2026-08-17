@@ -2364,22 +2364,36 @@ describe("graviss", () => {
         return box.getSize(new renderer.THREE.Vector3());
       };
 
-      // A coupling spans the two nodes it joins, and carries a tick across each
-      // end — the mark that says the ends cannot move apart. The tick lies
-      // square to the link, which for this vertical one is along Y.
+      // A coupling is a rigid link, and a line between the nodes is the whole
+      // of what it is: nothing of it stands off that line.
       const coupling = spread(renderer.meshes.couplings);
       expect(coupling.z).toBeCloseTo(2, 5);
-      expect(coupling.y).toBeGreaterThan(0);
+      expect(coupling.x).toBeCloseTo(0, 6);
+      expect(coupling.y).toBeCloseTo(0, 6);
 
-      // A spring is a coil, so it stands off its own axis rather than running
-      // straight down it.
+      // A spring acting along its axis is a helix, so it turns about that axis
+      // rather than running straight down it — in both directions square to it,
+      // which is what makes it a helix and not a zigzag.
       const springs = new renderer.THREE.Box3().setFromObject(renderer.meshes.springs);
+      const size = renderer.getSymbolSize();
       expect(springs.min.z).toBeCloseTo(0, 5);
-      expect(springs.max.z).toBeCloseTo(2, 5);
-      expect(springs.getSize(new renderer.THREE.Vector3()).y).toBeGreaterThan(0);
-      // The grounded one starts at the node it holds and reaches out the way
-      // it was told to, rather than joining anything.
-      expect(springs.max.x).toBeCloseTo(8, 5);
+      const reach = springs.getSize(new renderer.THREE.Vector3());
+      expect(reach.y).toBeCloseTo(size * 2, 5);
+      // The grounded one starts at the node it holds and reaches out the way it
+      // was told to, rather than joining anything.
+      expect(springs.max.x).toBeCloseTo(8 + size, 5);
+
+      // A spring acting about its axis is drawn as a turn about it instead: a
+      // ring across the axis, at the middle of the length it spans.
+      renderer.geometry.elements[0].rotational = true;
+      renderer.placeConnectorSymbols("spring");
+      const turning = new renderer.THREE.Box3().setFromObject(renderer.meshes.springs);
+      expect(turning.getSize(new renderer.THREE.Vector3()).y).toBeCloseTo(size * 2, 5);
+      // A ring lies across the axis, so it reaches no further along it than the
+      // nodes do — a helix would, having to climb between them.
+      expect(turning.max.z).toBeCloseTo(2, 5);
+      renderer.geometry.elements[0].rotational = false;
+      renderer.placeConnectorSymbols("spring");
 
       // Both are marks, so the one size covers them with the nodes.
       const before = spread(renderer.meshes.springs).y;

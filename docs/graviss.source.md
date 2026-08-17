@@ -94,6 +94,7 @@ type Element = {
   thickness?: number;
   offset?: number;
   direction?: Vector3;
+  rotational?: boolean;
   localAxes?: { x: Vector3; y: Vector3; z: Vector3 };
 };
 
@@ -139,7 +140,7 @@ A provider that supplies no section falls back to a thin centreline, and one tha
 
 `offset` moves an area element off the nodes it was meshed on, along its own normal — the right-handed normal of its node order, so the sign follows the order the nodes were given in. It is the distance from that plane to the element's mid-surface, in metres, and it may be negative. A slab modelled at its top face and a deck sitting on beams both mesh at nodes the element does not physically occupy; the analysis keeps the nodes where it put them and Graviss draws the element where it is. Nodes are shared between elements that offset differently, so this belongs to the element and never to the node, and a provider must not fold it into node coordinates. It applies at every level, with or without a thickness: an offset flat surface is still offset. Line elements ignore it.
 
-A `spring` and a `coupling` join two nodes without being structure, so Graviss draws them as marks rather than as members: a coil for a spring, a link with a tick across each end for a coupling. A spring may instead name a single node and a `direction`, which is how a spring between a node and the ground is expressed — it is then drawn reaching out that way from the node it holds. Neither takes a section or a thickness.
+A `spring` and a `coupling` join two nodes without being structure, so Graviss draws them as marks rather than as members: a helix for a spring, and for a coupling the plain line that a rigid link is the whole of. A spring that acts about its axis rather than along it says so with `rotational`, and is drawn as a turn about that axis — a ring across it — instead of a helix along it. A spring may instead name a single node and a `direction`, which is how a spring between a node and the ground is expressed — it is then drawn reaching out that way from the node it holds. Neither takes a section or a thickness.
 
 Everything Graviss draws as a mark rather than as structure — nodes, supports, springs, couplings — is sized by one length the user holds, taken from the model until they say otherwise, so a provider says where these are and never how big they should look.
 
