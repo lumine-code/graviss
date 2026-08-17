@@ -2995,7 +2995,16 @@ describe("graviss", () => {
         nodes: square,
         // Wound counter-clockwise in the XY plane, so the element normal is +Z
         // and a positive offset lifts it.
-        elements: [{ id: 1, kind: "shell", nodeIds: [1, 2, 3, 4], thickness: 0.2, offset: 0.5 }],
+        elements: [
+          {
+            id: 1,
+            kind: "shell",
+            nodeIds: [1, 2, 3, 4],
+            thickness: 0.2,
+            offset: 0.5,
+            localAxes: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+          },
+        ],
         sections: [],
         supports: [],
       }),
@@ -3022,22 +3031,29 @@ describe("graviss", () => {
       expect(bounds.min.x).toBeCloseTo(0, 6);
       expect(bounds.max.x).toBeCloseTo(1, 6);
 
-      // The offset is the element's own, so it holds without a thickness too —
-      // an offset flat surface is still offset.
+      // Without sections the element is not a body but the analysis surface
+      // itself, and that surface is where the nodes are: drawn eccentric it
+      // would hang half a thickness clear of the supports, springs and
+      // couplings that meet it at those nodes — which is how main-2's deck
+      // floated over its own bearings.
       renderer.setSectionRendering(false);
       const flat = new renderer.THREE.Box3().setFromObject(renderer.meshes.shells);
-      expect(flat.min.z).toBeCloseTo(0.5, 6);
-      expect(flat.max.z).toBeCloseTo(0.5, 6);
+      expect(flat.min.z).toBeCloseTo(0, 6);
+      expect(flat.max.z).toBeCloseTo(0, 6);
 
-      // And it moves the mesh lines with it, or they would float off the face.
+      // The mesh lines follow whichever surface is drawn.
       expect(renderer.meshes.shells.visible).toBe(true);
 
-      // The element's own centre moves with it too, which is where its local
-      // axis triad is drawn — left behind, the triad marks the plane the
-      // element was meshed at rather than the element.
+      // So does the local-axis triad: the node plane here, the body when the
+      // sections come back — left behind either way, it marks a plane rather
+      // than the element.
+      expect(renderer.elementCenter(renderer.geometry.elements[0]).z).toBeCloseTo(0, 9);
+      expect(renderer.localAxes.geometry.getAttribute("position").getZ(0)).toBeCloseTo(0, 6);
+      renderer.setSectionRendering(true);
       const centre = renderer.elementCenter(renderer.geometry.elements[0]);
       expect(centre.z).toBeCloseTo(0.5, 9);
       expect(centre.x).toBeCloseTo(0.5, 9);
+      expect(renderer.localAxes.geometry.getAttribute("position").getZ(0)).toBeCloseTo(0.5, 6);
       expect(renderer.elementNormal(renderer.geometry.elements[0]).z).toBeCloseTo(1, 9);
     } finally {
       viewer.destroy();
