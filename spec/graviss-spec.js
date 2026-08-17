@@ -2425,28 +2425,47 @@ describe("graviss", () => {
     expect(renderer.isBackgroundGradient()).toBe(true);
     expect(button.getAttribute("aria-pressed")).toBe("true");
     expect(button.classList.contains("selected")).toBe(true);
-    const texture = renderer.scene.background;
-    expect(texture.isTexture).toBe(true);
+    const sky = renderer.sky;
+    expect(sky).not.toBeNull();
 
-    // The top of it is the appearance's own colour lifted towards white, and
-    // the bottom is that colour: light falling from above, not a second scheme.
-    const source = texture.image;
-    const sampled = source.getContext("2d").getImageData(0, 0, 1, source.height).data;
-    const top = [sampled[0], sampled[1], sampled[2]];
-    const bottom = source.height - 1;
-    const foot = [sampled[bottom * 4], sampled[bottom * 4 + 1], sampled[bottom * 4 + 2]];
-    expect(top[0] + top[1] + top[2]).toBeGreaterThan(foot[0] + foot[1] + foot[2]);
-    const flat = appearanceDefinition(renderer.activeAppearance).background;
-    expect(foot[0]).toBe((flat >> 16) & 255);
-    expect(foot[2]).toBe(flat & 255);
+    // The grade belongs to the world, not to the screen: it is measured along
+    // the model's own up axis, so the bright side stays where the ceiling is
+    // however the camera is turned.
+    const position = sky.geometry.getAttribute("position");
+    const colors = sky.geometry.getAttribute("color");
+    const direction = new renderer.THREE.Vector3();
+    let zenith = null;
+    let nadir = null;
+    for (let index = 0; index < position.count; index += 1) {
+      direction.fromBufferAttribute(position, index).normalize();
+      const height = direction.dot(renderer.worldUp);
+      const value = colors.getX(index) + colors.getY(index) + colors.getZ(index);
+      if (zenith === null || height > zenith.height) zenith = { height, value };
+      if (nadir === null || height < nadir.height) nadir = { height, value };
+    }
+    expect(zenith.value).toBeGreaterThan(nadir.value);
 
-    // It belongs to the graphic, and the texture is let go when it stops being
-    // wanted rather than left behind on the card it was drawn on.
+    // The bottom of it is the appearance's own colour, so the sky is that
+    // colour lit from above rather than a second scheme.
+    const flat = new renderer.THREE.Color(
+      appearanceDefinition(renderer.activeAppearance).background,
+    );
+    expect(nadir.value).toBeCloseTo(flat.r + flat.g + flat.b, 5);
+
+    // It follows the camera, so it is a sky and not something the camera can
+    // leave behind or fly through.
+    renderer.moveCamera("left");
+    renderer.placeSky();
+    expect(sky.position.distanceTo(renderer.camera.position)).toBeCloseTo(0, 9);
+    expect(sky.scale.x).toBeGreaterThan(renderer.camera.near);
+
+    // It belongs to the graphic, and it is taken out of the scene when the
+    // background goes back to flat rather than left in it unseen.
     expect(item.viewDocument.getData().graphics[0].backgroundGradient).toBe(true);
-    const disposed = spyOn(texture, "dispose").and.callThrough();
     button.click();
-    expect(disposed).toHaveBeenCalled();
     expect(renderer.isBackgroundGradient()).toBe(false);
+    expect(renderer.sky).toBeNull();
+    expect(renderer.scene.children.includes(sky)).toBe(false);
     expect(renderer.scene.background.isColor).toBe(true);
 
     // Switching graphics restores what each of them holds.
