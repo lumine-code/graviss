@@ -107,15 +107,16 @@ describe("graviss", () => {
     });
     expect(item.renderer.hovered).toBeUndefined();
     expect(item.renderer.colors.hover).toBeUndefined();
-    // Every fill sinks by the same polygon offset. The offset exists so lines
-    // sit on surfaces, but a fill left at true depth would meet an offset
-    // neighbour a depth quantum early — a boundary that slides with the zoom.
+    // Every fill sinks by the same hair of polygon offset — quanta only, no
+    // slope factor. Equal, or the boundary between grazing bodies slides with
+    // the zoom; small, or the mesh lines of a body behind pierce the one in
+    // front along a grazing intersection, by the offset over the dihedral.
     const memberFill = item.renderer.memberMaterial;
     expect([
       memberFill.polygonOffset,
       memberFill.polygonOffsetFactor,
       memberFill.polygonOffsetUnits,
-    ]).toEqual([true, 1, 1]);
+    ]).toEqual([true, 0, 2]);
     // Every line draws before every fill. Lines write true depth and fills
     // are sunk by their offset, so a fill fails against its own lines and
     // stays behind them, while a fill in front of a foreign line — a slab
@@ -741,7 +742,7 @@ describe("graviss", () => {
       shellFill.polygonOffset,
       shellFill.polygonOffsetFactor,
       shellFill.polygonOffsetUnits,
-    ]).toEqual([true, 1, 1]);
+    ]).toEqual([true, 0, 2]);
     continuous.destroy();
 
     // A genuine step keeps both walls: its corners differ by the length of the
