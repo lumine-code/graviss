@@ -176,6 +176,8 @@ describe("graviss", () => {
       "shells",
       "nodes",
       "supports",
+      "springs",
+      "couplings",
       "mesh",
       "grid",
       "axes",
@@ -2313,6 +2315,82 @@ describe("graviss", () => {
     providerDisposable.dispose();
     fs.rmSync(directory, { recursive: true, force: true });
     fs.rmSync(other, { recursive: true, force: true });
+  });
+
+  it("draws springs and couplings as marks between the nodes they join", async () => {
+    const model = {
+      id: "connectors",
+      title: "Connectors",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 0, y: 0, z: 2 },
+          { id: 3, x: 4, y: 0, z: 0 },
+          { id: 4, x: 4, y: 0, z: 2 },
+          { id: 5, x: 8, y: 0, z: 0 },
+        ],
+        elements: [
+          { id: "S1", kind: "spring", nodeIds: [1, 2] },
+          { id: "C1", kind: "coupling", nodeIds: [3, 4] },
+          // A spring between a node and the ground names one node and says
+          // which way it acts.
+          { id: "S2", kind: "spring", nodeIds: [5], direction: [0, 0, 1] },
+        ],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      expect(renderer.meshes.springs).not.toBeUndefined();
+      expect(renderer.meshes.couplings).not.toBeUndefined();
+
+      const spread = (mesh) => {
+        const box = new renderer.THREE.Box3().setFromObject(mesh);
+        return box.getSize(new renderer.THREE.Vector3());
+      };
+
+      // A coupling spans the two nodes it joins, and carries a tick across each
+      // end — the mark that says the ends cannot move apart. The tick lies
+      // square to the link, which for this vertical one is along Y.
+      const coupling = spread(renderer.meshes.couplings);
+      expect(coupling.z).toBeCloseTo(2, 5);
+      expect(coupling.y).toBeGreaterThan(0);
+
+      // A spring is a coil, so it stands off its own axis rather than running
+      // straight down it.
+      const springs = new renderer.THREE.Box3().setFromObject(renderer.meshes.springs);
+      expect(springs.min.z).toBeCloseTo(0, 5);
+      expect(springs.max.z).toBeCloseTo(2, 5);
+      expect(springs.getSize(new renderer.THREE.Vector3()).y).toBeGreaterThan(0);
+      // The grounded one starts at the node it holds and reaches out the way
+      // it was told to, rather than joining anything.
+      expect(springs.max.x).toBeCloseTo(8, 5);
+
+      // Both are marks, so the one slider sizes them with the nodes.
+      const before = spread(renderer.meshes.springs).y;
+      renderer.setSymbolScale(renderer.getSymbolScale() * 2);
+      expect(spread(renderer.meshes.springs).y).toBeCloseTo(before * 2, 5);
+
+      // And both can be put away on their own.
+      renderer.setVisibility("springs", false);
+      expect(renderer.meshes.springs.visible).toBe(false);
+      expect(renderer.meshes.couplings.visible).toBe(true);
+    } finally {
+      viewer.destroy();
+    }
   });
 
   it("sizes every symbol from one slider, against the model rather than the metre", async () => {
