@@ -34,25 +34,25 @@ describe("print regions", () => {
     expect(() => validateWorldFrustum(null)).toThrowError(/positive width/);
   });
 
-  it("holds the region in metres on the target plane, unbounded by any pane", () => {
-    // Offsets may be anywhere and extents any positive size: the region names
-    // structure, and structure does not end at a window.
-    expect(validatePrintRegion({ right: -12.5, up: 3.75, width: 40, height: 8 })).toEqual({
-      right: -12.5,
-      up: 3.75,
-      width: 40,
-      height: 8,
+  it("holds the region as a view window, unbounded by any pane", () => {
+    // The centre may be anywhere about the view axis and the extents any
+    // positive size: the window is the view's, and the view does not end at
+    // a pane.
+    expect(validatePrintRegion({ center: [-1.5, 0.75], width: 4, height: 0.8 })).toEqual({
+      center: [-1.5, 0.75],
+      width: 4,
+      height: 0.8,
     });
 
-    // But it has to be a real rectangle.
-    expect(() => validatePrintRegion({ right: 0, up: 0, width: 0, height: 4 })).toThrowError(
-      /target plane/,
+    // But it has to be a real rectangle about a real centre.
+    expect(() => validatePrintRegion({ center: [0, 0], width: 0, height: 4 })).toThrowError(
+      /view tangents/,
     );
-    expect(() => validatePrintRegion({ right: NaN, up: 0, width: 4, height: 4 })).toThrowError(
-      /target plane/,
+    expect(() => validatePrintRegion({ center: [NaN, 0], width: 4, height: 4 })).toThrowError(
+      /view tangents/,
     );
     expect(() => validatePrintRegion({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 })).toThrowError(
-      /target plane/,
+      /view tangents/,
     );
   });
 

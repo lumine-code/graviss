@@ -1608,15 +1608,16 @@ describe("graviss", () => {
     expect(wideExtent.width).toBeCloseTo(extent.width, 6);
     expect(wideExtent.height).toBeCloseTo(extent.height, 6);
 
-    // A region taken from the view is written down in metres on the target
-    // plane — the whole visible extent, centred on the target — so the file
-    // holds a plot area and not a description of this window.
-    const visible = renderer.visibleExtentAtTarget();
+    // A region taken from the view is written down as the whole view window:
+    // centred on the view axis, two view units tall, and as wide as the pane
+    // aspect makes the view. The file holds a window through the camera, not
+    // a description of this pane.
+    const viewport = renderer.viewportPixels();
+    const half = Math.tan((renderer.camera.fov * Math.PI) / 360) / renderer.camera.zoom;
     const region = item.setPrintRegionFromView();
-    expect(region.right).toBeCloseTo(0, 6);
-    expect(region.up).toBeCloseTo(0, 6);
-    expect(region.width).toBeCloseTo(visible.width, 6);
-    expect(region.height).toBeCloseTo(visible.height, 6);
+    expect(region.center).toEqual([0, 0]);
+    expect(region.width).toBeCloseTo((2 * half * viewport.width) / viewport.height, 6);
+    expect(region.height).toBeCloseTo(2 * half, 6);
     expect(item.getPrintRegion()).toEqual(region);
     expect(item.element.querySelector(".graviss-print-region").hidden).toBe(false);
     expect(
@@ -1647,8 +1648,8 @@ describe("graviss", () => {
     expect(renderer.regionForScreenRect({ x: 300, y: 150 }, { x: 304, y: 250 })).toBeNull();
 
     // The whole gesture, through the command the palette offers. What the
-    // fractions drew is stored as metres on the target plane: half the
-    // viewport across and down is half of what it shows, centred.
+    // fractions drew is stored as a window of angles about the view axis:
+    // half the viewport across and down is half the view either way, centred.
     expect(item.getPrintRegion()).toBeNull();
     expect(item.selectPrintRegion()).toBe(true);
     expect(renderer.controls.enabled).toBe(false);
@@ -1656,10 +1657,11 @@ describe("graviss", () => {
     expect(renderer.controls.enabled).toBe(true);
     const visible = renderer.visibleExtentAtTarget();
     const stored = item.getPrintRegion();
-    expect(stored.right).toBeCloseTo(0, 6);
-    expect(stored.up).toBeCloseTo(0, 6);
-    expect(stored.width).toBeCloseTo(visible.width / 2, 6);
-    expect(stored.height).toBeCloseTo(visible.height / 2, 6);
+    const half = Math.tan((renderer.camera.fov * Math.PI) / 360) / renderer.camera.zoom;
+    expect(stored.center[0]).toBeCloseTo(0, 9);
+    expect(stored.center[1]).toBeCloseTo(0, 9);
+    expect(stored.width).toBeCloseTo(2 * half, 9);
+    expect(stored.height).toBeCloseTo(half, 9);
 
     const overlay = item.element.querySelector(".graviss-print-region");
     expect(overlay.hidden).toBe(false);
@@ -1670,17 +1672,30 @@ describe("graviss", () => {
     expect(covered.width).toBeCloseTo(visible.width / 2, 6);
     expect(covered.height).toBeCloseTo(visible.height / 2, 6);
 
-    // The region keeps its metres through the wheel: zooming moves the
-    // camera, and the camera changes what stands inside the frame — never
-    // what the frame is. On screen the same metres fill more of a closer
-    // view, so the overlay grows while the plot area stays the plot area.
+    // The frame is stable on the user's screen under every camera action:
+    // zooming and dollying recompose what stands inside it — the window is
+    // the view's, so a closer view plots a smaller piece of the structure —
+    // and can never move the frame itself.
     renderer.zoomCamera("in");
     expect(item.getPrintRegion()).toEqual(stored);
     const zoomed = renderer.resolvePrintRegion(stored);
-    expect(zoomed.width).toBeCloseTo(covered.width, 6);
-    expect(zoomed.height).toBeCloseTo(covered.height, 6);
+    expect(zoomed.width).toBeLessThan(covered.width);
     item.renderer.paintPrintRegion();
-    expect(parseFloat(overlay.style.width)).toBeGreaterThan(50);
+    expect(overlay.style.left).toBe("25%");
+    expect(overlay.style.width).toBe("50%");
+
+    // A wheel dolly also drags the orbit target sideways, toward whatever is
+    // under the pointer. The window rides the view axis, not the target, so
+    // even that leaves the frame exactly where it stands.
+    renderer.controls.target.x += 2;
+    renderer.controls.target.y += 1;
+    renderer.controls.update();
+    expect(item.getPrintRegion()).toEqual(stored);
+    const fractions = item.printRegionFractions();
+    expect(fractions.x).toBeCloseTo(0.25, 9);
+    expect(fractions.y).toBeCloseTo(0.25, 9);
+    expect(fractions.width).toBeCloseTo(0.5, 9);
+    expect(fractions.height).toBeCloseTo(0.5, 9);
 
     // Escaping a selection leaves the region the graphic already had.
     expect(item.selectPrintRegion()).toBe(true);
@@ -1794,8 +1809,8 @@ describe("graviss", () => {
     item.renderer.endRegionSelection(drawn);
     // Selected again from its own read-back fractions, so equal to rounding.
     const redrawn = item.getPrintRegion();
-    expect(redrawn.right).toBeCloseTo(drawnStored.right, 9);
-    expect(redrawn.up).toBeCloseTo(drawnStored.up, 9);
+    expect(redrawn.center[0]).toBeCloseTo(drawnStored.center[0], 9);
+    expect(redrawn.center[1]).toBeCloseTo(drawnStored.center[1], 9);
     expect(redrawn.width).toBeCloseTo(drawnStored.width, 9);
     expect(redrawn.height).toBeCloseTo(drawnStored.height, 9);
 
