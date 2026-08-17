@@ -2440,25 +2440,28 @@ describe("graviss", () => {
     for (let index = 0; index < position.count; index += 1) {
       direction.fromBufferAttribute(position, index).normalize();
       const height = direction.dot(renderer.worldUp);
-      const value = colors.getX(index) + colors.getY(index) + colors.getZ(index);
-      if (zenith === null || height > zenith.height) zenith = { height, value };
-      if (nadir === null || height < nadir.height) nadir = { height, value };
+      const warmth = colors.getX(index) - colors.getZ(index);
+      const value = { r: colors.getX(index), b: colors.getZ(index), warmth };
+      if (zenith === null || height > zenith.height) zenith = { height, ...value };
+      if (nadir === null || height < nadir.height) nadir = { height, ...value };
       if (horizon === null || Math.abs(height) < Math.abs(horizon.height)) {
-        horizon = { height, value };
+        horizon = { height, ...value };
       }
     }
 
-    // A lit ceiling over a floor in shadow, meeting at the colour the
+    // Cool above the horizon and warm below it, meeting at the colour the
     // appearance chose — one grade each way rather than one across the whole,
-    // so the horizon is the scheme and neither half is a second one.
+    // so the horizon is the scheme and neither half is a second one. Hue is
+    // what carries it: a viewport that can be turned under its model needs a
+    // stronger signal than which end is brighter.
     const flat = new renderer.THREE.Color(
       appearanceDefinition(renderer.activeAppearance).background,
     );
-    const base = flat.r + flat.g + flat.b;
     expect(horizon.height).toBeCloseTo(0, 6);
-    expect(horizon.value).toBeCloseTo(base, 5);
-    expect(zenith.value).toBeGreaterThan(base);
-    expect(nadir.value).toBeLessThan(base);
+    expect(horizon.r).toBeCloseTo(flat.r, 5);
+    expect(horizon.b).toBeCloseTo(flat.b, 5);
+    expect(zenith.warmth).toBeLessThan(flat.r - flat.b);
+    expect(nadir.warmth).toBeGreaterThan(flat.r - flat.b);
 
     // It follows the camera, so it is a sky and not something the camera can
     // leave behind or fly through.
