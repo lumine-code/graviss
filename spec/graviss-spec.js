@@ -107,6 +107,15 @@ describe("graviss", () => {
     });
     expect(item.renderer.hovered).toBeUndefined();
     expect(item.renderer.colors.hover).toBeUndefined();
+    // Every fill sinks by the same polygon offset. The offset exists so lines
+    // sit on surfaces, but a fill left at true depth would meet an offset
+    // neighbour a depth quantum early — a boundary that slides with the zoom.
+    const memberFill = item.renderer.memberMaterial;
+    expect([
+      memberFill.polygonOffset,
+      memberFill.polygonOffsetFactor,
+      memberFill.polygonOffsetUnits,
+    ]).toEqual([true, 1, 1]);
     spyOn(item.renderer, "pick").and.callThrough();
     item.renderer.canvasRenderer.domElement.dispatchEvent(new MouseEvent("pointermove"));
     expect(item.renderer.pick).not.toHaveBeenCalled();
@@ -703,6 +712,12 @@ describe("graviss", () => {
     // triangles, thirty vertices per element.
     const continuous = await buildViewer([0.2, 0.2]);
     expect(continuous.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(60);
+    const shellFill = continuous.renderer.meshes.shells.material;
+    expect([
+      shellFill.polygonOffset,
+      shellFill.polygonOffsetFactor,
+      shellFill.polygonOffsetUnits,
+    ]).toEqual([true, 1, 1]);
     continuous.destroy();
 
     // A genuine step keeps both walls: its corners differ by the length of the
