@@ -107,16 +107,14 @@ describe("graviss", () => {
     });
     expect(item.renderer.hovered).toBeUndefined();
     expect(item.renderer.colors.hover).toBeUndefined();
-    // Every fill sinks by the same hair of polygon offset — quanta only, no
-    // slope factor. Equal, or the boundary between grazing bodies slides with
-    // the zoom; small, or the mesh lines of a body behind pierce the one in
-    // front along a grazing intersection, by the offset over the dihedral.
+    // Fills carry no polygon offset and lose depth ties instead: any sink,
+    // however small, is worth its size over the dihedral wherever two bodies
+    // graze — a tail of foreign mesh lines past the intersection, stretching
+    // as the view flattens along it. Lines draw first and write true depth,
+    // so the strict test is all a fill needs.
     const memberFill = item.renderer.memberMaterial;
-    expect([
-      memberFill.polygonOffset,
-      memberFill.polygonOffsetFactor,
-      memberFill.polygonOffsetUnits,
-    ]).toEqual([true, 0, 2]);
+    expect(memberFill.polygonOffset).toBe(false);
+    expect(memberFill.depthFunc).toBe(item.renderer.THREE.LessDepth);
     // Every line draws before every fill. Lines write true depth and fills
     // are sunk by their offset, so a fill fails against its own lines and
     // stays behind them, while a fill in front of a foreign line — a slab
@@ -738,11 +736,8 @@ describe("graviss", () => {
     const continuous = await buildViewer([0.2, 0.2]);
     expect(continuous.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(60);
     const shellFill = continuous.renderer.meshes.shells.material;
-    expect([
-      shellFill.polygonOffset,
-      shellFill.polygonOffsetFactor,
-      shellFill.polygonOffsetUnits,
-    ]).toEqual([true, 0, 2]);
+    expect(shellFill.polygonOffset).toBe(false);
+    expect(shellFill.depthFunc).toBe(continuous.renderer.THREE.LessDepth);
     continuous.destroy();
 
     // A genuine step keeps both walls: its corners differ by the length of the
