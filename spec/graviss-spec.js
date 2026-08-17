@@ -119,21 +119,20 @@ describe("graviss", () => {
     const memberFill = item.renderer.memberMaterial;
     expect(memberFill.polygonOffset).toBe(false);
     expect(memberFill.depthFunc).toBe(item.renderer.THREE.LessEqualDepth);
-    // Every line draws before every fill. Lines write true depth and fills
-    // are sunk by their offset, so a fill fails against its own lines and
-    // stays behind them, while a fill in front of a foreign line — a slab
-    // over a beam's arris, a beam over a slab's mesh lines — paints over
-    // exactly what it hides.
-    const memberMeshes = item.renderer.meshes.members.children.filter(
-      (child) => child.isInstancedMesh,
-    );
+    // The tie chain, resolved by draw order with no epsilon anywhere: member
+    // fills draw after the ordinary lines and win their ties, member contours
+    // draw after their fill and tie back over it — bit-exact, both baked on
+    // the CPU from the same matrices — and the shell fill draws last, losing
+    // ties to everything while covering whatever it strictly hides.
+    const memberMeshes = item.renderer.meshes.members.children.filter((child) => child.isMesh);
     expect(memberMeshes.length).toBeGreaterThan(0);
     expect(memberMeshes.every((mesh) => mesh.renderOrder === 2)).toBe(true);
+    expect(memberMeshes.every((mesh) => !mesh.isInstancedMesh)).toBe(true);
     expect(item.renderer.memberContours.length).toBeGreaterThan(0);
     expect(
       item.renderer.memberContours.every(
         (contours) =>
-          contours.renderOrder === 1 &&
+          contours.renderOrder === 3 &&
           contours.material.transparent === false &&
           contours.material.depthWrite === true,
       ),
@@ -536,12 +535,20 @@ describe("graviss", () => {
       supports: 0,
       sections: 1,
     });
-    expect(memberMesh.geometry.type).toBe("BoxGeometry");
-    // An instanced geometry carries no colour attribute. Declaring vertex
-    // colours anyway makes the vertex shader read that missing attribute as
-    // black and swallow the instance colour, which renders every member, node
-    // and support as a black silhouette.
-    for (const mesh of [memberMesh, item.renderer.meshes.nodes, item.renderer.meshes.supports]) {
+    // The member fill is baked, not instanced: merged world-space triangles
+    // with a colour per vertex, exactly like the shell surface, so the
+    // contours stamped from the same matrices tie with it to the bit. One
+    // rectangle section is the twelve triangles of its box.
+    expect(memberMesh.isInstancedMesh).toBeUndefined();
+    expect(memberMesh.geometry.type).toBe("BufferGeometry");
+    expect(memberMesh.geometry.getAttribute("position").count).toBe(36);
+    expect(memberMesh.geometry.getAttribute("color")).not.toBeUndefined();
+    expect(memberMesh.material.vertexColors).toBe(true);
+    expect(memberMesh.userData.gravissEntityRanges).toEqual([{ start: 0, count: 36 }]);
+    // The marks stay instanced, and an instanced geometry carries no colour
+    // attribute: declaring vertex colours anyway would make the shader read
+    // the missing attribute as black and swallow the instance colour.
+    for (const mesh of [item.renderer.meshes.nodes, item.renderer.meshes.supports]) {
       if (!mesh) continue;
       expect(mesh.isInstancedMesh).toBe(true);
       expect(mesh.geometry.getAttribute("color")).toBeUndefined();
@@ -611,10 +618,15 @@ describe("graviss", () => {
 
     expect(item.toggleSectionRendering()).toBe(true);
     expect(sectionButton.getAttribute("aria-pressed")).toBe("true");
-    expect(
-      item.renderer.pickables.find((mesh) => mesh.userData.gravissColorKey === "element").geometry
-        .type,
-    ).toBe("BoxGeometry");
+    // Baked on the CPU rather than instanced, so the contours stamped from
+    // the same matrices tie with the fill exactly: one box section is its
+    // twelve triangles, merged.
+    const rebuiltMember = item.renderer.pickables.find(
+      (mesh) => mesh.userData.gravissColorKey === "element",
+    );
+    expect(rebuiltMember.geometry.type).toBe("BufferGeometry");
+    expect(rebuiltMember.isInstancedMesh).toBeUndefined();
+    expect(rebuiltMember.geometry.getAttribute("position").count).toBe(36);
 
     // Rendered members carry their section contours in the mesh-line layer:
     // the twelve edges of the unit box, stamped by the element's own matrix.
@@ -1302,9 +1314,9 @@ describe("graviss", () => {
     expect(edges.material.transparent).toBe(false);
     expect(edges.material.depthWrite).toBe(true);
     expect(edges.renderOrder).toBe(1);
-    // After the member fills, whose flush faces must claim their band before
-    // the tie-losing shell fill arrives.
-    expect(item.renderer.meshes.shells.renderOrder).toBe(3);
+    // After the member fills and their contours, whose flush faces and
+    // arrises must claim their band before the tie-losing shell fill arrives.
+    expect(item.renderer.meshes.shells.renderOrder).toBe(4);
     expect(edges.visible).toBe(true);
     expect(item.setVisibility("mesh", false)).toBe(false);
     expect(edges.visible).toBe(false);
