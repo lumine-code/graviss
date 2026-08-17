@@ -184,6 +184,7 @@ describe("graviss", () => {
       "grid",
       "axes",
       "local-axes",
+      "gradient",
       "background",
       "save-image",
       "copy-image",
@@ -2407,6 +2408,53 @@ describe("graviss", () => {
     } finally {
       viewer.destroy();
     }
+  });
+
+  it("grades the background lighter towards the top when asked", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const button = item.element.querySelector('[data-action="toggle-gradient"]');
+
+    // Flat until somebody asks otherwise: one colour, and nothing to dispose.
+    expect(renderer.isBackgroundGradient()).toBe(false);
+    expect(renderer.scene.background.isColor).toBe(true);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+
+    button.click();
+    expect(renderer.isBackgroundGradient()).toBe(true);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(button.classList.contains("selected")).toBe(true);
+    const texture = renderer.scene.background;
+    expect(texture.isTexture).toBe(true);
+
+    // The top of it is the appearance's own colour lifted towards white, and
+    // the bottom is that colour: light falling from above, not a second scheme.
+    const source = texture.image;
+    const sampled = source.getContext("2d").getImageData(0, 0, 1, source.height).data;
+    const top = [sampled[0], sampled[1], sampled[2]];
+    const bottom = source.height - 1;
+    const foot = [sampled[bottom * 4], sampled[bottom * 4 + 1], sampled[bottom * 4 + 2]];
+    expect(top[0] + top[1] + top[2]).toBeGreaterThan(foot[0] + foot[1] + foot[2]);
+    const flat = appearanceDefinition(renderer.activeAppearance).background;
+    expect(foot[0]).toBe((flat >> 16) & 255);
+    expect(foot[2]).toBe(flat & 255);
+
+    // It belongs to the graphic, and the texture is let go when it stops being
+    // wanted rather than left behind on the card it was drawn on.
+    expect(item.viewDocument.getData().graphics[0].backgroundGradient).toBe(true);
+    const disposed = spyOn(texture, "dispose").and.callThrough();
+    button.click();
+    expect(disposed).toHaveBeenCalled();
+    expect(renderer.isBackgroundGradient()).toBe(false);
+    expect(renderer.scene.background.isColor).toBe(true);
+
+    // Switching graphics restores what each of them holds.
+    item.setBackgroundGradient(true);
+    item.activateGraphic(1);
+    expect(renderer.isBackgroundGradient()).toBe(false);
+    item.activateGraphic(0);
+    expect(renderer.isBackgroundGradient()).toBe(true);
   });
 
   it("sizes every mark from one field, as the length it is", async () => {

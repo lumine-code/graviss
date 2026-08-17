@@ -68,6 +68,7 @@ Commands available in `.graviss`:
 - `graviss:toggle-axes`: show or hide the global axes,
 - `graviss:toggle-local-axes`: show or hide element-local axes,
 - `graviss:toggle-section-rendering`: switch between rendered sections and plain lines and surfaces,
+- `graviss:toggle-background-gradient`: grade the background lighter towards the top, or leave it flat,
 - `graviss:save-as-image`: render the active graphic and save it as a PNG,
 - `graviss:copy-to-clipboard`: render the active graphic and copy it to the clipboard,
 - `graviss:select-print-region`: drag a rectangle over the canvas to set the print region,
