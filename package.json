@@ -46,6 +46,12 @@
       "type": "boolean",
       "default": true
     },
+    "zoomTowardPointer": {
+      "title": "Zoom Toward the Pointer",
+      "description": "Move the wheel's zoom along the ray under the pointer, so whatever it is over stays where it is, instead of zooming at the middle of the viewport.",
+      "type": "boolean",
+      "default": true
+    },
     "showOrbitPivot": {
       "title": "Show the Orbit Pivot",
       "description": "Mark the pinned point for as long as a rotation is being dragged. A press that never moved is a click and marks nothing, and the mark never reaches an exported image.",

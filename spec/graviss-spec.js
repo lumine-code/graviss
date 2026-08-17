@@ -1614,6 +1614,83 @@ describe("graviss", () => {
     expect(item.serialize().viewDocument.data.graphics[0].camera).toEqual(cameraBefore);
   });
 
+  it("zooms along the ray under the pointer", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const viewport = item.element.querySelector(".graviss-viewport");
+    viewport.style.width = "800px";
+    viewport.style.height = "400px";
+    renderer.resize();
+
+    const canvas = renderer.canvasRenderer.domElement;
+    const bounds = canvas.getBoundingClientRect();
+    const wheel = (point, deltaY) =>
+      canvas.dispatchEvent(
+        new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          deltaY,
+          clientX: bounds.left + point.x,
+          clientY: bounds.top + point.y,
+        }),
+      );
+    const screenOf = (world) => {
+      renderer.camera.updateMatrixWorld(true);
+      return renderer.projectToScreen(world);
+    };
+
+    // Well away from the middle, which is where anchoring at the pointer and
+    // anchoring at the viewport disagree most. A pointer event carries whole
+    // pixels, so the anchor is read back from the exact pixel the wheel will
+    // name rather than from the node, whose own projection falls between two.
+    const node = renderer.geometry.nodes[0];
+    const projected = screenOf([node.x, node.y, node.z]);
+    const under = { x: Math.round(projected.x), y: Math.round(projected.y) };
+    const hit = renderer.intersectionAt({
+      clientX: bounds.left + under.x,
+      clientY: bounds.top + under.y,
+    });
+    expect(hit).not.toBeNull();
+    const world = hit.point.toArray();
+    const anchored = screenOf(world);
+    const distanceBefore = renderer.camera.position.distanceTo(renderer.controls.target);
+
+    wheel(under, -240);
+    expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeLessThan(
+      distanceBefore,
+    );
+
+    // The contract: whatever the wheel was over has not moved under it.
+    const held = screenOf(world);
+    expect(Math.hypot(held.x - anchored.x, held.y - anchored.y)).toBeLessThan(0.01);
+
+    // And back out again, still anchored.
+    wheel(under, 240);
+    const returned = screenOf(world);
+    expect(Math.hypot(returned.x - anchored.x, returned.y - anchored.y)).toBeLessThan(0.01);
+    expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeCloseTo(
+      distanceBefore,
+      6,
+    );
+
+    // Turned off, the wheel pulls toward the middle and the point drifts.
+    lumine.config.set("graviss.zoomTowardPointer", false);
+    expect(renderer.controls.zoomToCursor).toBe(false);
+    const centred = screenOf(world);
+    wheel(under, -240);
+    const drifted = screenOf(world);
+    expect(Math.hypot(drifted.x - centred.x, drifted.y - centred.y)).toBeGreaterThan(1);
+
+    // An anchor is measured against the canvas, so a canvas with nothing to
+    // measure has to leave the zoom unanchored rather than aim it at infinity.
+    lumine.config.set("graviss.zoomTowardPointer", true);
+    viewport.style.height = "0px";
+    wheel(under, -240);
+    expect(renderer.captureCameraState().position.every(Number.isFinite)).toBe(true);
+    expect(renderer.captureCameraState().target.every(Number.isFinite)).toBe(true);
+  });
+
   it("pins the pivot only where a gesture asks for one", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");

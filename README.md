@@ -4,7 +4,7 @@ Explore finite element models in an interactive engineering viewport.
 
 ## Features
 
-- **Engineering viewport**: orbits around the element under the pointer, pans, zooms, fits, and switches between standard camera views and projection modes.
+- **Engineering viewport**: orbits and zooms about the element under the pointer, pans, fits, and switches between standard camera views and projection modes.
 - **Model geometry**: switches beam members, shells, nodes, supports, mesh lines, grids, and global or element-local axes independently, in the model's declared coordinate system.
 - **Section profiles**: renders rectangular, circular, tubular, tee, and polygonal beam sections with instanced meshes.
 - **Multiple graphics**: stores several named graphics in one `.grv` file, each with its own camera, visibility, section rendering, appearance, and print region.
@@ -103,7 +103,7 @@ The canvas keeps its canonical JSON in a private `TextBuffer`, without creating 
 
 Graviss owns the canvas and every command. Source packages provide the `graviss.source` service and own only recognition, file or database access, translation, and session disposal — no package but Graviss creates a viewer or registers an opener.
 
-Dragging with the left button turns the model about whatever is under the pointer when the drag begins, so the detail being examined stays where it was rather than swinging out of frame. A mark shows the pinned point for as long as the drag runs. Started over empty space, where there is nothing to pin to, the drag turns about the camera target as it always did.
+Dragging with the left button turns the model about whatever is under the pointer when the drag begins, so the detail being examined stays where it was rather than swinging out of frame. A mark shows the pinned point for as long as the drag runs. Started over empty space, where there is nothing to pin to, the drag turns about the camera target as it always did. The wheel is anchored the same way, moving along the ray under the pointer so that whatever it is over stays where it is.
 
 A rendered image covers the active graphic's print region: a rectangle drawn over the viewport, held in fractions of it so it survives a resize and stays where it was drawn. Moving, rotating and zooming the camera change what falls inside it, which is how a view is composed through it. Every gesture on the frame is held behind the command modifier — Command on macOS, Control elsewhere — so the model keeps every unmodified pointer: orbit, pan, pick and the wheel all reach it through the frame. Held, a press inside the frame moves it, on an edge or a corner resizes it, outside it draws a new one, and a right-click drops it. One gesture is one undo step. **Enter Selection Mode** latches the modifier on for anyone who would rather not hold a key. Without one the image covers the whole model with a margin of two per cent of its longer side — the whole of it, including whatever the viewport is cropping away, and measured from what is drawn rather than from where the nodes are, so a rendered section is never cut off. It is still the view on screen, reaching past its edges: the camera never moves, because moving it would change the perspective and the image would be taken from somewhere the viewport never was.
 
