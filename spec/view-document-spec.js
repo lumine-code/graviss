@@ -3,7 +3,12 @@ const os = require("node:os");
 const path = require("node:path");
 const { TextBuffer } = require("lumine");
 const { TEST_MODELS: EXAMPLES } = require("./support/test-model");
-const { GravissViewDocument, validateViewDocument } = require("../lib/view-document");
+const {
+  GravissViewDocument,
+  graphicAt,
+  normalizeViewDocument,
+  validateViewDocument,
+} = require("../lib/view-document");
 
 describe("GravissViewDocument", () => {
   let document;
@@ -73,34 +78,55 @@ describe("GravissViewDocument", () => {
     expect(document.isImplicit()).toBe(true);
     expect(document.isModified()).toBe(false);
     expect(document.getSourceBuffer().getText()).toBe(" \r\n\t");
+    // What is read is whole: everything the file did not say, worked out.
     expect(document.getData()).toEqual(
-      jasmine.objectContaining({
-        format: "graviss-view",
-        version: 1,
-        activeGraphicId: "overview",
-      }),
+      jasmine.objectContaining({ format: "graviss-view", version: 1 }),
     );
+    expect(document.getData().graphics.length).toBe(1);
+    expect(document.getData().activeGraphicId).toBe(document.getData().graphics[0].id);
     // A title is a name someone chose. A document made up for a blank file has
     // nobody to have chosen one, and the file's own name is not data.
     expect("title" in document.getData()).toBe(false);
-    expect(document.getData().graphics.length).toBe(1);
+    // What is stored is only what was said, which for a blank file is nothing.
+    expect(document.getStoredData()).toEqual({});
 
     document.update((data) => {
-      data.graphics[0].visibility.grid = false;
+      const graphic = graphicAt(data, 0);
+      graphic.visibility ||= {};
+      graphic.visibility.grid = false;
     });
 
     expect(document.isImplicit()).toBe(false);
     expect(document.isModified()).toBe(true);
-    expect(JSON.parse(document.getSourceBuffer().getText()).format).toBe("graviss-view");
+    // The whole of what reaches the file is the one thing that was changed.
+    // Everything else stays Graviss's to work out, so nothing else is written
+    // down and nothing else can go stale against it.
+    expect(JSON.parse(document.getSourceBuffer().getText())).toEqual({
+      graphics: [{ visibility: { grid: false } }],
+    });
     await document.save();
-    expect(JSON.parse(fs.readFileSync(filePath, "utf8")).graphics[0].visibility.grid).toBe(false);
+    expect(JSON.parse(fs.readFileSync(filePath, "utf8"))).toEqual({
+      graphics: [{ visibility: { grid: false } }],
+    });
   });
 
-  it("still rejects malformed non-empty view files", () => {
+  it("reads a document that says nothing and refuses one that says something wrong", () => {
+    // Nothing has to be stated. The extension is what makes the file a view.
     fs.writeFileSync(filePath, "{}");
-    expect(() => GravissViewDocument.load(filePath)).toThrowError(
-      /Unsupported Graviss view document format or version/,
-    );
+    document = GravissViewDocument.load(filePath);
+    expect(document.getData().graphics.length).toBe(1);
+    expect(document.getStoredData()).toEqual({});
+    document.destroy();
+
+    fs.writeFileSync(filePath, `{"format":"something-else"}`);
+    expect(() => GravissViewDocument.load(filePath)).toThrowError(/format/);
+
+    fs.writeFileSync(filePath, `{"version":2}`);
+    expect(() => GravissViewDocument.load(filePath)).toThrowError(/version/);
+
+    fs.writeFileSync(filePath, "not json");
+    expect(() => GravissViewDocument.load(filePath)).toThrow();
+    document = null;
   });
 
   it("undoes, redoes, and branches normalized view-document changes", () => {
@@ -309,10 +335,18 @@ describe("GravissViewDocument", () => {
     blankTitle.title = "";
     expect(() => validateViewDocument(blankTitle)).toThrowError(/title/);
 
-    // A graphic still has to name itself: nothing else can name one.
-    const untitledGraphic = clone(EXAMPLES[0].viewDocument);
-    delete untitledGraphic.graphics[0].title;
-    expect(() => validateViewDocument(untitledGraphic)).toThrowError(/title/);
+    // A graphic that names neither itself nor its position is named after
+    // where it sits, and only its neighbours can make that ambiguous.
+    const bareGraphics = { graphics: [{}, {}] };
+    expect(validateViewDocument(bareGraphics)).toBe(bareGraphics);
+    const normalized = normalizeViewDocument(bareGraphics);
+    expect(normalized.graphics.map(({ id }) => id)).toEqual(["graphic-1", "graphic-2"]);
+    expect(normalized.graphics.map(({ title }) => title)).toEqual(["Graphic 1", "Graphic 2"]);
+    expect(normalized.activeGraphicId).toBe("graphic-1");
+
+    // A derived name never collides with one that was chosen.
+    const mixed = normalizeViewDocument({ graphics: [{}, { id: "graphic-1" }] });
+    expect(mixed.graphics.map(({ id }) => id)).toEqual(["graphic-2", "graphic-1"]);
   });
 });
 

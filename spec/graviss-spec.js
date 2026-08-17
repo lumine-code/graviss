@@ -1114,7 +1114,11 @@ describe("graviss", () => {
       item.toggleVisibility("grid");
       expect(item.viewDocument.isImplicit()).toBe(false);
       expect(item.isModified()).toBe(true);
-      expect(JSON.parse(item.viewDocument.getSourceBuffer().getText()).format).toBe("graviss-view");
+      // Only what was touched reaches the file: no format, no version, no ids,
+      // titles or camera Graviss worked out for itself.
+      expect(JSON.parse(item.viewDocument.getSourceBuffer().getText())).toEqual({
+        graphics: [{ visibility: { grid: false } }],
+      });
     } finally {
       registration.dispose();
       if (item) await lumine.workspace.paneForItem(item)?.destroyItem(item, true);

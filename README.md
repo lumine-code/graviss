@@ -99,7 +99,15 @@ Commands available in `lumine-workspace`:
 
 A `.grv` document stores view configuration and an optional source path. When the source is omitted, registered providers can resolve a supported model with the same basename. Graviss opens the view as a canvas; **Open Source** opens the same file in a normal JSON editor.
 
-A document may name itself with a `title`, and most have no reason to: without one the pane is named after its file, extension included, exactly as the source of the same file is named. The two tabs then read alike and the icon is what tells the render from the source.
+Everything in a `.grv` file is optional — the extension is what makes it a view — and a file holds only what someone set. What is left out is worked out: a pane is named after its file, a graphic after its position, a view with no camera frames the model. A change writes down itself and nothing else, so a file kept short stays short. What a document does state still has to be true: a `format` or `version` naming something Graviss does not know is refused rather than read hopefully.
+
+The narrowest complete document is therefore `{}`, and a useful one is little more:
+
+```json
+{ "source": "model.dat" }
+```
+
+A `title` names the model when someone wants it named, and most documents have no reason to: without one the pane is named after its file, extension included, exactly as the source of the same file is named. The two tabs then read alike and the icon is what tells the render from the source.
 
 The canvas keeps its canonical JSON in a private `TextBuffer`, without creating or registering a hidden text editor. Clean external changes reload immediately. Changes that overlap unsaved work remain conflicted until the normal Lumine save flow resolves them.
 
