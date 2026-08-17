@@ -1528,6 +1528,177 @@ describe("graviss", () => {
     expect(overlay.hidden).toBe(true);
   });
 
+  it("turns the model about the element under the pointer", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const viewport = item.element.querySelector(".graviss-viewport");
+    const marker = item.element.querySelector(".graviss-orbit-pivot");
+    viewport.style.width = "800px";
+    viewport.style.height = "400px";
+    renderer.resize();
+
+    const canvas = renderer.canvasRenderer.domElement;
+    // A dispatched pointer is not an active one, so the capture the controls
+    // take on it would throw. Nothing else in the gesture depends on it.
+    canvas.setPointerCapture = () => {};
+    canvas.releasePointerCapture = () => {};
+
+    const bounds = canvas.getBoundingClientRect();
+    const send = (type, point, held = {}) =>
+      canvas.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          pointerId: 1,
+          clientX: bounds.left + point.x,
+          clientY: bounds.top + point.y,
+          ...held,
+        }),
+      );
+    const screenOf = (world) => {
+      renderer.camera.updateMatrixWorld(true);
+      return renderer.projectToScreen(world.toArray());
+    };
+
+    // Press over a node, so the ray has something to pin to.
+    const node = renderer.geometry.nodes[0];
+    const over = renderer.projectToScreen([node.x, node.y, node.z]);
+    const positionBefore = renderer.camera.position.clone();
+    const targetBefore = renderer.controls.target.clone();
+    const quaternionBefore = renderer.camera.quaternion.clone();
+    const distanceBefore = positionBefore.distanceTo(targetBefore);
+    const updateCamera = spyOn(item, "updateCamera").and.callThrough();
+    const cameraBefore = item.serialize().viewDocument.data.graphics[0].camera;
+
+    // Pressing pins the pivot and moves nothing at all.
+    send("pointerdown", over);
+    expect(renderer.orbitPivot).not.toBeNull();
+    expect(renderer.camera.position.equals(positionBefore)).toBe(true);
+    expect(renderer.controls.target.equals(targetBefore)).toBe(true);
+    expect(renderer.camera.quaternion.equals(quaternionBefore)).toBe(true);
+    expect(marker.hidden).toBe(true);
+
+    const pivot = renderer.orbitPivot.point.clone();
+    const pinned = screenOf(pivot);
+
+    send("pointermove", { x: over.x + 60, y: over.y + 25 });
+    expect(marker.hidden).toBe(false);
+    expect(Number.parseFloat(marker.style.left)).toBeCloseTo(pinned.x, 2);
+    expect(Number.parseFloat(marker.style.top)).toBeCloseTo(pinned.y, 2);
+    send("pointermove", { x: over.x + 120, y: over.y + 50 });
+    send("pointerup", { x: over.x + 120, y: over.y + 50 });
+    expect(marker.hidden).toBe(true);
+    expect(renderer.orbitPivot).toBeNull();
+
+    // The contract: the point that was under the pointer is still under it.
+    const settled = screenOf(pivot);
+    expect(Math.hypot(settled.x - pinned.x, settled.y - pinned.y)).toBeLessThan(0.01);
+
+    // It was a rotation and not a pan, and turning about the pointer is what
+    // carries the target along with it.
+    expect(renderer.camera.quaternion.angleTo(quaternionBefore)).toBeGreaterThan(0.1);
+    expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeCloseTo(
+      distanceBefore,
+      6,
+    );
+    expect(renderer.controls.target.distanceTo(targetBefore)).toBeGreaterThan(1e-6);
+
+    // One drag is one undo step, not one per pointer event.
+    expect(updateCamera).toHaveBeenCalledTimes(1);
+    expect(item.serialize().viewDocument.data.graphics[0].camera).toEqual(
+      renderer.captureCameraState(),
+    );
+    item.undo();
+    expect(item.serialize().viewDocument.data.graphics[0].camera).toEqual(cameraBefore);
+  });
+
+  it("pins the pivot only where a gesture asks for one", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const viewport = item.element.querySelector(".graviss-viewport");
+    const marker = item.element.querySelector(".graviss-orbit-pivot");
+    viewport.style.width = "800px";
+    viewport.style.height = "400px";
+    renderer.resize();
+
+    const canvas = renderer.canvasRenderer.domElement;
+    canvas.setPointerCapture = () => {};
+    canvas.releasePointerCapture = () => {};
+
+    const bounds = canvas.getBoundingClientRect();
+    const at = (point, held = {}) => ({
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      pointerId: 1,
+      clientX: bounds.left + point.x,
+      clientY: bounds.top + point.y,
+      ...held,
+    });
+    const send = (type, point, held) =>
+      canvas.dispatchEvent(new PointerEvent(type, at(point, held)));
+    const node = renderer.geometry.nodes[0];
+    const over = renderer.projectToScreen([node.x, node.y, node.z]);
+
+    // A press that never moved is a click: it marks nothing and turns nothing.
+    const restingPosition = renderer.camera.position.clone();
+    send("pointerdown", over);
+    send("pointerup", over);
+    expect(marker.hidden).toBe(true);
+    expect(renderer.camera.position.equals(restingPosition)).toBe(true);
+
+    // Pressed where the model is not, there is nothing to pin to and the orbit
+    // is the one it always was.
+    const empty = [
+      { x: 6, y: 6 },
+      { x: 794, y: 6 },
+      { x: 6, y: 394 },
+      { x: 794, y: 394 },
+    ].find((point) => !renderer.intersectionAt(at(point)));
+    expect(empty).toBeDefined();
+    send("pointerdown", empty);
+    expect(renderer.orbitPivot).toBeNull();
+    const emptyTarget = renderer.controls.target.clone();
+    send("pointermove", { x: empty.x + 80, y: empty.y + 40 });
+    expect(marker.hidden).toBe(true);
+    send("pointerup", { x: empty.x + 80, y: empty.y + 40 });
+    expect(renderer.controls.target.distanceTo(emptyTarget)).toBeLessThan(1e-8);
+
+    // Held shift the controls pan, and a pan has no pivot: the offset survives.
+    const panOffset = renderer.camera.position.clone().sub(renderer.controls.target);
+    send("pointerdown", over, { shiftKey: true });
+    expect(renderer.orbitPivot).toBeNull();
+    send("pointermove", { x: over.x + 70, y: over.y }, { shiftKey: true });
+    send("pointerup", { x: over.x + 70, y: over.y }, { shiftKey: true });
+    expect(
+      renderer.camera.position.clone().sub(renderer.controls.target).distanceTo(panOffset),
+    ).toBeLessThan(1e-8);
+
+    // Turned off, the drag is the classic orbit about the target.
+    lumine.config.set("graviss.orbitAroundPointer", false);
+    const classicTarget = renderer.controls.target.clone();
+    const classicPosition = renderer.camera.position.clone();
+    send("pointerdown", over);
+    expect(renderer.orbitPivot).toBeNull();
+    send("pointermove", { x: over.x + 90, y: over.y + 30 });
+    send("pointerup", { x: over.x + 90, y: over.y + 30 });
+    expect(renderer.controls.target.distanceTo(classicTarget)).toBeLessThan(1e-8);
+    expect(renderer.camera.position.distanceTo(classicPosition)).toBeGreaterThan(0.1);
+
+    // The mark can be dropped without dropping the pivot with it.
+    lumine.config.set("graviss.orbitAroundPointer", true);
+    lumine.config.set("graviss.showOrbitPivot", false);
+    const marked = renderer.projectToScreen([node.x, node.y, node.z]);
+    send("pointerdown", marked);
+    send("pointermove", { x: marked.x + 40, y: marked.y + 20 });
+    expect(renderer.orbitPivot.rotating).toBe(true);
+    expect(marker.hidden).toBe(true);
+    send("pointerup", { x: marked.x + 40, y: marked.y + 20 });
+  });
+
   it("exports the region as the very pixels the viewport shows there", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");

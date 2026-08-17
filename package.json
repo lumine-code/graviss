@@ -39,6 +39,20 @@
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
+  "configSchema": {
+    "orbitAroundPointer": {
+      "title": "Orbit Around the Pointer",
+      "description": "Pin the orbit to the front element under the pointer when a rotation starts, instead of turning around the camera target. A rotation started over empty space still turns around the target.",
+      "type": "boolean",
+      "default": true
+    },
+    "showOrbitPivot": {
+      "title": "Show the Orbit Pivot",
+      "description": "Mark the pinned point for as long as a rotation is being dragged. A press that never moved is a click and marks nothing, and the mark never reaches an exported image.",
+      "type": "boolean",
+      "default": true
+    }
+  },
   "deserializers": {
     "GravissView": "deserialize"
   },

@@ -17,6 +17,13 @@ describe("graviss package conventions", () => {
       Object.keys(manifest).indexOf("engines") + 1,
     );
     expect(manifest.backgroundTips).toHaveSize(1);
+    // The settings view renders a schema in the order it declares, and names
+    // every entry from its own title, so neither is optional.
+    for (const setting of Object.values(manifest.configSchema)) {
+      expect(setting.title).toBeTruthy();
+      expect(setting.description).toBeTruthy();
+      expect(setting.order).toBeUndefined();
+    }
   });
 
   it("ships convention-shaped documentation, service contracts, and CI", () => {

@@ -115,6 +115,26 @@
   pointer-events: none;
 }
 
+/* Where the orbit is pinned, for as long as a rotation is being dragged. An
+   overlay rather than a scene object: it is then never occluded by the element
+   it marks, never enters the model's bounds, its silhouette or an exported
+   image, and keeps one size in pixels under either projection. */
+.graviss-orbit-pivot {
+  --graviss-pivot-size: 13px;
+
+  position: absolute;
+  z-index: 3;
+  width: var(--graviss-pivot-size);
+  height: var(--graviss-pivot-size);
+  border: 1px solid var(--text-color-info);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--text-color-info) 0 1.5px, transparent 1.5px);
+  box-shadow: 0 0 0 1px var(--graviss-region-halo);
+  opacity: 0.7;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
 .graviss-canvas.is-selecting-region {
   cursor: crosshair;
 }
