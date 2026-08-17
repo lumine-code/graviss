@@ -1608,9 +1608,15 @@ describe("graviss", () => {
     expect(wideExtent.width).toBeCloseTo(extent.width, 6);
     expect(wideExtent.height).toBeCloseTo(extent.height, 6);
 
-    // A stored region is used exactly as it stands.
+    // A region taken from the view is written down in metres on the target
+    // plane — the whole visible extent, centred on the target — so the file
+    // holds a plot area and not a description of this window.
+    const visible = renderer.visibleExtentAtTarget();
     const region = item.setPrintRegionFromView();
-    expect(region).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+    expect(region.right).toBeCloseTo(0, 6);
+    expect(region.up).toBeCloseTo(0, 6);
+    expect(region.width).toBeCloseTo(visible.width, 6);
+    expect(region.height).toBeCloseTo(visible.height, 6);
     expect(item.getPrintRegion()).toEqual(region);
     expect(item.element.querySelector(".graviss-print-region").hidden).toBe(false);
     expect(
@@ -1640,38 +1646,46 @@ describe("graviss", () => {
     // A drag too small to have been meant as a rectangle sets nothing.
     expect(renderer.regionForScreenRect({ x: 300, y: 150 }, { x: 304, y: 250 })).toBeNull();
 
-    // The whole gesture, through the command the palette offers.
+    // The whole gesture, through the command the palette offers. What the
+    // fractions drew is stored as metres on the target plane: half the
+    // viewport across and down is half of what it shows, centred.
     expect(item.getPrintRegion()).toBeNull();
     expect(item.selectPrintRegion()).toBe(true);
     expect(renderer.controls.enabled).toBe(false);
     renderer.endRegionSelection(drawn);
     expect(renderer.controls.enabled).toBe(true);
-    expect(item.getPrintRegion()).toEqual(drawn);
+    const visible = renderer.visibleExtentAtTarget();
+    const stored = item.getPrintRegion();
+    expect(stored.right).toBeCloseTo(0, 6);
+    expect(stored.up).toBeCloseTo(0, 6);
+    expect(stored.width).toBeCloseTo(visible.width / 2, 6);
+    expect(stored.height).toBeCloseTo(visible.height / 2, 6);
 
     const overlay = item.element.querySelector(".graviss-print-region");
     expect(overlay.hidden).toBe(false);
     expect(overlay.style.left).toBe("25%");
     expect(overlay.style.width).toBe("50%");
 
-    // Half the viewport across and down covers a quarter of what it shows.
-    const visible = renderer.visibleExtentAtTarget();
-    const covered = renderer.resolvePrintRegion(drawn);
+    const covered = renderer.resolvePrintRegion(stored);
     expect(covered.width).toBeCloseTo(visible.width / 2, 6);
     expect(covered.height).toBeCloseTo(visible.height / 2, 6);
 
-    // The rectangle stays put through the wheel; only what falls inside it
-    // changes, which is how a view is composed through the frame.
+    // The region keeps its metres through the wheel: zooming moves the
+    // camera, and the camera changes what stands inside the frame — never
+    // what the frame is. On screen the same metres fill more of a closer
+    // view, so the overlay grows while the plot area stays the plot area.
     renderer.zoomCamera("in");
-    expect(item.getPrintRegion()).toEqual(drawn);
-    expect(overlay.style.left).toBe("25%");
-    expect(overlay.style.width).toBe("50%");
-    const zoomed = renderer.resolvePrintRegion(drawn);
-    expect(zoomed.width).toBeLessThan(covered.width);
+    expect(item.getPrintRegion()).toEqual(stored);
+    const zoomed = renderer.resolvePrintRegion(stored);
+    expect(zoomed.width).toBeCloseTo(covered.width, 6);
+    expect(zoomed.height).toBeCloseTo(covered.height, 6);
+    item.renderer.paintPrintRegion();
+    expect(parseFloat(overlay.style.width)).toBeGreaterThan(50);
 
     // Escaping a selection leaves the region the graphic already had.
     expect(item.selectPrintRegion()).toBe(true);
     renderer.endRegionSelection(null);
-    expect(item.getPrintRegion()).toEqual(drawn);
+    expect(item.getPrintRegion()).toEqual(stored);
   });
 
   it("keeps every frame gesture behind the command modifier", async () => {
@@ -1687,10 +1701,17 @@ describe("graviss", () => {
     expect(overlay.children.length).toBe(0);
     expect(getComputedStyle(overlay).pointerEvents).toBe("none");
 
+    // The stored region is metres on the target plane; the gestures work in
+    // fractions of the pane, so the assertions read the region back through
+    // the same conversion. The camera never moves in this spec, so the
+    // fraction arithmetic is exact.
+    const fractionsOf = () => item.printRegionFractions();
     const start = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
     expect(item.selectPrintRegion()).toBe(true);
     item.renderer.endRegionSelection(start);
-    expect(item.getPrintRegion()).toEqual(start);
+    const startStored = item.getPrintRegion();
+    expect(fractionsOf().x).toBeCloseTo(0.25, 6);
+    expect(fractionsOf().width).toBeCloseTo(0.5, 6);
 
     const bounds = viewport.getBoundingClientRect();
     const at = (x, y) => ({ clientX: bounds.left + x, clientY: bounds.top + y });
@@ -1706,11 +1727,12 @@ describe("graviss", () => {
     // Without the modifier the frame ignores the gesture entirely; the model
     // keeps it.
     drag(at(400, 200), at(480, 240), {});
-    expect(item.getPrintRegion()).toEqual(start);
+    expect(item.getPrintRegion()).toEqual(startStored);
 
     // Held, a press in the middle moves the frame and keeps its size.
     drag(at(400, 200), at(480, 240));
-    const moved = item.getPrintRegion();
+    const moved = fractionsOf();
+    const movedStored = item.getPrintRegion();
     expect(moved.x).toBeCloseTo(0.35, 6);
     expect(moved.y).toBeCloseTo(0.35, 6);
     expect(moved.width).toBeCloseTo(0.5, 6);
@@ -1718,20 +1740,22 @@ describe("graviss", () => {
     // A press on a corner resizes, leaving the opposite corner where it was.
     const corner = { x: moved.x * 800, y: moved.y * 400 };
     drag(at(corner.x, corner.y), at(corner.x + 40, corner.y + 20));
-    const resized = item.getPrintRegion();
+    const resized = fractionsOf();
+    const resizedStored = item.getPrintRegion();
     expect(resized.x).toBeCloseTo(0.4, 6);
     expect(resized.x + resized.width).toBeCloseTo(moved.x + moved.width, 6);
     expect(resized.y + resized.height).toBeCloseTo(moved.y + moved.height, 6);
 
     // One gesture is one undo step, not one per pointer event.
     item.undo();
-    expect(item.getPrintRegion()).toEqual(moved);
+    expect(item.getPrintRegion()).toEqual(movedStored);
     item.redo();
-    expect(item.getPrintRegion()).toEqual(resized);
+    expect(item.getPrintRegion()).toEqual(resizedStored);
 
     // Held and pressed outside the frame, the gesture draws a new one.
     drag(at(40, 40), at(240, 140));
-    const drawn = item.getPrintRegion();
+    const drawn = fractionsOf();
+    const drawnStored = item.getPrintRegion();
     expect(drawn.x).toBeCloseTo(0.05, 6);
     expect(drawn.width).toBeCloseTo(0.25, 6);
     expect(drawn.height).toBeCloseTo(0.25, 6);
@@ -1768,7 +1792,12 @@ describe("graviss", () => {
     expect(item.getPrintRegion()).toBeNull();
     expect(item.selectPrintRegion()).toBe(true);
     item.renderer.endRegionSelection(drawn);
-    expect(item.getPrintRegion()).toEqual(drawn);
+    // Selected again from its own read-back fractions, so equal to rounding.
+    const redrawn = item.getPrintRegion();
+    expect(redrawn.right).toBeCloseTo(drawnStored.right, 9);
+    expect(redrawn.up).toBeCloseTo(drawnStored.up, 9);
+    expect(redrawn.width).toBeCloseTo(drawnStored.width, 9);
+    expect(redrawn.height).toBeCloseTo(drawnStored.height, 9);
 
     // Holding the modifier is selection mode for as long as it is down, so the
     // frame shows its grips while a gesture is available.
@@ -1801,12 +1830,12 @@ describe("graviss", () => {
     item.setSelectionMode(true);
     expect(item.element.dataset.selectionMode).toBe("true");
     const inside = () => {
-      const region = item.getPrintRegion();
+      const region = fractionsOf();
       return { x: (region.x + region.width / 2) * 800, y: (region.y + region.height / 2) * 400 };
     };
     const held = inside();
     drag(at(held.x, held.y), at(held.x + 40, held.y), {});
-    expect(item.getPrintRegion().x).toBeCloseTo(drawn.x + 0.05, 6);
+    expect(fractionsOf().x).toBeCloseTo(drawn.x + 0.05, 6);
 
     item.setSelectionMode(false);
     expect(item.element.dataset.selectionMode).toBeUndefined();
@@ -1816,9 +1845,10 @@ describe("graviss", () => {
     expect(item.getPrintRegion()).toEqual(latched);
 
     // Right-clicking it, held, drops it; without the modifier it survives.
+    const latchedFractions = fractionsOf();
     const centre = {
-      x: (latched.x + latched.width / 2) * 800,
-      y: (latched.y + latched.height / 2) * 400,
+      x: (latchedFractions.x + latchedFractions.width / 2) * 800,
+      y: (latchedFractions.y + latchedFractions.height / 2) * 400,
     };
     viewport.dispatchEvent(
       new MouseEvent("contextmenu", { bubbles: true, cancelable: true, ...at(centre.x, centre.y) }),
@@ -2282,16 +2312,33 @@ describe("graviss", () => {
     // A frame far off in a corner is where a head-on render and the oblique one
     // the viewport shows disagree most under perspective. The export crops the
     // view it is already in, so the two agree exactly.
-    const region = { x: 0.02, y: 0.02, width: 0.34, height: 0.34 };
+    const region = renderer.printRegionFromViewportFractions({
+      x: 0.02,
+      y: 0.02,
+      width: 0.34,
+      height: 0.34,
+    });
     const image = renderer.renderPrintImage(region, { maxEdge: 272 });
 
     expect(image.width).toBe(272);
     expect(image.height).toBe(170);
-    expect(image.region).toEqual({ width: 0.34 * 800, height: 0.34 * 500 });
+    expect(image.region.width).toBeCloseTo(0.34 * 800, 6);
+    expect(image.region.height).toBeCloseTo(0.34 * 500, 6);
 
     // The camera is not moved to take the crop; an off-axis frustum is what
     // makes it the same view rather than a new one aimed at the frame.
     expect(renderer.camera.view?.enabled).toBeFalsy();
+
+    // The same stored metres print the same picture from any pane — which is
+    // what a region is for: an unambiguous plot area, for any window and for
+    // a batch render that never had one.
+    renderer.host.style.width = "320px";
+    renderer.host.style.height = "400px";
+    renderer.resize();
+    const again = renderer.renderPrintImage(region, { maxEdge: 272 });
+    expect(again.width).toBe(image.width);
+    expect(again.height).toBe(image.height);
+    expect(again.dataUrl).toBe(image.dataUrl);
   });
 
   it("frames the structure itself, with and without a border", async () => {
@@ -2304,14 +2351,13 @@ describe("graviss", () => {
 
     const tight = item.autoSelectPrintRegion();
     expect(item.getPrintRegion()).toEqual(tight);
-    expect(tight.x).toBeGreaterThanOrEqual(0);
     expect(tight.width).toBeGreaterThan(0);
-    expect(tight.x + tight.width).toBeLessThanOrEqual(1.0001);
+    expect(tight.height).toBeGreaterThan(0);
 
     // The frame is measured from the structure, not from the reference grid,
     // which spreads well beyond it.
     expect(renderer.grid.userData.gravissGridSize).toBeGreaterThan(renderer.bounds.radius * 2);
-    expect(tight.width).toBeLessThan(1);
+    expect(item.printRegionFractions().width).toBeLessThan(1);
 
     // It is measured from what is drawn rather than from where the nodes are.
     // A rendered section stands off its own centre line, and a support symbol
@@ -2331,37 +2377,41 @@ describe("graviss", () => {
     expect(renderer.visibleModelBounds().min.z).toBeGreaterThan(drawn.min.z);
     item.setVisibility("supports", true);
 
-    // A structure reaching past the viewport gives a frame that stops at its
-    // edge rather than one that describes a rectangle no view could hold.
+    // A structure reaching past the viewport is framed whole anyway: the
+    // frame reaches past the pane wherever the structure does, because the
+    // plot area must not depend on the window it was asked from.
     renderer.zoomCamera("in");
     renderer.zoomCamera("in");
     renderer.zoomCamera("in");
     const raw = renderer.modelScreenRect();
     expect(raw.x < 0 || raw.y < 0 || raw.x + raw.width > 1 || raw.y + raw.height > 1).toBe(true);
-    const clipped = item.autoSelectPrintRegion(0.02);
-    expect(clipped.x).toBeGreaterThanOrEqual(0);
-    expect(clipped.y).toBeGreaterThanOrEqual(0);
-    expect(clipped.x + clipped.width).toBeLessThanOrEqual(1.0001);
-    expect(clipped.y + clipped.height).toBeLessThanOrEqual(1.0001);
-    expect(item.getPrintRegion()).toEqual(clipped);
+    const framed = item.autoSelectPrintRegion(0.02);
+    expect(item.getPrintRegion()).toEqual(framed);
+    const framedFractions = item.printRegionFractions();
+    expect(
+      framedFractions.x < 0 ||
+        framedFractions.y < 0 ||
+        framedFractions.x + framedFractions.width > 1 ||
+        framedFractions.y + framedFractions.height > 1,
+    ).toBe(true);
     item.clearPrintRegion();
     item.dispatchCommand("graviss:fit-view");
     await conditionPromise(() => renderer.modelScreenRect().width < 1, "the fitted view");
 
     // With a border it grows by two per cent of its longer side on each side.
-    // Measured afresh, because the fit above moved the camera.
-    const refitted = item.autoSelectPrintRegion();
+    // Measured afresh, because the fit above moved the camera; asserted in
+    // fractions of the unmoving camera's view, where the margin rule lives.
+    item.autoSelectPrintRegion();
+    const refitted = item.printRegionFractions();
     const bordered = item.autoSelectPrintRegion(0.02);
+    const borderedFractions = item.printRegionFractions();
     // The margin is one distance, so it is the same number of pixels on every
     // side rather than the same fraction of two axes of different length.
     const viewport = renderer.viewportPixels();
     const margin =
       Math.max(refitted.width * viewport.width, refitted.height * viewport.height) * 0.02;
-    expect(bordered.width).toBeCloseTo(
-      Math.min(refitted.width + (margin * 2) / viewport.width, 1),
-      6,
-    );
-    expect(bordered.x).toBeCloseTo(Math.max(refitted.x - margin / viewport.width, 0), 6);
+    expect(borderedFractions.width).toBeCloseTo(refitted.width + (margin * 2) / viewport.width, 6);
+    expect(borderedFractions.x).toBeCloseTo(refitted.x - margin / viewport.width, 6);
     expect(item.getPrintRegion()).toEqual(bordered);
   });
 
@@ -2399,7 +2449,7 @@ describe("graviss", () => {
     const beforeSize = renderer.canvasRenderer.getSize(new renderer.THREE.Vector2());
 
     const image = renderer.renderPrintImage(
-      { x: 0, y: 0.25, width: 1, height: 0.5 },
+      renderer.printRegionFromViewportFractions({ x: 0, y: 0.25, width: 1, height: 0.5 }),
       {
         maxEdge: 800,
       },

@@ -34,23 +34,25 @@ describe("print regions", () => {
     expect(() => validateWorldFrustum(null)).toThrowError(/positive width/);
   });
 
-  it("holds the drawn rectangle in fractions of the viewport it was drawn over", () => {
-    expect(validatePrintRegion({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 })).toEqual({
-      x: 0.1,
-      y: 0.2,
-      width: 0.5,
-      height: 0.4,
+  it("holds the region in metres on the target plane, unbounded by any pane", () => {
+    // Offsets may be anywhere and extents any positive size: the region names
+    // structure, and structure does not end at a window.
+    expect(validatePrintRegion({ right: -12.5, up: 3.75, width: 40, height: 8 })).toEqual({
+      right: -12.5,
+      up: 3.75,
+      width: 40,
+      height: 8,
     });
 
-    // A rectangle has to sit inside the viewport it is a fraction of.
-    expect(() => validatePrintRegion({ x: 0.8, y: 0, width: 0.5, height: 0.4 })).toThrowError(
-      /inside the viewport/,
+    // But it has to be a real rectangle.
+    expect(() => validatePrintRegion({ right: 0, up: 0, width: 0, height: 4 })).toThrowError(
+      /target plane/,
     );
-    expect(() => validatePrintRegion({ x: -0.1, y: 0, width: 0.5, height: 0.4 })).toThrowError(
-      /inside the viewport/,
+    expect(() => validatePrintRegion({ right: NaN, up: 0, width: 4, height: 4 })).toThrowError(
+      /target plane/,
     );
-    expect(() => validatePrintRegion({ x: 0, y: 0, width: 0, height: 0.4 })).toThrowError(
-      /inside the viewport/,
+    expect(() => validatePrintRegion({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 })).toThrowError(
+      /target plane/,
     );
   });
 
@@ -97,13 +99,13 @@ describe("reshaping a print region", () => {
       height: 0.4,
     });
 
-    // Moving keeps its size and stops at the edge of the viewport instead of
-    // sliding out of it.
+    // Moving keeps its size and is free to leave the viewport: the frame
+    // marks structure, and structure does not end at the pane.
     const pushed = resizePrintRegion(start, null, { x: 5, y: 5 });
     expect(pushed.width).toBeCloseTo(0.4, 9);
     expect(pushed.height).toBeCloseTo(0.4, 9);
-    expect(pushed.x).toBeCloseTo(0.6, 9);
-    expect(pushed.y).toBeCloseTo(0.6, 9);
+    expect(pushed.x).toBeCloseTo(5.2, 9);
+    expect(pushed.y).toBeCloseTo(5.2, 9);
   });
 
   it("moves only the edges a handle names", () => {
@@ -125,7 +127,7 @@ describe("reshaping a print region", () => {
     expect(corner.y + corner.height).toBeCloseTo(0.6, 9);
   });
 
-  it("never lets an edge cross the one opposite it or leave the viewport", () => {
+  it("never lets an edge cross the one opposite it", () => {
     const collapsed = resizePrintRegion(start, "e", { x: -5, y: 0 });
     expect(collapsed.width).toBeCloseTo(MINIMUM_REGION_FRACTION, 9);
 
@@ -133,10 +135,11 @@ describe("reshaping a print region", () => {
     expect(crossed.width).toBeCloseTo(MINIMUM_REGION_FRACTION, 9);
     expect(crossed.x + crossed.width).toBeCloseTo(0.6, 9);
 
+    // Growing past the viewport is allowed; only inversion is not.
     const stretched = resizePrintRegion(start, "se", { x: 5, y: 5 });
-    expect(stretched.x + stretched.width).toBeCloseTo(1, 9);
-    expect(stretched.y + stretched.height).toBeCloseTo(1, 9);
+    expect(stretched.x + stretched.width).toBeCloseTo(5.6, 9);
+    expect(stretched.y + stretched.height).toBeCloseTo(5.6, 9);
 
-    expect(() => resizePrintRegion(null, "e", { x: 0 })).toThrowError(/inside the viewport/);
+    expect(() => resizePrintRegion(null, "e", { x: 0 })).toThrowError(/viewport fractions/);
   });
 });
