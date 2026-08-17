@@ -98,7 +98,8 @@ Commands available in `.graviss`:
 
 Commands available in `lumine-workspace`:
 
-- `graviss:open-source`: open the active or selected `.grv` document as JSON source.
+- `graviss:open-source`: open the active or selected `.grv` document as JSON source,
+- `graviss:open-source-on-right`: the same, split to the right of the canvas.
 
 ## Usage
 

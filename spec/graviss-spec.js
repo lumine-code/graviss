@@ -1142,6 +1142,7 @@ describe("graviss", () => {
     expect(viewerCommandNames).toContain("graviss:activate-graphic");
     expect(workspaceCommandNames).not.toContain("graviss-meshio:open-example");
     expect(workspaceCommandNames).toContain("graviss:open-source");
+    expect(workspaceCommandNames).toContain("graviss:open-source-on-right");
     expect(workspaceCommandNames).not.toContain("graviss:fit-view");
     expect(workspaceCommandNames).not.toContain("graviss:next-graphic");
 
@@ -1548,7 +1549,7 @@ describe("graviss", () => {
     });
     const button = canvas.element.querySelector('[data-action="open-source"]');
     expect(button).not.toBeNull();
-    expect(button.dataset.command).toBe("graviss:open-source");
+    expect(button.dataset.command).toBe("graviss:open-source-on-right");
     expect(button.closest(".graviss-source-control")).not.toBeNull();
 
     // The command lives on the workspace, so a dispatch from inside the canvas
@@ -1556,7 +1557,7 @@ describe("graviss", () => {
     expect(
       lumine.commands
         .findCommands({ target: button })
-        .some(({ name }) => name === "graviss:open-source"),
+        .some(({ name }) => name === "graviss:open-source-on-right"),
     ).toBe(true);
 
     // Resolved from the dispatch target, so the button opens its own canvas's
@@ -1564,11 +1565,13 @@ describe("graviss", () => {
     const other = await lumine.workspace.open(SHELL_EXAMPLE_URI, { searchAllPanes: true });
     expect(lumine.workspace.getActivePaneItem()).toBe(other);
 
-    const editor = await mainModule.openSourceCommand({ target: button });
+    const editor = await mainModule.openSourceCommand({ target: button }, { split: "right" });
 
     expect(lumine.workspace.isTextEditor(editor)).toBe(true);
     expect(editor.getPath()).toBe(MAIN_EXAMPLE.viewDocumentPath);
     expect(editor.getGrammar().scopeName).toBe("source.json");
+    // The button splits: the source stands beside the canvas, not over it.
+    expect(lumine.workspace.paneForItem(editor)).not.toBe(lumine.workspace.paneForItem(canvas));
 
     await lumine.workspace.paneForItem(editor).destroyItem(editor, true);
   });
@@ -2506,8 +2509,21 @@ describe("graviss", () => {
     expect(manifest.activationCommands).toBeUndefined();
     expect(manifest.consumedServices["tree-view.selection"]).toBeDefined();
     expect(commands).toContain("graviss:open-source");
+    expect(commands).toContain("graviss:open-source-on-right");
     expect(menus.menu[0].submenu[0].submenu).toContain(
       jasmine.objectContaining({ label: "Open Source", command: "graviss:open-source" }),
+    );
+    expect(menus.menu[0].submenu[0].submenu).toContain(
+      jasmine.objectContaining({
+        label: "Open Source on Right",
+        command: "graviss:open-source-on-right",
+      }),
+    );
+    expect(contextItems).toContain(
+      jasmine.objectContaining({
+        label: "Open Source on Right",
+        command: "graviss:open-source-on-right",
+      }),
     );
     expect(contextItems).toContain(
       jasmine.objectContaining({ label: "Open Source", command: "graviss:open-source" }),
