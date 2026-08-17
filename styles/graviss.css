@@ -35,14 +35,44 @@
   display: flex;
   min-height: var(--graviss-toolbar-height);
   margin-left: 0;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 4px 10px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--graviss-border);
   background: color-mix(in srgb, var(--tool-panel-background-color) 94%, transparent);
 }
 
-.graviss-toolbar > .block {
-  margin-bottom: 0;
+/* One region per scope a control acts at: the set of graphics, the picture the
+   active graphic composes, the layers inside that picture — and, held to the
+   far side, what belongs to the document and the renderer rather than to
+   anything a graphic stores. A hairline says where one scope ends; the tail
+   needs none, because the gap before it already does. */
+.graviss-toolbar-region {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+/* The blocks space themselves through the gaps above, not through the margins
+   the core toolbar would hand its direct children. */
+.graviss-toolbar-region .block {
+  margin: 0;
+}
+
+.graviss-toolbar-region + .graviss-toolbar-region:not(.graviss-toolbar-tail)::before {
+  content: "";
+  width: 1px;
+  height: 22px;
+  flex: none;
+  margin-right: 2px;
+  background: var(--graviss-border);
+}
+
+.graviss-toolbar-tail {
+  margin-left: auto;
 }
 
 .graviss-toolbar-block {

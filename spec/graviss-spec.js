@@ -166,6 +166,8 @@ describe("graviss", () => {
     ).toEqual([
       "previous-graphic",
       "next-graphic",
+      "add-graphic",
+      "delete-graphic",
       "fit",
       "isometric",
       "top",
@@ -173,6 +175,10 @@ describe("graviss", () => {
       "right",
       "perspective",
       "orthographic",
+      "gradient",
+      "background",
+      "save-image",
+      "copy-image",
       "sections",
       "members",
       "shells",
@@ -184,12 +190,25 @@ describe("graviss", () => {
       "grid",
       "axes",
       "local-axes",
-      "gradient",
-      "background",
-      "save-image",
-      "copy-image",
       "open-source",
     ]);
+    // The bar is split by the scope a control acts at — the set of graphics,
+    // the picture the active graphic composes, the layers inside it — with
+    // everything document- or renderer-wide held apart in the tail.
+    expect(
+      [...toolbar.querySelectorAll(":scope > .graviss-toolbar-region")].map((region) =>
+        region.getAttribute("aria-label"),
+      ),
+    ).toEqual(["Graphics", "Picture", "Layers", "Document and renderer"]);
+    const regionOf = (selector) =>
+      toolbar.querySelector(selector).closest(".graviss-toolbar-region").getAttribute("aria-label");
+    expect(regionOf('[data-action="add-graphic"]')).toBe("Graphics");
+    expect(regionOf('[data-action="save-as-image"]')).toBe("Picture");
+    expect(regionOf('[data-action="background"]')).toBe("Picture");
+    expect(regionOf('[data-visible="members"]')).toBe("Layers");
+    expect(regionOf(".graviss-symbol-input")).toBe("Layers");
+    expect(regionOf('[data-action="open-source"]')).toBe("Document and renderer");
+    expect(toolbar.querySelector(".graviss-toolbar-tail .graviss-fps-counter")).not.toBeNull();
     expect(toolbarButtons.every((button) => !button.getAttribute("title"))).toBe(true);
     for (const button of toolbarButtons) {
       const tooltips = lumine.tooltips.findTooltips(button);
@@ -205,6 +224,14 @@ describe("graviss", () => {
     expect(previousGraphic.querySelector('[data-icon="previous-graphic"]')).not.toBeNull();
     expect(nextGraphic.querySelector('[data-icon="next-graphic"]')).not.toBeNull();
     expect(previousGraphic.closest(".btn-group")).toBe(nextGraphic.closest(".btn-group"));
+    const addGraphicButton = toolbar.querySelector('[data-action="add-graphic"]');
+    const deleteGraphicButton = toolbar.querySelector('[data-action="delete-graphic"]');
+    expect(addGraphicButton.closest(".btn-group")).toBe(deleteGraphicButton.closest(".btn-group"));
+    expect(addGraphicButton.closest(".btn-group")).not.toBe(previousGraphic.closest(".btn-group"));
+    expect(previousGraphic.disabled).toBe(false);
+    expect(nextGraphic.disabled).toBe(false);
+    expect(addGraphicButton.disabled).toBe(false);
+    expect(deleteGraphicButton.disabled).toBe(false);
     expect(toolbar.querySelector('[data-visible="nodes"] [data-icon="nodes"]')).not.toBeNull();
     expect(item.element.querySelector(".graviss-graphic-actions").getAttribute("aria-label")).toBe(
       "3D overview, graphic 1 of 3",
@@ -680,6 +707,71 @@ describe("graviss", () => {
     expect(graphic.sectionRendering).toBe(false);
     expect(graphic.visibility.nodes).toBe(false);
     expect(graphic.appearance).toBe("midnight");
+  });
+
+  it("adds and deletes graphics from the toolbar, one document edit each", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-graphic-edit-"));
+    const viewPath = path.join(directory, "model.grv");
+    fs.writeFileSync(viewPath, "{}\n");
+    const providerDisposable = mainModule.consumeGravissSource({
+      id: "graphic-edit-models",
+      createSession: ({ filePath }) =>
+        filePath === viewPath ? new TestSession(MAIN_EXAMPLE) : null,
+    });
+
+    const item = await lumine.workspace.open(viewPath, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const toolbar = item.element.querySelector(".graviss-toolbar");
+    const counter = toolbar.querySelector(".graviss-graphic-counter");
+    const previous = toolbar.querySelector('[data-action="previous-graphic"]');
+    const next = toolbar.querySelector('[data-action="next-graphic"]');
+    const add = toolbar.querySelector('[data-action="add-graphic"]');
+    const remove = toolbar.querySelector('[data-action="delete-graphic"]');
+
+    // A single-graphic document keeps every graphic control on screen; what
+    // cannot be done yet is disabled rather than gone.
+    expect(item.element.querySelector(".graviss-graphic-actions").hidden).toBe(false);
+    expect(counter.textContent).toBe("1/1");
+    expect(previous.disabled).toBe(true);
+    expect(next.disabled).toBe(true);
+    expect(add.disabled).toBe(false);
+    expect(remove.disabled).toBe(true);
+
+    // Deleting the only graphic is refused with a reason, not performed.
+    const warned = spyOn(lumine.notifications, "addWarning").and.callThrough();
+    expect(item.deleteGraphic()).toBe(false);
+    expect(warned).toHaveBeenCalledWith("Graviss cannot delete the only graphic", {
+      detail: "A view keeps at least one graphic. Add another before deleting this one.",
+    });
+
+    // Adding writes one blank graphic after the active one and shows it. The
+    // new graphic states nothing, so the file gains exactly two empty objects
+    // and a position — everything else stays worked out.
+    add.click();
+    expect(counter.textContent).toBe("2/2");
+    expect(item.activeGraphic.title).toBe("Graphic 2");
+    expect(item.isModified()).toBe(true);
+    expect(previous.disabled).toBe(false);
+    expect(next.disabled).toBe(false);
+    expect(remove.disabled).toBe(false);
+    expect(item.viewDocument.getStoredData()).toEqual({ graphics: [{}, {}], activeGraphic: 1 });
+
+    // Deleting takes the active graphic out; its neighbour takes its place.
+    remove.click();
+    expect(counter.textContent).toBe("1/1");
+    expect(item.viewDocument.getStoredData().graphics).toEqual([{}]);
+    expect(item.viewDocument.getStoredData().activeGraphic).toBe(0);
+    expect(remove.disabled).toBe(true);
+
+    // Each edit is one undo step of the document.
+    item.undo();
+    expect(counter.textContent).toBe("2/2");
+    expect(item.activeGraphic.title).toBe("Graphic 2");
+    item.undo();
+    expect(counter.textContent).toBe("1/1");
+    expect(item.viewDocument.getStoredData()).toEqual({});
+
+    providerDisposable.dispose();
   });
 
   it("marks the canvas conflicted when the source is saved under pending edits", async () => {
@@ -2133,7 +2225,12 @@ describe("graviss", () => {
     expect(viewer instanceof GravissView).toBe(true);
     expect(viewer.getTitle()).toBe("Service Test");
     expect(viewer.serialize()).toBeNull();
-    expect(viewer.element.querySelector(".graviss-graphic-actions").hidden).toBe(true);
+    // The graphic controls stay on screen even here, where there is no
+    // document to page through or edit; they are disabled instead of gone.
+    expect(viewer.element.querySelector(".graviss-graphic-actions").hidden).toBe(false);
+    for (const action of ["previous-graphic", "next-graphic", "add-graphic", "delete-graphic"]) {
+      expect(viewer.element.querySelector(`[data-action="${action}"]`).disabled).toBe(true);
+    }
     viewer.destroy();
     expect(calls[0]).toBe("describe");
     expect(calls).toContain("dispose");

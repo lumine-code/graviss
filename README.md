@@ -7,7 +7,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Engineering viewport**: orbits and zooms about the element under the pointer, pans, fits, and switches between standard camera views and projection modes.
 - **Model geometry**: switches beam members, shells, nodes, supports, springs, couplings, mesh lines, grids, and global or element-local axes independently, in the model's declared coordinate system.
 - **Section profiles**: renders rectangular, circular, tubular, tee, and polygonal beam sections with instanced meshes.
-- **Multiple graphics**: stores several named graphics in one `.grv` file, each with its own camera, visibility, section rendering, appearance, and print region.
+- **Multiple graphics**: stores several named graphics in one `.grv` file, added and deleted from the toolbar, each with its own camera, visibility, section rendering, appearance, and print region.
 - **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state, and conflicted-save handling.
 - **Document history**: records camera and toolbar changes in a private `TextBuffer` so Undo and Redo cover the complete view document.
 - **Navigation integration**: exposes named graphics to the navigation panel and activates a graphic when its outline entry is selected.
@@ -25,6 +25,8 @@ Commands available in `.graviss`:
 - `graviss:fit-view`: fit the complete model in the viewport,
 - `graviss:previous-graphic`: activate the previous graphic,
 - `graviss:next-graphic`: activate the next graphic,
+- `graviss:add-graphic`: add a blank graphic after the active one and show it,
+- `graviss:delete-graphic`: delete the active graphic, keeping at least one,
 - `graviss:choose-background`: open the engineering-background picker,
 - `graviss:toggle-projection`: switch between perspective and orthographic projection,
 - `graviss:retry-loading-model`: retry a failed model load,
@@ -119,6 +121,8 @@ A `title` names the model when someone wants it named, and most documents have n
 The canvas keeps its canonical JSON in a private `TextBuffer`, without creating or registering a hidden text editor. Clean external changes reload immediately. Changes that overlap unsaved work remain conflicted until the normal Lumine save flow resolves them.
 
 Graviss owns the canvas and every command. Source packages provide the `graviss.source` service and own only recognition, file or database access, translation, and session disposal — no package but Graviss creates a viewer or registers an opener.
+
+The toolbar is laid out by the scope a control acts at: first the set of graphics — paging, adding, deleting — then the picture the active graphic composes (camera, projection, background, image output), then its layers (what is drawn and how it is marked), and, held to the far end, what belongs to the document and the renderer rather than to any graphic. Every control stays on screen whatever the document holds; what cannot be done right now is disabled rather than gone.
 
 Dragging with the left button turns the model about whatever is under the pointer when the drag begins, so the detail being examined stays where it was rather than swinging out of frame. A mark shows the pinned point for as long as the drag runs. Started over empty space, where there is nothing to pin to, the drag turns about the camera target as it always did. The wheel is anchored the same way, moving along the ray under the pointer so that whatever it is over stays where it is.
 
