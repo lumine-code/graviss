@@ -205,9 +205,13 @@
    overlay rather than a scene object: it is then never occluded by the element
    it marks, never enters the model's bounds, its silhouette or an exported
    image, and keeps one size in pixels under either projection. */
+/* Light, because it is pinned to an element and the elements are light no
+   longer: a dark mark on a pale member reads as part of the member. The dark
+   hairline around it is what keeps it off a pale background, so it can be near
+   white without disappearing into one. */
 .graviss-orbit-pivot {
   --graviss-pivot-size: 13px;
-  --graviss-pivot-ink: var(--text-color);
+  --graviss-pivot-ink: #fff;
 
   position: absolute;
   z-index: 3;
@@ -218,8 +222,10 @@
   /* Cut out rather than filled: the ring says where the turn is pinned and the
      dot says the point exactly, and the model stays visible between them. */
   background: radial-gradient(circle, var(--graviss-pivot-ink) 0 1.5px, transparent 1.5px);
-  box-shadow: 0 0 0 1px var(--graviss-region-halo);
-  opacity: 0.6;
+  box-shadow:
+    0 0 0 1px var(--graviss-region-halo),
+    inset 0 0 0 1px var(--graviss-region-halo);
+  opacity: 0.95;
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
