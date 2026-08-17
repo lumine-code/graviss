@@ -99,6 +99,8 @@ Commands available in `lumine-workspace`:
 
 A `.grv` document stores view configuration and an optional source path. When the source is omitted, registered providers can resolve a supported model with the same basename. Graviss opens the view as a canvas; **Open Source** opens the same file in a normal JSON editor.
 
+A document may name itself with a `title`, and most have no reason to: without one the pane is named after its file, extension included, exactly as the source of the same file is named. The two tabs then read alike and the icon is what tells the render from the source.
+
 The canvas keeps its canonical JSON in a private `TextBuffer`, without creating or registering a hidden text editor. Clean external changes reload immediately. Changes that overlap unsaved work remain conflicted until the normal Lumine save flow resolves them.
 
 Graviss owns the canvas and every command. Source packages provide the `graviss.source` service and own only recognition, file or database access, translation, and session disposal — no package but Graviss creates a viewer or registers an opener.

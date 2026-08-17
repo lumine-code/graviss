@@ -77,10 +77,12 @@ describe("GravissViewDocument", () => {
       jasmine.objectContaining({
         format: "graviss-view",
         version: 1,
-        title: "model",
         activeGraphicId: "overview",
       }),
     );
+    // A title is a name someone chose. A document made up for a blank file has
+    // nobody to have chosen one, and the file's own name is not data.
+    expect("title" in document.getData()).toBe(false);
     expect(document.getData().graphics.length).toBe(1);
 
     document.update((data) => {
@@ -296,6 +298,21 @@ describe("GravissViewDocument", () => {
     const badSections = clone(EXAMPLES[0].viewDocument);
     badSections.graphics[0].sectionRendering = "yes";
     expect(() => validateViewDocument(badSections)).toThrowError(/sectionRendering/);
+
+    // A document need not name itself — the pane is then named after its file.
+    // Naming itself nothing is a different thing, and not allowed.
+    const untitled = clone(EXAMPLES[0].viewDocument);
+    delete untitled.title;
+    expect(validateViewDocument(untitled)).toBe(untitled);
+
+    const blankTitle = clone(EXAMPLES[0].viewDocument);
+    blankTitle.title = "";
+    expect(() => validateViewDocument(blankTitle)).toThrowError(/title/);
+
+    // A graphic still has to name itself: nothing else can name one.
+    const untitledGraphic = clone(EXAMPLES[0].viewDocument);
+    delete untitledGraphic.graphics[0].title;
+    expect(() => validateViewDocument(untitledGraphic)).toThrowError(/title/);
   });
 });
 

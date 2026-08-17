@@ -1103,7 +1103,10 @@ describe("graviss", () => {
 
       expect(item instanceof GravissView).toBe(true);
       expect(item.renderer).not.toBeNull();
-      expect(item.getTitle()).toBe("empty-model");
+      // A blank document names nothing, so the pane is named after its file
+      // the way every other editor names one.
+      expect(item.getTitle()).toBe("empty-model.grv");
+      expect(item.viewDocument.getData().title).toBeUndefined();
       expect(item.viewDocument.isImplicit()).toBe(true);
       expect(item.isModified()).toBe(false);
       expect(item.renderer.controls.target.toArray()).toEqual([4, 5, 3.5]);
@@ -2247,6 +2250,55 @@ describe("graviss", () => {
     await Promise.resolve();
     expect(session.getGeometry).not.toHaveBeenCalled();
     expect(session.dispose).toHaveBeenCalled();
+  });
+
+  it("names a tab after the file when the document names nothing", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-tab-title-"));
+    const untitled = { ...MAIN_EXAMPLE.viewDocument };
+    delete untitled.title;
+    const mainPath = path.join(directory, "main.grv");
+    fs.writeFileSync(mainPath, `${JSON.stringify(untitled, null, 2)}\n`);
+    const providerDisposable = mainModule.consumeGravissSource({
+      id: "titled-models",
+      createSession: ({ filePath }) =>
+        path.extname(filePath) === ".grv" ? new TestSession(MAIN_EXAMPLE) : null,
+    });
+
+    // Extension included, exactly as the editor writes it for the source of
+    // the same file, so the icon is what tells the two tabs apart.
+    const viewer = mainModule.createFileViewer(mainPath);
+    expect(viewer.getTitle()).toBe("main.grv");
+    expect(viewer.getIconName()).toBe("graph");
+    await conditionPromise(() => viewer.renderer != null, "the Three.js scene to initialize");
+    // Loading resolves the title again and must not talk itself into the
+    // model's own name.
+    expect(viewer.getTitle()).toBe("main.grv");
+
+    // Nothing to be told apart from, so the tab stays as it is even when the
+    // bar asks — which it does whenever the source of this very file is open.
+    expect(viewer.getLongTitle()).toBe("main.grv");
+
+    // A second render of a same-named file in another folder is the case that
+    // does need it.
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-tab-title-"));
+    const otherPath = path.join(other, "main.grv");
+    fs.writeFileSync(otherPath, `${JSON.stringify(untitled, null, 2)}\n`);
+    const opened = await lumine.workspace.open(mainPath, { searchAllPanes: true });
+    const sibling = await lumine.workspace.open(otherPath, { searchAllPanes: true });
+    expect(opened.getLongTitle()).toBe(`main.grv — ${path.basename(directory)}`);
+    expect(sibling.getLongTitle()).toBe(`main.grv — ${path.basename(other)}`);
+
+    // A document that names itself keeps its name.
+    const named = path.join(directory, "named.grv");
+    fs.writeFileSync(named, `${JSON.stringify(MAIN_EXAMPLE.viewDocument, null, 2)}\n`);
+    const titled = mainModule.createFileViewer(named);
+    expect(titled.getTitle()).toBe(MAIN_EXAMPLE.viewDocument.title);
+
+    titled.destroy();
+    viewer.destroy();
+    providerDisposable.dispose();
+    fs.rmSync(directory, { recursive: true, force: true });
+    fs.rmSync(other, { recursive: true, force: true });
   });
 
   it("loads a pane restored before its source package registered", async () => {
