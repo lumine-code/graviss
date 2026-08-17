@@ -1691,6 +1691,61 @@ describe("graviss", () => {
     expect(renderer.captureCameraState().target.every(Number.isFinite)).toBe(true);
   });
 
+  it("keeps a floor under the camera however long the wheel is turned", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const viewport = item.element.querySelector(".graviss-viewport");
+    viewport.style.width = "800px";
+    viewport.style.height = "400px";
+    renderer.resize();
+    const canvas = renderer.canvasRenderer.domElement;
+    const bounds = canvas.getBoundingClientRect();
+    const node = renderer.geometry.nodes[0];
+    const seen = renderer.projectToScreen([node.x, node.y, node.z]);
+    const wheel = (deltaY) =>
+      canvas.dispatchEvent(
+        new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          deltaY,
+          clientX: bounds.left + Math.round(seen.x),
+          clientY: bounds.top + Math.round(seen.y),
+        }),
+      );
+    const distance = () => renderer.camera.position.distanceTo(renderer.controls.target);
+    const floor = renderer.controls.minDistance;
+    expect(floor).toBeGreaterThan(renderer.camera.near);
+
+    // Zoom scales the distance rather than subtracting from it, so a few dozen
+    // clicks are enough to decay it by six orders of magnitude.
+    for (let step = 0; step < 300; step += 1) wheel(-120);
+    expect(distance()).toBeGreaterThanOrEqual(floor - 1e-9);
+    // The point of the floor: never inside the near plane, which is fixed when
+    // the view is framed and does not follow the camera in.
+    expect(distance()).toBeGreaterThan(renderer.camera.near);
+
+    // Everything still moves down there, in the world and not just on paper.
+    const beforePan = renderer.camera.position.clone();
+    renderer.controls.pan(80, 0);
+    renderer.controls.update();
+    expect(renderer.camera.position.distanceTo(beforePan)).toBeGreaterThan(floor * 0.1);
+    const beforeOut = distance();
+    wheel(240);
+    expect(distance()).toBeGreaterThan(beforeOut);
+
+    // A camera that collapsed before there was a floor is pulled back out by
+    // the restore, so an already-saved document is not stuck for good.
+    renderer.applyCameraState({
+      projection: "perspective",
+      position: [4.0000001, 5, 3.5],
+      target: [4, 5, 3.5],
+      up: [0, 0, 1],
+      fieldOfView: 42,
+    });
+    expect(distance()).toBeGreaterThanOrEqual(renderer.controls.minDistance - 1e-9);
+  });
+
   it("pins the pivot only where a gesture asks for one", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
