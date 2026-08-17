@@ -2548,6 +2548,60 @@ describe("graviss", () => {
     expect(item.viewDocument.getData().graphics[0].symbolSize).toBeCloseTo(before + step * 10, 9);
   });
 
+  it("tapers an area element that is thicker at one corner than another", async () => {
+    // SOFiSTiK stores a thickness per corner, so a slab that tapers across
+    // itself is one element rather than a stack of them. Drawn from a single
+    // number the whole plate would be parallel plates of the first corner's
+    // thickness, which is neither what it is nor where it is.
+    const model = {
+      id: "tapered",
+      title: "Tapered slab",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+        ],
+        elements: [
+          { id: 1, kind: "shell", nodeIds: [1, 2, 3, 4], thickness: [0.2, 0.2, 0.6, 0.6] },
+        ],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      const bounds = new renderer.THREE.Box3().setFromObject(renderer.meshes.shells);
+      // Half of the thickest corner either side of the plane the nodes are on.
+      expect(bounds.min.z).toBeCloseTo(-0.3, 5);
+      expect(bounds.max.z).toBeCloseTo(0.3, 5);
+
+      // The thin end is thin: no vertex out there reaches the thick end's face.
+      const position = renderer.meshes.shells.geometry.getAttribute("position");
+      let thinnest = 0;
+      for (let index = 0; index < position.count; index += 1) {
+        if (position.getY(index) < 0.5)
+          thinnest = Math.max(thinnest, Math.abs(position.getZ(index)));
+      }
+      expect(thinnest).toBeCloseTo(0.1, 5);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("draws an area element where it sits, not where its nodes are", async () => {
     // A SOFiSTiK quad can be eccentric: a slab meshed at its top face, a deck
     // sitting on beams. The nodes stay where the analysis put them, so the

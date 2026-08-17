@@ -91,7 +91,7 @@ type Element = {
   kind: "beam" | "shell" | "spring" | "coupling";
   nodeIds: [Id] | [Id, Id] | [Id, Id, Id] | [Id, Id, Id, Id];
   sectionId?: Id;
-  thickness?: number;
+  thickness?: number | number[];
   offset?: number;
   direction?: Vector3;
   rotational?: boolean;
@@ -137,6 +137,8 @@ Graviss draws line and area elements at one of three levels, and the user switch
 | `full`    | its cross-section, extruded | extruded to its real thickness | the above, plus `thickness` on area elements                          |
 
 A provider that supplies no section falls back to a thin centreline, and one that supplies no thickness draws its area elements flat. Neither is an error: the model is drawn as completely as it was described.
+
+An area element's `thickness` may be one number or one per node, in the order its nodes are given. A list is how an element that tapers across itself is described, and it is drawn tapering rather than as parallel plates of its first corner's thickness. A list shorter than the element has nodes repeats its last value.
 
 `offset` moves an area element off the nodes it was meshed on, along its own normal — the right-handed normal of its node order, so the sign follows the order the nodes were given in. It is the distance from that plane to the element's mid-surface, in metres, and it may be negative. A slab modelled at its top face and a deck sitting on beams both mesh at nodes the element does not physically occupy; the analysis keeps the nodes where it put them and Graviss draws the element where it is. Nodes are shared between elements that offset differently, so this belongs to the element and never to the node, and a provider must not fold it into node coordinates. It applies at every level, with or without a thickness: an offset flat surface is still offset. Line elements ignore it.
 

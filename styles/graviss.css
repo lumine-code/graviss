@@ -207,16 +207,19 @@
    image, and keeps one size in pixels under either projection. */
 .graviss-orbit-pivot {
   --graviss-pivot-size: 13px;
+  --graviss-pivot-ink: var(--text-color);
 
   position: absolute;
   z-index: 3;
   width: var(--graviss-pivot-size);
   height: var(--graviss-pivot-size);
-  border: 1px solid var(--text-color-info);
+  border: 1px solid var(--graviss-pivot-ink);
   border-radius: 50%;
-  background: radial-gradient(circle, var(--text-color-info) 0 1.5px, transparent 1.5px);
+  /* Cut out rather than filled: the ring says where the turn is pinned and the
+     dot says the point exactly, and the model stays visible between them. */
+  background: radial-gradient(circle, var(--graviss-pivot-ink) 0 1.5px, transparent 1.5px);
   box-shadow: 0 0 0 1px var(--graviss-region-halo);
-  opacity: 0.7;
+  opacity: 0.6;
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
