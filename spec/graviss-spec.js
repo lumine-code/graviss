@@ -2416,6 +2416,14 @@ describe("graviss", () => {
 
       // And it moves the mesh lines with it, or they would float off the face.
       expect(renderer.meshes.shells.visible).toBe(true);
+
+      // The element's own centre moves with it too, which is where its local
+      // axis triad is drawn — left behind, the triad marks the plane the
+      // element was meshed at rather than the element.
+      const centre = renderer.elementCenter(renderer.geometry.elements[0]);
+      expect(centre.z).toBeCloseTo(0.5, 9);
+      expect(centre.x).toBeCloseTo(0.5, 9);
+      expect(renderer.elementNormal(renderer.geometry.elements[0]).z).toBeCloseTo(1, 9);
     } finally {
       viewer.destroy();
     }
