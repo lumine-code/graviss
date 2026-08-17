@@ -2430,6 +2430,22 @@ describe("graviss", () => {
     expect(item.getPrintRegion()).toEqual(bordered);
   });
 
+  it("repaints the canvas in the same task as a resize", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+
+    // Resizing the drawing buffer clears it on the spot, and the observer
+    // fires before paint: a repaint deferred to the next animation frame
+    // would let the compositor show the empty canvas first, flashing the
+    // pane's bare background on every step of a resize drag.
+    const rendered = spyOn(renderer.canvasRenderer, "render").and.callThrough();
+    renderer.host.style.width = "612px";
+    renderer.host.style.height = "364px";
+    renderer.resize();
+    expect(rendered).toHaveBeenCalled();
+  });
+
   it("frames the whole model without moving the camera", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
