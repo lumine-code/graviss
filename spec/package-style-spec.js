@@ -53,12 +53,12 @@ describe("graviss package conventions", () => {
     // Read the way the keymap loader reads it: comments are welcome in a
     // keymap file, and this spec must not be the one place that refuses them.
     const keymapText = fs
-      .readFileSync(path.join(root, "keymaps", "graviss.json"), "utf8")
+      .readFileSync(path.join(root, "keymaps", "main.json"), "utf8")
       .replace(/^\s*\/\/.*$/gm, "");
     const keymap = JSON.parse(keymapText);
     expect(Object.keys(keymap)).toEqual([".graviss"]);
     expect(Object.keys(keymap[".graviss"]).some((stroke) => /^ctrl-/.test(stroke))).toBe(false);
-    const styles = fs.readFileSync(path.join(root, "styles", "graviss.css"), "utf8");
+    const styles = fs.readFileSync(path.join(root, "styles", "main.css"), "utf8");
     expect(styles).toContain("--graviss-axis-x-color");
     expect(styles).toContain("--graviss-axis-y-color");
     expect(styles).toContain("--graviss-axis-z-color");

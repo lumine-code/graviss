@@ -2500,7 +2500,7 @@ describe("graviss", () => {
 
   it("declares its workspace commands and tree-view context menu", () => {
     const manifest = require("../package.json");
-    const menus = require("../menus/graviss.json");
+    const menus = require("../menus/main.json");
     const contextItems = menus["context-menu"]['.tree-view .file[data-path$=".grv"]'];
     const commands = lumine.commands
       .findCommands({ target: lumine.workspace.getElement() })
