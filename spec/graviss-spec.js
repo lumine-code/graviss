@@ -3625,6 +3625,123 @@ describe("graviss", () => {
     });
   });
 
+  it("bends a member between its ends when a result says how, and not before", async () => {
+    const model = {
+      id: "cantilever",
+      title: "Cantilever",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 10, y: 0, z: 0 },
+          { id: 3, x: 20, y: 0, z: 0 },
+        ],
+        elements: [
+          { id: "B1", kind: "beam", number: 1, nodeIds: [1, 2], sectionId: "R" },
+          { id: "B2", kind: "beam", number: 2, nodeIds: [2, 3], sectionId: "R" },
+        ],
+        sections: [{ id: "R", shape: { kind: "rectangle", width: 0.4, height: 0.8 } }],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      const unitVertices = () =>
+        renderer.pickables
+          .find((mesh) => mesh.userData.gravissColorKey === "element")
+          .geometry.getAttribute("position").count;
+      // A straight member has nothing to say between its ends, so it is drawn
+      // as the eight corners of a box and no rings in between.
+      expect(renderer.memberBendSteps).toBe(1);
+      const straight = unitVertices();
+
+      // A result with no stations is still a result: the members move with
+      // their nodes and stay straight, which is the best anyone can say.
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: { ids: [2], values: [0, 0, -0.5] },
+        extent: 0.5,
+      });
+      expect(renderer.memberBendSteps).toBe(1);
+      expect(unitVertices()).toBe(straight);
+
+      // With stations the section gains rings along its length - there has to
+      // be something between the ends for the bow to move.
+      const tip = -0.5;
+      const slope = (1.5 * 0.5) / 10;
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 2,
+        components: 3,
+        nodes: { ids: [2], values: [0, 0, tip] },
+        extent: 0.5,
+        elements: [
+          {
+            id: "B1",
+            stations: [
+              { x: 0, u: [0, 0, 0], phi: [0, 0, 0] },
+              // Twist about the member's own axis first, then the rotation
+              // that bends it: the tip of a cantilever turns by one and a half
+              // times its deflection over its length.
+              { x: 10, u: [0, 0, tip], phi: [0.02, slope, 0] },
+            ],
+          },
+        ],
+      });
+      expect(renderer.memberBendSteps).toBeGreaterThan(1);
+      expect(unitVertices()).toBeGreaterThan(straight);
+
+      // Both ends of the member that has stations, and nothing for the one that
+      // does not - which draws it straight between its moved ends.
+      const placement = renderer.memberInstances[0];
+      const first = placement.elements.findIndex((element) => element.id === "B1");
+      const second = placement.elements.findIndex((element) => element.id === "B2");
+      // Held in a Float32Array, so read back to the precision one keeps.
+      const farEnd = Array.from(placement.bendB.array.slice(first * 4, first * 4 + 4));
+      expect(farEnd.slice(0, 3)).toEqual([0, 0, tip]);
+      expect(farEnd[3]).toBeCloseTo(0.02, 6);
+      expect(placement.bendR.array[first * 4 + 2]).toBeCloseTo(slope, 6);
+      expect(Array.from(placement.bendB.array.slice(second * 4, second * 4 + 4))).toEqual([
+        0, 0, 0, 0,
+      ]);
+
+      // The arrises read the very same three buffers as the fill they lie on,
+      // for the same reason they read the same instance matrix.
+      const contours = renderer.memberContours[0];
+      expect(contours.geometry.getAttribute("instanceBendA")).toBe(placement.bendA);
+      expect(contours.material.defines.GRAVISS_BEND).toBe("");
+
+      // How far the bow is drawn is one number the materials share, so a frame
+      // of animation costs a uniform rather than a walk over every vertex.
+      renderer.setDeformationScale(3);
+      expect(renderer.bendFactor.value).toBe(3);
+      renderer.setDeformationPhase(0.5);
+      expect(renderer.bendFactor.value).toBe(1.5);
+      renderer.setDeformationScale(0);
+      expect(renderer.bendFactor.value).toBe(0);
+
+      // And a result that goes away takes the tessellation with it.
+      renderer.setResult(null);
+      expect(renderer.memberBendSteps).toBe(1);
+      expect(unitVertices()).toBe(straight);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("reads the model as a field when asked, and as a structure otherwise", async () => {
     const model = {
       id: "coloured",
