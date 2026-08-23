@@ -3305,6 +3305,205 @@ describe("graviss", () => {
     }
   });
 
+  describe("showing an analysis", () => {
+    // A little bridge with three cases, one of which is a mode shape. Node 3
+    // moves in every case, so a scale and a colour both have something to say.
+    function analysedModel() {
+      return {
+        id: "analysed",
+        title: "Analysed",
+        format: "Spec fixture",
+        loadCases: [
+          { id: 101, title: "self-weight", kind: "linear", hasResults: true },
+          { id: 192, title: "dead-load", kind: "linear", hasResults: true },
+          { id: 901, title: "1st mode", kind: "eigenmode", hasResults: true },
+        ],
+        createResult: (loadCaseId) => ({
+          kind: "displacement",
+          loadCaseId,
+          components: 3,
+          nodes: { ids: [3], values: [0, 0, loadCaseId === 901 ? -0.05 : -0.01] },
+          extent: loadCaseId === 901 ? 0.05 : 0.01,
+        }),
+        createGeometry: () => ({
+          nodes: [
+            { id: 1, x: 0, y: 0, z: 0 },
+            { id: 2, x: 6, y: 0, z: 0 },
+            { id: 3, x: 12, y: 0, z: 0 },
+          ],
+          facets: [{ id: "group", title: "Group", values: [{ id: 1 }, { id: 2 }] }],
+          elements: [
+            {
+              id: "B1",
+              kind: "beam",
+              number: 1,
+              nodeIds: [1, 2],
+              sectionId: "R",
+              facetValues: { group: 1 },
+            },
+            {
+              id: "B2",
+              kind: "beam",
+              number: 2,
+              nodeIds: [2, 3],
+              sectionId: "R",
+              facetValues: { group: 2 },
+            },
+          ],
+          sections: [{ id: "R", shape: { kind: "rectangle", width: 0.2, height: 0.4 } }],
+          supports: [],
+        }),
+      };
+    }
+
+    async function analysedViewer() {
+      const model = analysedModel();
+      // With a document, because what is being shown of an analysis is something
+      // a graphic holds rather than something a viewer merely remembers.
+      const viewDocument = mainModule.createViewDocument({ fallbackData: { graphics: [{}] } });
+      const viewer = mainModule.createViewer(new TestSession(model), {
+        title: model.title,
+        viewDocument,
+      });
+      jasmine.attachToDOM(viewer.element);
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      return viewer;
+    }
+
+    it("lists what the analysis holds, and shows one case of it", async () => {
+      const viewer = await analysedViewer();
+      try {
+        expect(viewer.hasResults()).toBe(true);
+        expect(viewer.getLoadCases().map(({ title }) => title)).toEqual([
+          "self-weight",
+          "dead-load",
+          "1st mode",
+        ]);
+        // Nothing is being shown until something is asked for: opening a model
+        // with results is not the same as reading six thousand records.
+        expect(viewer.result).toBeNull();
+        expect(viewer.renderer.getDeformation()).toBeNull();
+
+        await viewer.selectLoadCase(101);
+        expect(viewer.result.loadCaseId).toBe(101);
+        expect(viewer.renderer.getDeformation().extent).toBeCloseTo(0.01, 9);
+        // A load case is a real state of the structure, so it runs up from zero;
+        // a mode shape has no sign, so it swings about it.
+        expect(viewer.getResultsState().cycle).toBe("thereAndBack");
+
+        await viewer.selectLoadCase(901);
+        expect(viewer.renderer.getDeformation().extent).toBeCloseTo(0.05, 9);
+        // The cycle a user chose is theirs to keep; only a case arriving where
+        // nobody chose one picks its own.
+        expect(viewer.getResultsState().cycle).toBe("thereAndBack");
+        viewer.setAnimationCycle(null);
+        await viewer.selectLoadCase(901);
+        expect(viewer.getResultsState().cycle).toBe("pingPong");
+
+        // And a case nobody has is no case at all rather than an error.
+        await viewer.selectLoadCase(404);
+        expect(viewer.getResultsState().loadCaseId).toBeNull();
+      } finally {
+        viewer.destroy();
+      }
+    });
+
+    it("holds an amplification and an animation the graphic remembers", async () => {
+      const viewer = await analysedViewer();
+      try {
+        await viewer.selectLoadCase(101);
+        // Chosen by the viewer until a user chooses one, and kept after.
+        expect(viewer.getResultsState().scale).toBe("auto");
+        expect(viewer.renderer.getDeformation().automatic).toBe(true);
+        viewer.setDeformationScale(100);
+        expect(viewer.renderer.getDeformation().automatic).toBe(false);
+        expect(viewer.renderer.getDeformation().scale).toBe(100);
+
+        viewer.toggleAnimation();
+        expect(viewer.getResultsState().playing).toBe(true);
+        expect(viewer.renderer.getAnimation().running).toBe(true);
+        viewer.toggleAnimation();
+        expect(viewer.renderer.getAnimation().running).toBe(false);
+        // Stopping leaves the model at the shape rather than part way through it.
+        expect(viewer.renderer.getDeformation().phase).toBe(1);
+
+        viewer.toggleColorByDisplacement();
+        expect(viewer.renderer.colorByDisplacement).toBe(true);
+
+        // Only what differs from the default is written down.
+        expect(viewer.activeGraphic.results).toEqual({
+          loadCaseId: 101,
+          scale: 100,
+          cycle: "thereAndBack",
+          colorByDisplacement: true,
+        });
+      } finally {
+        viewer.destroy();
+      }
+    });
+
+    it("narrows the model and says so in the graphic", async () => {
+      const viewer = await analysedViewer();
+      try {
+        const fill = viewer.renderer.pickables.find(
+          (mesh) => mesh.userData.gravissColorKey === "element",
+        );
+        viewer.setNumberFilter("1");
+        expect(fill.count).toBe(1);
+        expect(viewer.activeGraphic.filter).toEqual({ numbers: "1" });
+
+        // Half an expression is not an expression yet, so the model stays where
+        // it was rather than emptying while a user is still typing.
+        viewer.setNumberFilter("1-");
+        expect(fill.count).toBe(1);
+
+        viewer.setNumberFilter("");
+        viewer.setFacetFilter("group", [2]);
+        expect(fill.count).toBe(1);
+        expect(viewer.activeGraphic.filter).toEqual({ facets: { group: [2] } });
+        expect(viewer.elementCounts().get("beam")).toEqual({ total: 2, shown: 1 });
+
+        viewer.clearFilter();
+        expect(fill.count).toBe(2);
+        expect("filter" in viewer.activeGraphic).toBe(false);
+      } finally {
+        viewer.destroy();
+      }
+    });
+
+    it("gives each graphic its own case, its own scale and its own filter", async () => {
+      const viewer = await analysedViewer();
+      try {
+        await viewer.selectLoadCase(101);
+        viewer.setDeformationScale(50);
+        viewer.setNumberFilter("1");
+
+        viewer.addGraphic();
+        expect(viewer.getResultsState().loadCaseId).toBeNull();
+        expect(viewer.getFilterState().numbers).toBe("");
+        expect(viewer.renderer.getDeformation().result).toBeNull();
+        await viewer.selectLoadCase(192);
+        viewer.setNumberFilter("2");
+
+        viewer.activateGraphic(0);
+        await conditionPromise(
+          () => viewer.result?.loadCaseId === 101,
+          "the first graphic's own case to come back",
+        );
+        expect(viewer.getResultsState().scale).toBe(50);
+        expect(viewer.getFilterState().numbers).toBe("1");
+        // Coming back to a graphic is looking at it, not changing it.
+        expect(viewer.activeGraphic.results.loadCaseId).toBe(101);
+      } finally {
+        viewer.destroy();
+      }
+    });
+  });
+
   it("reads the model as a field when asked, and as a structure otherwise", async () => {
     const model = {
       id: "coloured",

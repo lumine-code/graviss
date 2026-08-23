@@ -114,6 +114,16 @@ class TestSession {
   constructor(model) {
     this.model = model;
     this.disposed = false;
+    // Present only when the model has them: a session that answers a question it
+    // has no answer to is not the shape a provider without results takes, and
+    // the whole point of the optional methods is that most sources lack them.
+    if (model.loadCases) this.getLoadCases = async () => model.loadCases;
+    if (model.createResult) {
+      this.getResult = async (request) => {
+        this.lastResultRequest = request;
+        return model.createResult(request.loadCaseId);
+      };
+    }
   }
 
   async describe() {
@@ -130,6 +140,8 @@ class TestSession {
           elementKinds: [...new Set(geometry.elements.map(({ kind }) => kind))],
           supports: geometry.supports.length > 0,
         },
+        ...(this.model.loadCases ? { results: { displacement: true, loadCases: true } } : {}),
+        ...(geometry.facets ? { facets: true } : {}),
       },
     };
   }
