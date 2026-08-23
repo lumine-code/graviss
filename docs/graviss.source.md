@@ -50,9 +50,11 @@ type ModelSession = {
   getGeometry(): Geometry | Promise<Geometry>;
   dispose(): void | Promise<void>;
   onDidChange?(callback: (event: ChangeEvent) => void): Disposable;
+  getLoadCases?(): LoadCase[] | Promise<LoadCase[]>;
+  getResult?(request: ResultRequest): Result | Promise<Result>;
 };
 
-type ChangeEvent = { scope: "all" | "geometry" };
+type ChangeEvent = { scope: "all" | "geometry" | "results" };
 
 type ModelDescription = {
   model: {
@@ -74,7 +76,44 @@ type ModelDescription = {
           sections?: boolean;
           localAxes?: boolean;
         };
+    results?: {
+      displacement: true;
+      loadCases: true;
+      beamStations?: boolean;
+    };
+    facets?: true;
   };
+};
+
+type LoadCase = {
+  id: Id;
+  title: string;
+  kind?:
+    "linear" | "nonlinear" | "superposition" | "eigenmode" | "buckling" | "design" | "transient";
+  actionType?: string;
+  factor?: number;
+  hasResults?: boolean;
+};
+
+type ResultRequest = { loadCaseId: Id; kind: "displacement" };
+
+type Result = {
+  kind: "displacement";
+  loadCaseId: Id;
+  components: 3 | 6;
+  nodes: { ids?: Id[]; values: Float32Array | number[] };
+  extent?: number;
+  elements?: {
+    id: Id;
+    stations: { x: number; u: Vector3; phi?: Vector3 }[];
+  }[];
+};
+
+type Facet = {
+  id: Id;
+  title: string;
+  multiple?: boolean;
+  values: { id: Id; title?: string }[];
 };
 
 type Geometry = {
@@ -82,6 +121,7 @@ type Geometry = {
   elements: Element[];
   supports?: Support[];
   sections?: Section[];
+  facets?: Facet[];
 };
 
 type Node = { id: Id; x: number; y: number; z: number };
@@ -90,6 +130,8 @@ type Element = {
   id: Id;
   kind: "beam" | "truss" | "cable" | "shell" | "spring" | "coupling";
   nodeIds: [Id] | [Id, Id] | [Id, Id, Id] | [Id, Id, Id, Id];
+  number?: number;
+  facetValues?: Record<Id, Id | Id[]>;
   sectionId?: Id;
   thickness?: number | number[];
   offset?: number | number[];
@@ -130,7 +172,7 @@ type Section = {
 };
 ```
 
-`id` and `createSession` are the required provider fields. `describe`, `getGeometry`, and `dispose` are the required session methods.
+`id` and `createSession` are the required provider fields. `describe`, `getGeometry`, and `dispose` are the required session methods; `onDidChange`, `getLoadCases` and `getResult` are optional, and a session that answers only the three required ones is a whole provider.
 
 ### Line elements
 
@@ -164,7 +206,27 @@ Everything Graviss draws as a mark rather than as structure — nodes, supports,
 
 ### Units
 
-**Values are SI base units: lengths in metres, forces in newtons.** A source that records its own units converts them at this boundary. A source whose format carries no units — a bare mesh file — passes its numbers through unchanged and is read as metres. Graviss never rescales what a provider returns, so a model is only as correct as the conversion its provider performs.
+**Values are SI base units: lengths in metres, forces in newtons, rotations in radians.** A source that records its own units converts them at this boundary. A source whose format carries no units — a bare mesh file — passes its numbers through unchanged and is read as metres. Graviss never rescales what a provider returns, so a model is only as correct as the conversion its provider performs.
+
+This is the one rule a provider cannot quietly skip, because most analysis formats are not written in SI. A database that stores a unit set of its own has to be read for it and converted here, field by field, and a factor that is wrong by a thousand looks entirely plausible on screen — a bridge deflecting a metre under its own weight is a picture, not an error. A provider is the only party that can tell, so it is the party that must check.
+
+### Results
+
+A source that has analysis results says so with `capabilities.results` and answers two more questions: `getLoadCases()` for what has been computed, and `getResult()` for one of them. Both are optional, and a provider that has neither is a provider of geometry, which is all Graviss ever required.
+
+`getLoadCases()` lists what the model was solved for. `title` is the source's own designation and is shown as written; `kind` is the one classification Graviss asks a provider to make, because **an eigenmode and a buckling mode have no sign**. A mode shape is defined only up to a factor, so Graviss animates one about zero and swings it both ways; an ordinary load case is a real state of the structure and is animated from zero up to itself. A provider that cannot tell leaves `kind` out and gets the ordinary treatment. `hasResults` says a case exists but was never solved, which is commoner than it sounds — a model may name a hundred cases and hold results for three.
+
+`getResult()` returns true displacements, never amplified ones. **The scale factor and the animation phase belong to Graviss**, exactly as the symbol size and the camera do: a provider that pre-multiplied its own numbers would make the viewer's scale meaningless and its readout a lie. `nodes.values` runs three or six components a node — translations, then rotations where the source has them — in `geometry.nodes` order unless `ids` says otherwise. `extent` is the largest resultant translation, and stating it saves Graviss a pass over the whole field to choose an automatic scale.
+
+`elements[].stations` is how a member bends. A line element drawn between its two displaced end nodes is a straight chord, which is what a deflected beam is not; a source that solved for the deflection along the member can hand back the stations it computed, in the element's own local frame, and Graviss sweeps the section along the curve they describe. `x` is the distance from the element's start. Two stations and their rotations already determine the curve, so a source with only the ends is worth reporting. `localAxes` is the rotation into global, which is one more reason for an axial member to state it.
+
+### Facets
+
+A model is usually divided into more than its element kinds — groups, sub-structures, the geometric entity an element was meshed from — and every source names those divisions differently. Rather than learn each one, Graviss takes them as **facets**: a provider declares the dimensions it has, names their values, and says which values each element holds. Graviss builds the filter surface from that and interprets none of it.
+
+A facet is a title and a list of values. `multiple` says an element may hold several — one element belongs to exactly one group in most systems and to any number of selection sets. An element states its values in `facetValues`, keyed by facet id; a facet a given element says nothing about simply does not filter it.
+
+`element.number` is separate, and is the element's own number in the source rather than the `id` Graviss keys it by. Ids must be unique across every kind, so a provider that has both a beam 5 and a shell 5 has to qualify them; the bare number is what a user types when they ask for elements 110001 to 110200, and only the provider knows it.
 
 ## Minimal example
 
@@ -198,7 +260,7 @@ A provider returns `null` or `undefined` when it does not recognize the document
 
 ### Reporting a change
 
-A source that can notice its own data moving on implements `onDidChange`. Both scopes Graviss understands today, `geometry` and `all`, reload the model and rebuild the scene; the camera survives, because it belongs to the view document. Debounce inside the provider — it knows how its source is written.
+A source that can notice its own data moving on implements `onDidChange`. `geometry` and `all` reload the model and rebuild the scene; the camera survives, because it belongs to the view document. `results` is the narrow one — the model stands and only what was solved for it has moved, so Graviss re-reads the load cases and the displayed case and leaves the scene where it is. A re-analysis that also remeshed is `geometry`, not `results`. Debounce inside the provider — it knows how its source is written.
 
 ## Teardown
 

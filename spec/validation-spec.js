@@ -5,7 +5,15 @@ const {
   createFrameGeometry,
   createShellGeometry,
 } = require("./support/test-model");
-const { validateDescription, validateGeometry, validateSession } = require("../lib/validation");
+const {
+  UNSIGNED_LOAD_CASE_KINDS,
+  validateChangeEvent,
+  validateDescription,
+  validateGeometry,
+  validateLoadCases,
+  validateResult,
+  validateSession,
+} = require("../lib/validation");
 const { geometryBounds } = require("../lib/renderer");
 
 function createMain1Geometry() {
@@ -268,6 +276,161 @@ describe("Graviss model validation", () => {
     const badObserver = new TestSession(FRAME_MODEL);
     badObserver.onDidChange = "soon";
     expect(() => validateSession(badObserver)).toThrowError(/onDidChange must be a function/);
+
+    // Results are optional, so a session without them is whole; one that offers
+    // them has to offer something callable.
+    for (const method of ["getLoadCases", "getResult"]) {
+      const withResults = new TestSession(FRAME_MODEL);
+      withResults[method] = () => [];
+      expect(validateSession(withResults)).toBe(withResults);
+      withResults[method] = "later";
+      expect(() => validateSession(withResults)).toThrowError(
+        new RegExp(`${method} must be a function`),
+      );
+    }
+  });
+
+  it("reads a change scope of results, and no scope it does not know", () => {
+    expect(validateChangeEvent({ scope: "results" })).toEqual({ scope: "results" });
+    expect(validateChangeEvent({})).toEqual({ scope: "all" });
+    expect(() => validateChangeEvent({ scope: "colours" })).toThrowError(/all, geometry, results/);
+  });
+
+  it("takes results and facets as capabilities a source may simply not have", async () => {
+    const description = await new TestSession(FRAME_MODEL).describe();
+    expect(validateDescription(description)).toBe(description);
+
+    description.capabilities.results = { displacement: true, loadCases: true };
+    description.capabilities.facets = true;
+    expect(validateDescription(description)).toBe(description);
+    description.capabilities.results.beamStations = true;
+    expect(validateDescription(description)).toBe(description);
+
+    // Stated as true, never as a boolean: a source that cannot answer is silent.
+    description.capabilities.results.displacement = false;
+    expect(() => validateDescription(description)).toThrowError(/displacement must be true/);
+    description.capabilities.results = { displacement: true };
+    expect(() => validateDescription(description)).toThrowError(/loadCases must be true/);
+    delete description.capabilities.results;
+    description.capabilities.facets = false;
+    expect(() => validateDescription(description)).toThrowError(/facets must be true/);
+  });
+
+  it("holds a facet's values together, and holds an element to them", () => {
+    const geometry = createMain1Geometry();
+    geometry.facets = [
+      { id: "group", title: "Group", values: [{ id: 11, title: "Deck" }, { id: 12 }] },
+      { id: "set", title: "Selection set", multiple: true, values: [{ id: "a" }, { id: "b" }] },
+    ];
+    geometry.elements[0].number = 110001;
+    geometry.elements[0].facetValues = { group: 11, set: ["a", "b"] };
+    expect(validateGeometry(geometry)).toBe(geometry);
+
+    // A facet nothing declared, a value it never listed, and a list where the
+    // facet holds one.
+    geometry.elements[0].facetValues = { storey: 1 };
+    expect(() => validateGeometry(geometry)).toThrowError(/unknown facet/);
+    geometry.elements[0].facetValues = { group: 99 };
+    expect(() => validateGeometry(geometry)).toThrowError(/unknown value/);
+    geometry.elements[0].facetValues = { group: [11, 12] };
+    expect(() => validateGeometry(geometry)).toThrowError(/does not declare multiple/);
+    geometry.elements[0].facetValues = { set: [] };
+    expect(() => validateGeometry(geometry)).toThrowError(/non-empty array/);
+    delete geometry.elements[0].facetValues;
+
+    geometry.elements[0].number = "110001";
+    expect(() => validateGeometry(geometry)).toThrowError(/number must be a finite number/);
+    delete geometry.elements[0].number;
+
+    geometry.facets[1].id = "group";
+    expect(() => validateGeometry(geometry)).toThrowError(/duplicates/);
+    geometry.facets = [{ id: "group", title: "", values: [] }];
+    expect(() => validateGeometry(geometry)).toThrowError(/title must be a non-empty string/);
+  });
+
+  it("holds a displacement field to one value a component a node", () => {
+    const geometry = createMain1Geometry();
+    const nodes = geometry.nodes.length;
+    const result = {
+      kind: "displacement",
+      loadCaseId: 101,
+      components: 3,
+      nodes: { values: new Float32Array(nodes * 3) },
+      extent: 0.012,
+    };
+    expect(validateResult(result, geometry)).toBe(result);
+
+    result.components = 6;
+    expect(() => validateResult(result, geometry)).toThrowError(/6 components for each of/);
+    result.components = 3;
+
+    result.nodes.values = new Float32Array(nodes * 3).fill(Number.NaN);
+    expect(() => validateResult(result, geometry)).toThrowError(/must be finite/);
+    result.nodes.values = new Float32Array(nodes * 3);
+
+    // A field that names its own nodes is measured against that list instead.
+    result.nodes = { ids: [geometry.nodes[0].id], values: [1, 2, 3] };
+    expect(validateResult(result, geometry)).toBe(result);
+
+    result.kind = "force";
+    expect(() => validateResult(result, geometry)).toThrowError(/must be "displacement"/);
+    result.kind = "displacement";
+    result.extent = -1;
+    expect(() => validateResult(result, geometry)).toThrowError(/non-negative/);
+  });
+
+  it("takes the stations a member bends through, in its own frame", () => {
+    const geometry = createMain1Geometry();
+    const result = {
+      kind: "displacement",
+      loadCaseId: 101,
+      components: 3,
+      nodes: { values: new Float32Array(geometry.nodes.length * 3) },
+      elements: [
+        {
+          id: geometry.elements[0].id,
+          stations: [
+            { x: 0, u: [0, 0, 0], phi: [0, 0, 0] },
+            { x: 4, u: [0, 0, -0.01] },
+          ],
+        },
+      ],
+    };
+    expect(validateResult(result, geometry)).toBe(result);
+
+    result.elements[0].stations = [];
+    expect(() => validateResult(result, geometry)).toThrowError(/non-empty array/);
+    result.elements[0].stations = [{ u: [0, 0, 0] }];
+    expect(() => validateResult(result, geometry)).toThrowError(/\.x must be finite/);
+    result.elements[0].stations = [{ x: 0, u: [0, 0] }];
+    expect(() => validateResult(result, geometry)).toThrowError(/three finite numbers/);
+  });
+
+  it("lists what a model was solved for, and what it only names", () => {
+    const cases = [
+      { id: 101, title: "self-weight", kind: "linear", actionType: "G_1", factor: 1 },
+      { id: 192, title: "dead-load", hasResults: false },
+      { id: 1, title: "1st mode", kind: "eigenmode" },
+    ];
+    expect(validateLoadCases(cases)).toBe(cases);
+    // Only these two are animated about zero; the rest run up from it.
+    expect(UNSIGNED_LOAD_CASE_KINDS.has("eigenmode")).toBe(true);
+    expect(UNSIGNED_LOAD_CASE_KINDS.has("buckling")).toBe(true);
+    expect(UNSIGNED_LOAD_CASE_KINDS.has("linear")).toBe(false);
+
+    expect(() =>
+      validateLoadCases([
+        { id: 1, title: "a" },
+        { id: 1, title: "b" },
+      ]),
+    ).toThrowError(/duplicates/);
+    expect(() => validateLoadCases([{ id: 1, title: "" }])).toThrowError(/non-empty string/);
+    expect(() => validateLoadCases([{ id: 1, title: "a", kind: "creep" }])).toThrowError(
+      /kind must be one of/,
+    );
+    expect(() => validateLoadCases([{ id: 1, title: "a", factor: "1" }])).toThrowError(
+      /factor must be a finite number/,
+    );
   });
 
   it("accepts signed model up axes and rejects ambiguous coordinate systems", async () => {
