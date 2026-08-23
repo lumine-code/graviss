@@ -11,6 +11,7 @@ const {
   TestSession,
   createFrameGeometry,
 } = require("./support/test-model");
+const { entityIndexAtVertex } = require("../lib/renderer");
 
 const MAIN_EXAMPLE = FRAME_MODEL;
 const MAIN_EXAMPLE_URI = MAIN_EXAMPLE.viewDocumentPath;
@@ -2939,6 +2940,24 @@ describe("graviss", () => {
       const before = spread(renderer.meshes.springs).y;
       renderer.setSymbolSize(renderer.getSymbolSize() * 2);
       expect(spread(renderer.meshes.springs).y).toBeCloseTo(before * 2, 5);
+
+      // Clicking anywhere on a spring selects that spring. A helix owns a whole
+      // run of vertices rather than the two a straight member does, so which
+      // entity a vertex belongs to is a question for the range table and not
+      // for arithmetic on the index.
+      const lines = renderer.pickables.find((mesh) => mesh.userData.gravissType === "spring");
+      const ranges = lines.userData.gravissEntityRanges;
+      expect(ranges.length).toBe(2);
+      expect(ranges[0].count).toBeGreaterThan(2);
+      for (const [index, range] of ranges.entries()) {
+        for (const vertex of [range.start, range.start + range.count - 1]) {
+          expect(entityIndexAtVertex(ranges, vertex)).toBe(index);
+        }
+      }
+      // Past the last vertex nothing owns it, and nothing is selected.
+      const last = ranges.at(-1);
+      expect(entityIndexAtVertex(ranges, last.start + last.count)).toBeUndefined();
+      expect(entityIndexAtVertex(ranges, -1)).toBeUndefined();
 
       // And both can be put away on their own.
       renderer.setVisibility("springs", false);
