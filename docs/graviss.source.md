@@ -176,7 +176,7 @@ type Section = {
 
 ### Line elements
 
-**`beam`, `truss` and `cable` are all drawn as members** — a run of structure between two nodes, drawn as its centreline or as its section extruded along it. They are separate kinds because they carry different things: a beam bends, a truss takes axial force alone, and a cable takes only tension. That decides the analysis and not the picture, so a provider says which it read and Graviss draws all three the same way, under one visibility switch and in one colour.
+**`beam`, `truss` and `cable` are all drawn as members** — a run of structure between two nodes, drawn as its centreline or as its section extruded along it. They are separate kinds because they carry different things: a beam bends, a truss takes axial force alone, and a cable takes only tension. That decides the analysis and not the picture, so a provider says which it read and Graviss draws all three the same way — as the same shape, in a colour and behind a switch of their own, so that a model can be looked at a kind at a time without a provider being asked to separate them. A provider states the kind and nothing else about how it is shown.
 
 A truss or a cable is often stored without a cross-section orientation, because an axial member has no bending for one to matter to. **A provider that knows the convention its source is written in should state `localAxes` anyway**, computed if need be: the roll Graviss picks when none is given is arbitrary, so an asymmetric section left to it may well be drawn upside down against every beam beside it. A provider with nothing to go on leaves it out and Graviss chooses. Either way the member's own axis is the run between its two nodes and never the provider's to state.
 

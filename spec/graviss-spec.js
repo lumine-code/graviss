@@ -1467,6 +1467,29 @@ describe("graviss", () => {
     }
   });
 
+  it("puts back every switch the graphic before it moved, not only the ones it names", async () => {
+    const viewer = createFixtureViewer(MAIN_EXAMPLE);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the Three.js scene to initialize");
+      // A switch the toolbar does not carry is still a switch a graphic states,
+      // and one nobody restores is one left where the last graphic had it.
+      viewer.toggleVisibility("springs");
+      viewer.toggleVisibility("trusses");
+      expect(viewer.renderer.visibility.springs).toBe(false);
+      expect(viewer.renderer.visibility.trusses).toBe(false);
+
+      viewer.activateGraphic(1);
+      expect(viewer.renderer.visibility.springs).toBe(true);
+      expect(viewer.renderer.visibility.trusses).toBe(true);
+
+      viewer.activateGraphic(0);
+      expect(viewer.renderer.visibility.springs).toBe(false);
+      expect(viewer.renderer.visibility.trusses).toBe(false);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("uses the last active graphic stored by the view document when reopening", () => {
     const first = createFixtureViewer(MAIN_EXAMPLE);
     first.activateGraphic(1);
@@ -3088,6 +3111,101 @@ describe("graviss", () => {
       });
       expect(renderer.selected).not.toBeNull();
       renderer.rebuildMemberMeshes();
+      expect(renderer.selected).toBeNull();
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("gives each member kind its own colour and its own switch", async () => {
+    const model = {
+      id: "kinds",
+      title: "Kinds",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 6, y: 0, z: 0 },
+          { id: 3, x: 12, y: 0, z: 0 },
+          { id: 4, x: 18, y: 0, z: 0 },
+        ],
+        elements: [
+          { id: "B1", kind: "beam", number: 1, sectionId: "R", nodeIds: [1, 2] },
+          { id: "T1", kind: "truss", number: 2, sectionId: "R", nodeIds: [2, 3] },
+          { id: "C1", kind: "cable", number: 3, sectionId: "R", nodeIds: [3, 4] },
+        ],
+        sections: [{ id: "R", shape: { kind: "rectangle", width: 0.2, height: 0.4 } }],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      const fill = renderer.pickables.find((m) => m.userData.gravissColorKey === "element");
+      const colorAt = (instance) => {
+        const at = instance * 3;
+        return [
+          fill.instanceColor.array[at],
+          fill.instanceColor.array[at + 1],
+          fill.instanceColor.array[at + 2],
+        ].map((channel) => Math.round(channel * 1000));
+      };
+      const of = (id) => {
+        const index = fill.userData.gravissEntities.findIndex((entity) => entity.id === id);
+        return colorAt(fill.userData.gravissEntityRanges[index].start);
+      };
+      // A beam is the member colour the scheme names; the other two step off it,
+      // so all three differ and none of them is black.
+      const beam = of("B1");
+      expect(beam).toEqual([...renderer.colors.element.toArray()].map((c) => Math.round(c * 1000)));
+      expect(of("T1")).not.toEqual(beam);
+      expect(of("C1")).not.toEqual(beam);
+      expect(of("C1")).not.toEqual(of("T1"));
+
+      // The switch is per kind, and the umbrella still covers all of them.
+      renderer.setVisibility("trusses", false);
+      expect(fill.count).toBe(2);
+      expect(renderer.elementCounts().get("truss")).toEqual({ total: 1, shown: 0 });
+      expect(renderer.elementCounts().get("beam")).toEqual({ total: 1, shown: 1 });
+      expect(renderer.meshes.members.visible).toBe(true);
+      renderer.setVisibility("members", false);
+      expect(renderer.meshes.members.visible).toBe(false);
+      renderer.setVisibility("members", true);
+      renderer.setVisibility("trusses", true);
+      expect(fill.count).toBe(3);
+
+      // A kind and a filter narrow the same model together rather than one
+      // replacing the other.
+      renderer.setElementFilter(createElementFilter({ numbers: "2,3" }));
+      renderer.setVisibility("cables", false);
+      expect(fill.count).toBe(1);
+      expect(fill.userData.gravissEntities[fill.userData.gravissSegmentToEntityIndex[0]].id).toBe(
+        "T1",
+      );
+
+      // Selecting something and then hiding its kind does not leave a selection
+      // pointing at an instance another element now occupies.
+      renderer.setVisibility("cables", true);
+      renderer.setElementFilter(null);
+      renderer.setSelected({
+        type: "element",
+        entity: fill.userData.gravissEntities.find((entity) => entity.id === "C1"),
+        entityIndex: fill.userData.gravissEntities.findIndex((entity) => entity.id === "C1"),
+        object: fill,
+        instanceId: 2,
+      });
+      expect(renderer.selected).not.toBeNull();
+      renderer.setVisibility("cables", false);
       expect(renderer.selected).toBeNull();
     } finally {
       viewer.destroy();
