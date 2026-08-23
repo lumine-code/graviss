@@ -130,7 +130,10 @@ describe("graviss", () => {
     const memberMeshes = item.renderer.meshes.members.children.filter((child) => child.isMesh);
     expect(memberMeshes.length).toBeGreaterThan(0);
     expect(memberMeshes.every((mesh) => mesh.renderOrder === 2)).toBe(true);
-    expect(memberMeshes.every((mesh) => !mesh.isInstancedMesh)).toBe(true);
+    // Instanced: the section once, the members as placements. A contour reads
+    // the same matrix buffer its fill does, so the two evaluate an identical
+    // transform and the arris needs no epsilon to win its tie.
+    expect(memberMeshes.every((mesh) => mesh.isInstancedMesh)).toBe(true);
     expect(memberFill.stencilWrite).toBe(true);
     expect(memberFill.stencilRef).toBe(1);
     expect(memberFill.stencilZPass).toBe(item.renderer.THREE.ReplaceStencilOp);
@@ -545,16 +548,29 @@ describe("graviss", () => {
       supports: 0,
       sections: 1,
     });
-    // The member fill is baked, not instanced: merged world-space triangles
-    // with a colour per vertex, exactly like the shell surface, so the
-    // contours stamped from the same matrices tie with it to the bit. One
-    // rectangle section is the twelve triangles of its box.
-    expect(memberMesh.isInstancedMesh).toBeUndefined();
-    expect(memberMesh.geometry.type).toBe("BufferGeometry");
-    expect(memberMesh.geometry.getAttribute("position").count).toBe(36);
-    expect(memberMesh.geometry.getAttribute("color")).not.toBeUndefined();
-    expect(memberMesh.material.vertexColors).toBe(true);
-    expect(memberMesh.userData.gravissEntityRanges).toEqual([{ start: 0, count: 36 }]);
+    // The member fill is instanced: the section is uploaded once and each
+    // member is sixteen floats of placement. Baking it vertex by vertex cost a
+    // fifth of a second a frame on a real model, which is not something an
+    // animation can pay. One rectangle section is the twelve triangles of its
+    // box, uploaded once however many members share it.
+    expect(memberMesh.isInstancedMesh).toBe(true);
+    expect(memberMesh.count).toBe(1);
+    // A box is indexed, so its twelve triangles are twenty-four vertices.
+    expect(memberMesh.geometry.getAttribute("position").count).toBe(24);
+    // An instanced geometry carries no colour attribute: declaring vertex
+    // colours anyway would make the shader read the missing attribute as black
+    // and swallow the instance colour.
+    expect(memberMesh.geometry.getAttribute("color")).toBeUndefined();
+    expect(memberMesh.material.vertexColors).toBe(false);
+    // Ranges count instances now, not vertices — one member is one segment
+    // until it bends.
+    expect(memberMesh.userData.gravissEntityRanges).toEqual([{ start: 0, count: 1 }]);
+    // The contours read the very same matrix buffer, which is what keeps an
+    // arris on its fill to the bit with no offset and no inflation: two buffers
+    // holding the same numbers would still be two roundings.
+    const memberArris = item.renderer.memberContours[0];
+    expect(memberArris.geometry.getAttribute("instanceMatrix")).toBe(memberMesh.instanceMatrix);
+    expect(memberArris.material.defines.USE_INSTANCING).toBe("");
     // The marks stay instanced, and an instanced geometry carries no colour
     // attribute: declaring vertex colours anyway would make the shader read
     // the missing attribute as black and swallow the instance colour.
@@ -642,15 +658,14 @@ describe("graviss", () => {
 
     expect(item.toggleSectionRendering()).toBe(true);
     expect(sectionButton.getAttribute("aria-pressed")).toBe("true");
-    // Baked on the CPU rather than instanced, so the contours stamped from
-    // the same matrices tie with the fill exactly: one box section is its
-    // twelve triangles, merged.
+    // Instanced, and the contours read the same matrix buffer, so the two tie
+    // exactly: one box section is uploaded once and the member is a placement.
     const rebuiltMember = item.renderer.pickables.find(
       (mesh) => mesh.userData.gravissColorKey === "element",
     );
-    expect(rebuiltMember.geometry.type).toBe("BufferGeometry");
-    expect(rebuiltMember.isInstancedMesh).toBeUndefined();
-    expect(rebuiltMember.geometry.getAttribute("position").count).toBe(36);
+    expect(rebuiltMember.isInstancedMesh).toBe(true);
+    expect(rebuiltMember.count).toBe(1);
+    expect(rebuiltMember.geometry.getAttribute("position").count).toBe(24);
 
     // Rendered members carry their section contours in the mesh-line layer:
     // the twelve edges of the unit box, stamped by the element's own matrix.
@@ -3028,7 +3043,10 @@ describe("graviss", () => {
         (mesh) => mesh.userData.gravissColorKey === "element",
       );
       expect(memberMesh.userData.gravissEntityRanges.length).toBe(3);
-      expect(memberMesh.geometry.getAttribute("position").count).toBe(108);
+      // Three members sharing one section is one upload of that section and
+      // three placements, not three copies of its triangles.
+      expect(memberMesh.count).toBe(3);
+      expect(memberMesh.geometry.getAttribute("position").count).toBe(24);
       const box = new renderer.THREE.Box3().setFromObject(renderer.meshes.members);
       expect(box.min.x).toBeCloseTo(0, 5);
       expect(box.max.x).toBeCloseTo(12, 5);
@@ -3051,8 +3069,8 @@ describe("graviss", () => {
       renderer.setSectionRendering(true);
       const painted = () => {
         const mesh = renderer.pickables.find((m) => m.userData.gravissColorKey === "element");
-        const colors = mesh.geometry.getAttribute("color").array;
-        return [...colors].some((value) => value > 0);
+        const colors = mesh.instanceColor?.array;
+        return Boolean(colors) && [...colors].some((value) => value > 0);
       };
       expect(painted()).toBe(true);
       renderer.rebuildMemberMeshes();
@@ -3146,8 +3164,9 @@ describe("graviss", () => {
       expect(fills.length).toBe(2);
       const greyed = fills.find((mesh) => mesh.userData.gravissColorKey === "ineffective");
       expect(greyed).not.toBeUndefined();
-      // One rectangle extruded: the twelve triangles of a box.
-      expect(greyed.geometry.getAttribute("position").count).toBe(36);
+      // One rectangle extruded, uploaded once and placed per member.
+      expect(greyed.isInstancedMesh).toBe(true);
+      expect(greyed.count).toBe(1);
       // It draws after the member so it wins every depth tie it makes.
       expect(greyed.renderOrder).toBeGreaterThan(fills.find((mesh) => mesh !== greyed).renderOrder);
 
