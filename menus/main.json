@@ -7,6 +7,14 @@
           "label": "Graviss",
           "submenu": [
             {
+              "label": "Model Filter",
+              "command": "graviss:toggle-filter-panel"
+            },
+            {
+              "label": "Model Results",
+              "command": "graviss:toggle-results-panel"
+            },
+            {
               "label": "Open Source",
               "command": "graviss:open-source"
             },

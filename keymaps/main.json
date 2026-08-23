@@ -23,6 +23,8 @@
     "l": "graviss:toggle-local-axes",
     "d": "graviss:toggle-section-rendering",
     "b": "graviss:choose-background",
+    "c": "graviss:toggle-filter-panel",
+    "v": "graviss:toggle-results-panel",
     "left": "graviss:move-left",
     "right": "graviss:move-right",
     "up": "graviss:move-up",
@@ -35,5 +37,13 @@
     "=": "graviss:zoom-in",
     "-": "graviss:zoom-out",
     "_": "graviss:zoom-out"
+  },
+
+  // The panels are not `.graviss` and must not be: every one of the single
+  // letters above would fire while a filter expression was being typed. Their
+  // own inputs carry native-key-bindings; their roots do not, which is what
+  // leaves escape free to say "back to the model".
+  ".graviss-panel": {
+    "escape": "graviss:focus-viewer"
   }
 }

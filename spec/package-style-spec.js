@@ -16,7 +16,10 @@ describe("graviss package conventions", () => {
     expect(Object.keys(manifest).indexOf("backgroundTips")).toBe(
       Object.keys(manifest).indexOf("engines") + 1,
     );
-    expect(manifest.backgroundTips).toHaveSize(1);
+    // Three, because the package now has three headline features rather than
+    // one: framing a model, narrowing it, and reading an analysis over it.
+    expect(manifest.backgroundTips.length).toBeGreaterThanOrEqual(1);
+    expect(manifest.backgroundTips.length).toBeLessThanOrEqual(3);
     // The settings view renders a schema in the order it declares, and names
     // every entry from its own title, so neither is optional.
     for (const setting of Object.values(manifest.configSchema)) {
@@ -56,8 +59,23 @@ describe("graviss package conventions", () => {
       .readFileSync(path.join(root, "keymaps", "main.json"), "utf8")
       .replace(/^\s*\/\/.*$/gm, "");
     const keymap = JSON.parse(keymapText);
-    expect(Object.keys(keymap)).toEqual([".graviss"]);
-    expect(Object.keys(keymap[".graviss"]).some((stroke) => /^ctrl-/.test(stroke))).toBe(false);
+    // Two scopes, and the second one is why the panels are not `.graviss`:
+    // every single letter the viewer binds would fire while a filter expression
+    // was being typed if they were. Nothing global, and nothing modified - a
+    // package that reached for ctrl- would be taking a key from every other
+    // surface in the window.
+    expect(Object.keys(keymap)).toEqual([".graviss", ".graviss-panel"]);
+    expect(Object.keys(keymap[".graviss-panel"])).toEqual(["escape"]);
+    for (const scope of Object.keys(keymap)) {
+      expect(Object.keys(keymap[scope]).some((stroke) => /^ctrl-/.test(stroke))).toBe(false);
+    }
+    // A panel's root must not carry native-key-bindings either: it would put
+    // every core binding above the escape that gets back to the model. The
+    // inputs inside it carry their own.
+    for (const source of ["graviss-panel.js", "filter-panel.js", "results-panel.js"]) {
+      const text = fs.readFileSync(path.join(root, "lib", source), "utf8");
+      expect(text).not.toMatch(/graviss-panel [^"'`]*native-key-bindings/);
+    }
     const styles = fs.readFileSync(path.join(root, "styles", "main.css"), "utf8");
     expect(styles).toContain("--graviss-axis-x-color");
     expect(styles).toContain("--graviss-axis-y-color");

@@ -31,8 +31,13 @@
     "node": ">=24"
   },
   "backgroundTips": [
-    "You can fit the active FEM model to its viewport with {{ 'graviss:fit-view' | keystroke }}"
+    "You can fit the active FEM model to its viewport with {{ 'graviss:fit-view' | keystroke }}",
+    "You can narrow a FEM model to the elements you are interested in with {{ 'graviss:toggle-filter-panel' | keystroke }}",
+    "You can animate a load case over the FEM model with {{ 'graviss:toggle-results-panel' | keystroke }}"
   ],
+  "deserializers": {
+    "GravissView": "deserialize"
+  },
   "scripts": {
     "test": "lumine --test spec",
     "lint": "eslint . --max-warnings 0",
@@ -64,9 +69,6 @@
       "type": "boolean",
       "default": true
     }
-  },
-  "deserializers": {
-    "GravissView": "deserialize"
   },
   "providedServices": {
     "navigation.adapter": {

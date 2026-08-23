@@ -8,10 +8,10 @@ Explore finite element models in an interactive engineering viewport.
 - **Model geometry**: switches beam, truss and cable members, shells, nodes, supports, springs, couplings, mesh lines, grids, and global or element-local axes independently, in the model's declared coordinate system, and opens a model that lies in a plane along that plane rather than at the isometric corner.
 - **Section profiles**: renders rectangular, circular, tubular, tee, polygonal, and thin-walled plated member sections with instanced meshes, greying out whatever part of a section a source says does not carry.
 - **Multiple graphics**: stores several named graphics in one `.grv` file, added and deleted from the toolbar, each with its own camera, visibility, section rendering, appearance, and print region.
-- **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state, and conflicted-save handling.
-- **Document history**: records camera and toolbar changes in a private `TextBuffer` so Undo and Redo cover the complete view document.
-- **Navigation integration**: exposes named graphics to the navigation panel and activates a graphic when its outline entry is selected.
+- **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state and conflicted-save handling, records every change in a private `TextBuffer` so Undo and Redo cover the whole view document, and exposes its named graphics to the navigation panel.
 - **Live sources**: rebuilds the scene when a source reports that its geometry changed, keeping the camera the view document holds.
+- **Analysis results**: animates a displacement field over the model at a chosen or automatic amplification, through four cycles that start from zero or swing about it, and colours every element by how far it went.
+- **Model filtering**: narrows the model by element number, range or digit pattern, by any dimension the source declares such as group or material, and by kind, each with its own colour and a count of what survived.
 - **Symbols and connectors**: draws springs as helices or rings by the way they act, couplings as plain links, and sizes every mark with one length in millimetres, scrollable and zeroable.
 
 ## Installation
@@ -99,7 +99,13 @@ Commands available in `.graviss`:
 Commands available in `lumine-workspace`:
 
 - `graviss:open-source`: open the active or selected `.grv` document as JSON source,
-- `graviss:open-source-on-right`: the same, split to the right of the canvas.
+- `graviss:open-source-on-right`: the same, split to the right of the canvas,
+- `graviss:toggle-filter-panel`: show or hide the panel that narrows which elements are drawn,
+- `graviss:toggle-results-panel`: show or hide the panel that shows the analysis results.
+
+Commands available in `.graviss-panel`:
+
+- `graviss:focus-viewer`: return focus to the model, leaving the panel open.
 
 ## Usage
 
@@ -112,6 +118,8 @@ The narrowest complete document is therefore `{}`, and a useful one is little mo
 ```json
 { "source": "model.dat" }
 ```
+
+A graphic holds what is being looked at as well as how: `filter` states which elements are drawn and `results` which load case is shown, at what amplification and under which cycle. Both are per graphic rather than per file, so one document can hold an animated mode shape, a static dead-load case and an unfiltered overview side by side.
 
 A graphic is identified by where it sits in `graphics`, and by nothing else, so nothing about it can collide or be misspelt. `activeGraphic` names the one to show as a position, counting from zero. It may carry an `id` and be named by that instead, which is easier to write by hand; an `id` is an alias rather than an identity, so two graphics may share one and the first wins.
 
