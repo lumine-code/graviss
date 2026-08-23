@@ -296,12 +296,12 @@ describe("Graviss model validation", () => {
     expect(() => validateChangeEvent({ scope: "colours" })).toThrowError(/all, geometry, results/);
   });
 
-  it("takes results and facets as capabilities a source may simply not have", async () => {
+  it("takes results and filter types as capabilities a source may simply not have", async () => {
     const description = await new TestSession(FRAME_MODEL).describe();
     expect(validateDescription(description)).toBe(description);
 
     description.capabilities.results = { displacement: true, loadCases: true };
-    description.capabilities.facets = true;
+    description.capabilities.filterTypes = true;
     expect(validateDescription(description)).toBe(description);
     description.capabilities.results.beamStations = true;
     expect(validateDescription(description)).toBe(description);
@@ -312,40 +312,58 @@ describe("Graviss model validation", () => {
     description.capabilities.results = { displacement: true };
     expect(() => validateDescription(description)).toThrowError(/loadCases must be true/);
     delete description.capabilities.results;
-    description.capabilities.facets = false;
-    expect(() => validateDescription(description)).toThrowError(/facets must be true/);
+    description.capabilities.filterTypes = false;
+    expect(() => validateDescription(description)).toThrowError(/filterTypes must be true/);
   });
 
-  it("holds a facet's values together, and holds an element to them", () => {
+  it("holds a filter type together, and holds an element to it", () => {
     const geometry = createMain1Geometry();
-    geometry.facets = [
-      { id: "group", title: "Group", values: [{ id: 11, title: "Deck" }, { id: 12 }] },
+    geometry.filterTypes = [
+      {
+        id: "group",
+        title: "Group",
+        numeric: true,
+        values: [{ id: 11, title: "Deck" }, { id: 12 }],
+      },
       { id: "set", title: "Selection set", multiple: true, values: [{ id: "a" }, { id: "b" }] },
+      // No values at all: a dimension whose values are numbers needs no list,
+      // and a source with hundreds of them should not have to enumerate them.
+      { id: "line", title: "Structural line", numeric: true, kinds: ["beam", "truss", "cable"] },
     ];
     geometry.elements[0].number = 110001;
-    geometry.elements[0].facetValues = { group: 11, set: ["a", "b"] };
+    geometry.elements[0].filterValues = { group: 11, set: ["a", "b"], line: 1030 };
     expect(validateGeometry(geometry)).toBe(geometry);
 
-    // A facet nothing declared, a value it never listed, and a list where the
-    // facet holds one.
-    geometry.elements[0].facetValues = { storey: 1 };
-    expect(() => validateGeometry(geometry)).toThrowError(/unknown facet/);
-    geometry.elements[0].facetValues = { group: 99 };
+    // A dimension nothing declared, a value it never listed, and a list where
+    // the type holds one.
+    geometry.elements[0].filterValues = { storey: 1 };
+    expect(() => validateGeometry(geometry)).toThrowError(/unknown filter type/);
+    geometry.elements[0].filterValues = { group: 99 };
     expect(() => validateGeometry(geometry)).toThrowError(/unknown value/);
-    geometry.elements[0].facetValues = { group: [11, 12] };
+    geometry.elements[0].filterValues = { group: [11, 12] };
     expect(() => validateGeometry(geometry)).toThrowError(/does not declare multiple/);
-    geometry.elements[0].facetValues = { set: [] };
+    geometry.elements[0].filterValues = { set: [] };
     expect(() => validateGeometry(geometry)).toThrowError(/non-empty array/);
-    delete geometry.elements[0].facetValues;
+    // Where no values were declared there is nothing to check membership
+    // against, but a numeric dimension still holds numbers.
+    geometry.elements[0].filterValues = { line: "over there" };
+    expect(() => validateGeometry(geometry)).toThrowError(/finite numbers/);
+    delete geometry.elements[0].filterValues;
 
     geometry.elements[0].number = "110001";
     expect(() => validateGeometry(geometry)).toThrowError(/number must be a finite number/);
     delete geometry.elements[0].number;
 
-    geometry.facets[1].id = "group";
-    expect(() => validateGeometry(geometry)).toThrowError(/duplicates/);
-    geometry.facets = [{ id: "group", title: "", values: [] }];
+    geometry.filterTypes[1].id = "group";
+    expect(() => validateGeometry(geometry)).toThrowError(/not unique/);
+    geometry.filterTypes = [{ id: "group", title: "" }];
     expect(() => validateGeometry(geometry)).toThrowError(/title must be a non-empty string/);
+    // An id beginning with @ is reserved to the two dimensions Graviss owns.
+    geometry.filterTypes = [{ id: "@storey", title: "Storey" }];
+    expect(() => validateGeometry(geometry)).toThrowError(/reserved to Graviss/);
+    // A kind the contract does not know is refused by name.
+    geometry.filterTypes = [{ id: "g", title: "G", kinds: ["girder"] }];
+    expect(() => validateGeometry(geometry)).toThrowError(/unknown element kind/);
   });
 
   it("holds a displacement field to one value a component a node", () => {

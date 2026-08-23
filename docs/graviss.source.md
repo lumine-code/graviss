@@ -81,7 +81,7 @@ type ModelDescription = {
       loadCases: true;
       beamStations?: boolean;
     };
-    facets?: true;
+    filterTypes?: true;
   };
 };
 
@@ -109,11 +109,14 @@ type Result = {
   }[];
 };
 
-type Facet = {
-  id: Id;
+type FilterType = {
+  id: string; // never begins with "@", which is reserved to Graviss's own
   title: string;
-  multiple?: boolean;
-  values: { id: Id; title?: string }[];
+  numeric?: boolean; // its values are numbers, so ranges and digit globs apply
+  multiple?: boolean; // an element may hold several
+  kinds?: Element["kind"][]; // the element kinds it can ever be about
+  hint?: string; // an example expression, shown as the field's placeholder
+  values?: { id: Id; title?: string }[]; // optional: titles and an integrity check
 };
 
 type Geometry = {
@@ -121,7 +124,7 @@ type Geometry = {
   elements: Element[];
   supports?: Support[];
   sections?: Section[];
-  facets?: Facet[];
+  filterTypes?: FilterType[];
 };
 
 type Node = { id: Id; x: number; y: number; z: number };
@@ -131,7 +134,7 @@ type Element = {
   kind: "beam" | "truss" | "cable" | "shell" | "spring" | "coupling";
   nodeIds: [Id] | [Id, Id] | [Id, Id, Id] | [Id, Id, Id, Id];
   number?: number;
-  facetValues?: Record<Id, Id | Id[]>;
+  filterValues?: Record<string, Id | Id[]>;
   sectionId?: Id;
   thickness?: number | number[];
   offset?: number | number[];
@@ -220,13 +223,15 @@ A source that has analysis results says so with `capabilities.results` and answe
 
 `elements[].stations` is how a member bends. A line element drawn between its two displaced end nodes is a straight chord, which is what a deflected beam is not; a source that solved for the deflection along the member can hand back the stations it computed, in the element's own local frame, and Graviss sweeps the section along the curve they describe. `x` is the distance from the element's start. Two stations and their rotations already determine the curve, so a source with only the ends is worth reporting. `localAxes` is the rotation into global, which is one more reason for an axial member to state it.
 
-### Facets
+### Filter types
 
-A model is usually divided into more than its element kinds — groups, sub-structures, the geometric entity an element was meshed from — and every source names those divisions differently. Rather than learn each one, Graviss takes them as **facets**: a provider declares the dimensions it has, names their values, and says which values each element holds. Graviss builds the filter surface from that and interprets none of it.
+A model is usually divided into more than its element kinds — groups, sub-structures, the geometric entity an element was meshed from — and every source names those divisions differently. Rather than learn each one, Graviss takes them as **filter types**: a provider declares the dimensions it has, and says which values each element holds. Graviss builds the filter surface from that and interprets none of it — a type id is compared, never parsed, so a provider may spell its ids however its own domain does. An id beginning with `@` is reserved to the two dimensions Graviss owns outright, `@kind` and `@number`, because both facts are declared on `Element` itself.
 
-A facet is a title and a list of values. `multiple` says an element may hold several — one element belongs to exactly one group in most systems and to any number of selection sets. An element states its values in `facetValues`, keyed by facet id; a facet a given element says nothing about simply does not filter it.
+`numeric` says the dimension's values are numbers, so a range and a digit glob mean something for them and the values need not be enumerated at all. `values` is optional and buys three things where it is supplied: titles for completion, a name a user can type instead of an id, and a check that an element's value is one the model declared. `kinds` is the element kinds the dimension can ever be about, and Graviss neither adds nor removes an element outside them by a rule over it. `multiple` says an element may hold several values — one element belongs to exactly one group in most systems and to any number of selection sets. `hint` is an example expression, shown where the user will type one.
 
-`element.number` is separate, and is the element's own number in the source rather than the `id` Graviss keys it by. Ids must be unique across every kind, so a provider that has both a beam 5 and a shell 5 has to qualify them; the bare number is what a user types when they ask for elements 110001 to 110200, and only the provider knows it.
+An element states its values in `filterValues`, keyed by type id; a dimension a given element says nothing about simply does not filter it, in either direction — a rule that subtracts by group does not touch the ungrouped, and one that adds by group does not bring them along.
+
+`element.number` is separate, and is the element's own number in the source rather than the `id` Graviss keys it by. Ids must be unique across every kind, so a provider that has both a beam 5 and a shell 5 has to qualify them; the bare number is what a user types when they ask for elements 110001 to 110200, and only the provider knows it. It is expected to be a non-negative integer, because the expression grammar reads digits.
 
 ## Minimal example
 

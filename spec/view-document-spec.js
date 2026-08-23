@@ -346,7 +346,7 @@ describe("GravissViewDocument", () => {
           sectionRendering: "yes",
           visibility: { grid: "off", axes: true },
           printRegion: { x: -1, y: 0, width: 4, height: 4 },
-          filter: { numbers: 110001, facets: { group: [11] } },
+          filter: { rules: [{ sign: "x", type: "group", text: "11" }] },
           results: { loadCaseId: 101, scale: -3 },
         },
       ],
@@ -363,13 +363,22 @@ describe("GravissViewDocument", () => {
     expect("filter" in bad.graphics[0]).toBe(false);
     expect("results" in bad.graphics[0]).toBe(false);
 
-    // The two blocks a panel writes, kept as they were stated. The expression is
-    // held verbatim rather than as whatever it parsed to, because it is what the
-    // field has to show the user again.
+    // The two blocks a panel writes, kept as they were stated - IN ORDER,
+    // because the rules are applied in turn and the last one that names an
+    // element decides it. The expression is held verbatim rather than as
+    // whatever it parsed to, because it is what the row has to show the user
+    // again. `material` keeps a string expression alive so the named-value
+    // grammar always has a case.
     const narrowed = normalizeViewDocument({
       graphics: [
         {
-          filter: { numbers: "1-10,15,1*,11??", facets: { group: [11, 12], material: ["C30"] } },
+          filter: {
+            rules: [
+              { sign: "+", type: "group", text: "11,12,21-29" },
+              { sign: "-", type: "@number", kinds: ["shell"], text: "110001" },
+              { sign: "+", type: "material", text: "C30" },
+            ],
+          },
           results: {
             loadCaseId: 101,
             scale: "auto",
@@ -381,14 +390,37 @@ describe("GravissViewDocument", () => {
         },
       ],
     });
-    expect(narrowed.graphics[0].filter).toEqual({
-      numbers: "1-10,15,1*,11??",
-      facets: { group: [11, 12], material: ["C30"] },
+    expect(narrowed.graphics[0].filter.rules.map(({ type }) => type)).toEqual([
+      "group",
+      "@number",
+      "material",
+    ]);
+    expect(narrowed.graphics[0].filter.rules[1]).toEqual({
+      sign: "-",
+      type: "@number",
+      kinds: ["shell"],
+      text: "110001",
     });
     expect(narrowed.graphics[0].results.scale).toBe("auto");
     expect(narrowed.graphics[0].results.playing).toBe(true);
     // An empty block is a block, and says nothing rather than being refused.
     expect(normalizeViewDocument({ graphics: [{ filter: {} }] }).graphics[0].filter).toEqual({});
+    // The shape this replaced is refused whole rather than kept and misread:
+    // the old block was a conjunction, and no list of ordered signed rules
+    // means the same thing. Loud erasure beats a plausible wrong model.
+    expect(
+      "filter" in
+        normalizeViewDocument({
+          graphics: [{ filter: { numbers: "1-10", facets: { group: [11] } } }],
+        }).graphics[0],
+    ).toBe(false);
+    // A rule over a kind the contract does not know is a rule nobody wrote.
+    expect(
+      "filter" in
+        normalizeViewDocument({
+          graphics: [{ filter: { rules: [{ sign: "+", type: "g", kinds: ["girder"] }] } }],
+        }).graphics[0],
+    ).toBe(false);
     // A cycle nobody implements is not a cycle.
     expect(
       "results" in

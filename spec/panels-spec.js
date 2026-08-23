@@ -31,10 +31,11 @@ const ANALYSED_MODEL = {
       { id: 2, x: 6, y: 0, z: 0 },
       { id: 3, x: 12, y: 0, z: 0 },
     ],
-    facets: [
+    filterTypes: [
       {
         id: "group",
         title: "Group",
+        numeric: true,
         values: [
           { id: 1, title: "Deck" },
           { id: 2, title: "Piers" },
@@ -48,7 +49,7 @@ const ANALYSED_MODEL = {
         number: 1,
         nodeIds: [1, 2],
         sectionId: "R",
-        facetValues: { group: 1 },
+        filterValues: { group: 1 },
       },
       {
         id: "T1",
@@ -56,7 +57,7 @@ const ANALYSED_MODEL = {
         number: 2,
         nodeIds: [2, 3],
         sectionId: "R",
-        facetValues: { group: 2 },
+        filterValues: { group: 2 },
       },
     ],
     sections: [{ id: "R", shape: { kind: "rectangle", width: 0.2, height: 0.4 } }],
@@ -149,65 +150,188 @@ describe("the Graviss dock panels", () => {
     expect(filter.viewer).toBe(viewer);
   });
 
-  it("narrows the model from its own controls, and says what survived", async () => {
+  // A row's controls, found by what they are rather than by position.
+  function ruleRow(filter, index) {
+    const row = filter.list.querySelectorAll(".graviss-rule-row")[index];
+    return {
+      row,
+      sign: row.querySelector(".graviss-rule-sign"),
+      swatch: row.querySelector(".graviss-rule-swatch"),
+      select: row.querySelector(".graviss-rule-type"),
+      field: row.querySelector(".graviss-rule-text"),
+      count: row.querySelector(".graviss-rule-count"),
+      remove: row.querySelector(".graviss-rule-remove"),
+    };
+  }
+
+  function chooseSubject(filter, controls, title) {
+    const subjects = filter.viewer.getFilterSubjects();
+    const index = subjects.findIndex((subject) => subject.title === title);
+    expect(index).toBeGreaterThanOrEqual(0);
+    controls.select.value = String(index);
+    controls.select.dispatchEvent(new Event("change"));
+  }
+
+  function typeExpression(controls, text) {
+    controls.field.value = text;
+    controls.field.dispatchEvent(new Event("input"));
+  }
+
+  it("narrows the model with a list of signed rules, and says what each one names", async () => {
     const filter = await lumine.workspace.open(FILTER_PANEL_URI);
     await openViewer(ANALYSED_MODEL);
 
-    const rows = [...filter.kindList.querySelectorAll(".graviss-kind-row")];
-    expect(rows.map((row) => row.querySelector(".graviss-kind-label").textContent)).toEqual([
-      "Beams",
-      "Trusses",
-    ]);
-    // The swatch is painted from the renderer's own resolved colour, so it
-    // cannot disagree with what is on screen.
-    const swatch = rows[1].querySelector(".graviss-kind-swatch").style.background;
-    expect(swatch).toContain(
-      String(viewer.renderer.colors.truss.getHexString())
-        .match(/../g)
-        .map((pair) => parseInt(pair, 16))
-        .join(", "),
-    );
+    // Nothing narrowed is the whole model, and the seed row says so.
+    expect(filter.seed.textContent).toBe("Showing the whole model.");
+    expect(filter.total.textContent).toBe("2 of 2 elements");
 
-    // A kind switched off is a kind not drawn, and the count says so.
-    rows[0].querySelector("input").click();
-    expect(viewer.isVisible("beams")).toBe(false);
-    expect(filter.kindList.querySelectorAll(".graviss-kind-count")[0].textContent).toBe("0 / 1");
-    rows[0].querySelector("input").click();
+    // A fresh row names no dimension, so adding it moves nothing.
+    filter.body.querySelector(".graviss-add-rule").click();
+    expect(filter.list.querySelectorAll(".graviss-rule-row").length).toBe(1);
+    expect(filter.total.textContent).toBe("2 of 2 elements");
+    expect("filter" in viewer.activeGraphic).toBe(false);
 
-    // A number expression nobody can read says so and changes nothing.
-    filter.numberField.value = "1-";
-    filter.numberField.dispatchEvent(new Event("input"));
-    expect(filter.numberField.classList.contains("graviss-invalid")).toBe(true);
-    expect(viewer.getFilterState().numbers).toBe("");
+    // Choosing a dimension and typing an expression narrows the model and
+    // reaches the document in the shape a hand could have written.
+    const first = ruleRow(filter, 0);
+    chooseSubject(filter, first, "Number");
+    typeExpression(first, "1");
+    expect(filter.total.textContent).toBe("1 of 2 elements");
+    expect(first.count.textContent).toBe("1");
+    expect(viewer.activeGraphic.filter).toEqual({
+      rules: [{ sign: "+", type: "@number", text: "1" }],
+    });
+    // Opening by adding starts from nothing, and the seed row says which.
+    expect(filter.seed.textContent).toBe("Starting from nothing:");
 
-    filter.numberField.value = "2";
-    filter.numberField.dispatchEvent(new Event("input"));
-    expect(filter.numberField.classList.contains("graviss-invalid")).toBe(false);
-    expect(viewer.getFilterState().numbers).toBe("2");
-    expect(viewer.activeGraphic.filter).toEqual({ numbers: "2" });
+    // An expression nobody can read says so on the row and changes nothing.
+    typeExpression(first, "1-");
+    expect(first.field.classList.contains("graviss-invalid")).toBe(true);
+    expect(viewer.getFilterState().rules[0].text).toBe("1");
+    typeExpression(first, "1");
+    expect(first.field.classList.contains("graviss-invalid")).toBe(false);
 
-    filter.body.querySelector(".graviss-clear-filter").click();
-    expect(viewer.getFilterState().numbers).toBe("");
+    // The sign flips on its button, and a leading subtraction starts whole.
+    first.sign.click();
+    expect(viewer.getFilterState().rules[0].sign).toBe("-");
+    expect(filter.seed.textContent).toBe("Starting from the whole model:");
+    expect(filter.total.textContent).toBe("1 of 2 elements");
+
+    // The x takes the rule out, and an empty list takes the key out of the file.
+    first.remove.click();
+    expect(filter.list.querySelectorAll(".graviss-rule-row").length).toBe(0);
+    expect("filter" in viewer.activeGraphic).toBe(false);
+    expect(filter.total.textContent).toBe("2 of 2 elements");
   });
 
   it("offers the source's own dimensions without knowing what they mean", async () => {
     const filter = await lumine.workspace.open(FILTER_PANEL_URI);
     await openViewer(ANALYSED_MODEL);
 
-    const heading = filter.facetSection.querySelector(".graviss-facet-heading");
-    expect(heading.textContent).toContain("Group");
-    // Closed until asked for: a model with a dozen dimensions would otherwise
-    // open as a wall of checkboxes.
-    expect(filter.facetSection.querySelector(".graviss-facet-values")).toBeNull();
+    filter.body.querySelector(".graviss-add-rule").click();
+    const first = ruleRow(filter, 0);
+    const titles = [...first.select.options].map((option) => option.textContent);
+    // The two dimensions Graviss owns, the source's own by its declared title,
+    // and the kind-narrowed variants this model can actually distinguish.
+    expect(titles).toContain("Kind");
+    expect(titles).toContain("Number");
+    expect(titles).toContain("Group");
+    expect(titles).toContain("Group (trusses)");
 
-    heading.click();
-    const values = [...filter.facetSection.querySelectorAll(".graviss-facet-values label span")];
-    expect(values.map((value) => value.textContent)).toEqual(["Deck", "Piers"]);
-
-    filter.facetSection.querySelectorAll(".graviss-facet-values input")[1].click();
-    expect(viewer.getFilterState().facets.group).toEqual([2]);
+    chooseSubject(filter, first, "Group");
+    typeExpression(first, "2");
+    expect(viewer.activeGraphic.filter).toEqual({
+      rules: [{ sign: "+", type: "group", text: "2" }],
+    });
     expect(viewer.elementCounts().get("beam")).toEqual({ total: 1, shown: 0 });
-    expect(filter.facetSection.querySelector(".graviss-facet-badge").textContent).toBe("1");
+    expect(viewer.elementCounts().get("truss")).toEqual({ total: 1, shown: 1 });
+
+    // The kind-narrowed variant writes the kind into the rule rather than the
+    // expression, which is the whole trick: the type id itself is never parsed.
+    chooseSubject(filter, first, "Group (trusses)");
+    expect(viewer.getFilterState().rules[0]).toEqual(
+      jasmine.objectContaining({ type: "group", kinds: ["truss"] }),
+    );
+    // And the swatch takes the renderer's own resolved colour for that kind, so
+    // it cannot disagree with what is on screen.
+    expect(first.swatch.hidden).toBe(false);
+    expect(first.swatch.style.background).toContain(
+      String(viewer.renderer.colors.truss.getHexString())
+        .match(/../g)
+        .map((pair) => parseInt(pair, 16))
+        .join(", "),
+    );
+  });
+
+  it("reorders rules, and the order is the meaning", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+
+    // "Everything but group 2" then "and the trusses back".
+    const dropId = viewer.addRule({ sign: "-", type: "group", text: "2" });
+    viewer.addRule({ sign: "+", type: "@kind", text: "truss" });
+    expect(filter.total.textContent).toBe("2 of 2 elements");
+
+    // The other way round the truss arrives first and group 2 takes it away.
+    viewer.moveRule(dropId, 1);
+    expect(viewer.getFilterState().rules.map(({ sign }) => sign)).toEqual(["+", "-"]);
+    expect(filter.seed.textContent).toBe("Starting from nothing:");
+    expect(filter.total.textContent).toBe("0 of 2 elements");
+
+    // Reordering from the keyboard finds the row that holds focus.
+    const second = ruleRow(filter, 1);
+    second.field.focus();
+    lumine.commands.dispatch(second.field, "graviss:move-rule-up");
+    expect(viewer.getFilterState().rules.map(({ sign }) => sign)).toEqual(["-", "+"]);
+    expect(filter.total.textContent).toBe("2 of 2 elements");
+    // The row that moved is the same element it was, still holding focus.
+    expect(document.activeElement).toBe(second.field);
+  });
+
+  it("keeps a rule whose dimension this model has not got, and says so", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+
+    viewer.applyFilterState({
+      rules: [
+        { sign: "+", type: "storey", text: "3" },
+        { sign: "+", type: "@kind", text: "truss" },
+      ],
+    });
+    const first = ruleRow(filter, 0);
+    // The rule names nothing here, still holds its place in the fold, and the
+    // dropdown shows the stored id rather than quietly rewriting the rule.
+    expect(first.row.classList.contains("graviss-rule-unresolved")).toBe(true);
+    expect([...first.select.options].some((option) => option.textContent.includes("storey"))).toBe(
+      true,
+    );
+    expect(first.count.textContent).toBe("0");
+    expect(filter.total.textContent).toBe("1 of 2 elements");
+    // And it survives a round trip through the document untouched.
+    expect(viewer.activeGraphic.filter.rules[0]).toEqual({
+      sign: "+",
+      type: "storey",
+      text: "3",
+    });
+  });
+
+  it("keeps the caret in a rule while the rest of the workspace changes", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+
+    filter.body.querySelector(".graviss-add-rule").click();
+    const first = ruleRow(filter, 0);
+    chooseSubject(filter, first, "Number");
+    first.field.focus();
+    typeExpression(first, "12");
+    first.field.setSelectionRange(1, 1);
+
+    // A toolbar toggle re-renders this panel through the same event a filter
+    // change does, and must not rebuild the row out from under the typing.
+    viewer.toggleVisibility("grid");
+    expect(document.activeElement).toBe(first.field);
+    expect(first.field.value).toBe("12");
+    expect(first.field.selectionStart).toBe(1);
   });
 
   it("steps the cases without reading every one it passes", async () => {

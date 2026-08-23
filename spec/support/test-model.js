@@ -141,7 +141,7 @@ class TestSession {
           supports: geometry.supports.length > 0,
         },
         ...(this.model.loadCases ? { results: { displacement: true, loadCases: true } } : {}),
-        ...(geometry.facets ? { facets: true } : {}),
+        ...(geometry.filterTypes ? { filterTypes: true } : {}),
       },
     };
   }

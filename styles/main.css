@@ -592,31 +592,46 @@
   padding-top: 0.4em;
 }
 
-/* Elements, by kind */
+/* The filter's rule list. Each row is a live control, so rows are moved and
+   never rebuilt; the styles only have to lay one out. */
 
-.graviss-kind-list {
+.graviss-rule-list {
   margin: 0;
   padding: 0;
   list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
 }
 
-.graviss-kind-row {
+.graviss-rule-seed {
+  font-size: 0.85em;
+  color: var(--text-color-subtle);
+}
+
+.graviss-rule-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5em;
-  padding: 0.15em 0;
+  gap: 0.35em;
 }
 
-.graviss-kind-row label {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  margin: 0;
-  cursor: pointer;
+.graviss-rule-grip {
+  cursor: grab;
+  color: var(--text-color-subtle);
+  flex: none;
+  -webkit-user-drag: element;
 }
 
-.graviss-kind-swatch {
+.graviss-rule-sign {
+  min-width: 1.8em;
+  font-variant-numeric: tabular-nums;
+}
+
+.graviss-rule-subtracts .graviss-rule-sign {
+  color: var(--text-color-error);
+}
+
+.graviss-rule-swatch {
   width: 0.85em;
   height: 0.85em;
   border-radius: 2px;
@@ -624,84 +639,56 @@
   flex: none;
 }
 
-.graviss-kind-count {
+.graviss-rule-type {
+  flex: 1 1 5em;
+  min-width: 0;
+}
+
+.graviss-rule-text {
+  flex: 1.4 1 6em;
+  min-width: 0;
+}
+
+.graviss-rule-text.graviss-invalid {
+  border-color: var(--text-color-error);
+}
+
+.graviss-rule-count {
+  min-width: 2.2em;
+  text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--text-color-subtle);
 }
 
-.graviss-kind-count-narrowed {
-  color: var(--text-color-info);
+.graviss-rule-count-empty {
+  color: var(--text-color-error);
 }
 
-/* A number expression nobody can read says so while it is being typed. */
-
-.graviss-number-filter.graviss-invalid {
-  border-color: var(--text-color-error);
+.graviss-rule-unresolved .graviss-rule-type {
+  border-color: var(--text-color-warning);
 }
 
-/* The source's own dimensions */
-
-.graviss-facet {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3em;
-  padding: 0.25em 0;
-  border-top: 1px solid var(--graviss-border);
+.graviss-rule-remove {
+  flex: none;
 }
 
-.graviss-facet-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5em;
-  width: 100%;
-  padding: 0.2em 0;
-  border: none;
-  background: none;
-  color: inherit;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
+.graviss-dragging {
+  opacity: 0.5;
 }
 
-.graviss-facet-name {
-  flex: 1;
-  text-align: left;
+.graviss-drop-above {
+  box-shadow: 0 -2px 0 0 var(--text-color-info);
 }
 
-.graviss-facet-name::before {
-  content: "\25b8";
-  margin-right: 0.4em;
+.graviss-drop-below {
+  box-shadow: 0 2px 0 0 var(--text-color-info);
+}
+
+.graviss-rule-total {
+  margin-left: auto;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
   color: var(--text-color-subtle);
-}
-
-.graviss-facet-heading[aria-expanded="true"] .graviss-facet-name::before {
-  content: "\25be";
-}
-
-.graviss-facet-badge:not(:empty) {
-  padding: 0 0.45em;
-  border-radius: 0.8em;
-  background: var(--background-color-info);
-  color: var(--text-color-highlight);
-  font-size: 0.8em;
-}
-
-.graviss-facet-values {
-  margin: 0;
-  padding: 0 0 0 1em;
-  list-style: none;
-  max-height: 14em;
-  overflow-y: auto;
-}
-
-.graviss-facet-values label {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  margin: 0;
-  padding: 0.1em 0;
-  cursor: pointer;
 }
 
 /* Load cases */

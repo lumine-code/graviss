@@ -65,7 +65,7 @@ describe("graviss package conventions", () => {
     // package that reached for ctrl- would be taking a key from every other
     // surface in the window.
     expect(Object.keys(keymap)).toEqual([".graviss", ".graviss-panel"]);
-    expect(Object.keys(keymap[".graviss-panel"])).toEqual(["escape"]);
+    expect(Object.keys(keymap[".graviss-panel"])).toEqual(["escape", "alt-pageup", "alt-pagedown"]);
     for (const scope of Object.keys(keymap)) {
       expect(Object.keys(keymap[scope]).some((stroke) => /^ctrl-/.test(stroke))).toBe(false);
     }

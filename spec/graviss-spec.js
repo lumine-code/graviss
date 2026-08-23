@@ -12,7 +12,8 @@ const {
   createFrameGeometry,
 } = require("./support/test-model");
 const { entityIndexAtVertex } = require("../lib/renderer");
-const { createElementFilter } = require("../lib/element-filter");
+const { compileRules } = require("../lib/filter-rules");
+const { buildSubjects, subjectsByKey } = require("../lib/filter-types");
 
 const MAIN_EXAMPLE = FRAME_MODEL;
 const MAIN_EXAMPLE_URI = MAIN_EXAMPLE.viewDocumentPath;
@@ -1479,20 +1480,21 @@ describe("graviss", () => {
     const viewer = createFixtureViewer(MAIN_EXAMPLE);
     try {
       await conditionPromise(() => viewer.renderer != null, "the Three.js scene to initialize");
-      // A switch the toolbar does not carry is still a switch a graphic states,
-      // and one nobody restores is one left where the last graphic had it.
+      // A graphic restores every switch the one before it moved, not only the
+      // ones it names - one nobody restores is one left where the last graphic
+      // had it.
       viewer.toggleVisibility("springs");
-      viewer.toggleVisibility("trusses");
+      viewer.toggleVisibility("localAxes");
       expect(viewer.renderer.visibility.springs).toBe(false);
-      expect(viewer.renderer.visibility.trusses).toBe(false);
+      expect(viewer.renderer.visibility.localAxes).toBe(true);
 
       viewer.activateGraphic(1);
       expect(viewer.renderer.visibility.springs).toBe(true);
-      expect(viewer.renderer.visibility.trusses).toBe(true);
+      expect(viewer.renderer.visibility.localAxes).toBe(false);
 
       viewer.activateGraphic(0);
       expect(viewer.renderer.visibility.springs).toBe(false);
-      expect(viewer.renderer.visibility.trusses).toBe(false);
+      expect(viewer.renderer.visibility.localAxes).toBe(true);
     } finally {
       viewer.destroy();
     }
@@ -3301,8 +3303,12 @@ describe("graviss", () => {
       expect(of("C1")).not.toEqual(beam);
       expect(of("C1")).not.toEqual(of("T1"));
 
-      // The switch is per kind, and the umbrella still covers all of them.
-      renderer.setVisibility("trusses", false);
+      // A kind is narrowed away as a rule like any other question, and the
+      // members umbrella is still the layer switch above all of them.
+      const subjects = subjectsByKey(buildSubjects(renderer.geometry));
+      renderer.setElementFilter(
+        compileRules([{ sign: "-", type: "@kind", text: "truss" }], subjects),
+      );
       expect(fill.count).toBe(2);
       expect(renderer.elementCounts().get("truss")).toEqual({ total: 1, shown: 0 });
       expect(renderer.elementCounts().get("beam")).toEqual({ total: 1, shown: 1 });
@@ -3310,21 +3316,27 @@ describe("graviss", () => {
       renderer.setVisibility("members", false);
       expect(renderer.meshes.members.visible).toBe(false);
       renderer.setVisibility("members", true);
-      renderer.setVisibility("trusses", true);
+      renderer.setElementFilter(null);
       expect(fill.count).toBe(3);
 
-      // A kind and a filter narrow the same model together rather than one
-      // replacing the other.
-      renderer.setElementFilter(createElementFilter({ numbers: "2,3" }));
-      renderer.setVisibility("cables", false);
+      // Two rules narrow the same model together, for all six kinds rather
+      // than the three that used to have switches.
+      renderer.setElementFilter(
+        compileRules(
+          [
+            { sign: "+", type: "@number", text: "2,3" },
+            { sign: "-", type: "@kind", text: "cable" },
+          ],
+          subjects,
+        ),
+      );
       expect(fill.count).toBe(1);
       expect(fill.userData.gravissEntities[fill.userData.gravissSegmentToEntityIndex[0]].id).toBe(
         "T1",
       );
 
-      // Selecting something and then hiding its kind does not leave a selection
-      // pointing at an instance another element now occupies.
-      renderer.setVisibility("cables", true);
+      // Selecting something and then narrowing it away does not leave a
+      // selection pointing at an instance another element now occupies.
       renderer.setElementFilter(null);
       renderer.setSelected({
         type: "element",
@@ -3334,7 +3346,9 @@ describe("graviss", () => {
         instanceId: 2,
       });
       expect(renderer.selected).not.toBeNull();
-      renderer.setVisibility("cables", false);
+      renderer.setElementFilter(
+        compileRules([{ sign: "-", type: "@kind", text: "cable" }], subjects),
+      );
       expect(renderer.selected).toBeNull();
     } finally {
       viewer.destroy();
@@ -3353,7 +3367,14 @@ describe("graviss", () => {
           { id: 3, x: 12, y: 0, z: 0 },
           { id: 4, x: 18, y: 0, z: 0 },
         ],
-        facets: [{ id: "group", title: "Group", values: [{ id: 11, title: "Deck" }, { id: 12 }] }],
+        filterTypes: [
+          {
+            id: "group",
+            title: "Group",
+            numeric: true,
+            values: [{ id: 11, title: "Deck" }, { id: 12 }],
+          },
+        ],
         elements: [
           {
             id: "B1",
@@ -3361,7 +3382,7 @@ describe("graviss", () => {
             number: 101,
             sectionId: "R",
             nodeIds: [1, 2],
-            facetValues: { group: 11 },
+            filterValues: { group: 11 },
           },
           {
             id: "B2",
@@ -3369,7 +3390,7 @@ describe("graviss", () => {
             number: 102,
             sectionId: "R",
             nodeIds: [2, 3],
-            facetValues: { group: 11 },
+            filterValues: { group: 11 },
           },
           {
             id: "B3",
@@ -3377,7 +3398,7 @@ describe("graviss", () => {
             number: 201,
             sectionId: "R",
             nodeIds: [3, 4],
-            facetValues: { group: 12 },
+            filterValues: { group: 12 },
           },
         ],
         sections: [{ id: "R", shape: { kind: "rectangle", width: 0.2, height: 0.4 } }],
@@ -3403,7 +3424,10 @@ describe("graviss", () => {
 
       // Hiding is drawing fewer instances rather than drawing them invisibly:
       // the ones that survive are moved to the front and the count is cut.
-      renderer.setElementFilter(createElementFilter({ numbers: "1*" }));
+      const subjects = subjectsByKey(buildSubjects(renderer.geometry));
+      renderer.setElementFilter(
+        compileRules([{ sign: "+", type: "@number", text: "1*" }], subjects),
+      );
       expect(fill.count).toBe(2);
       expect(contours.geometry.instanceCount).toBe(2);
       // Both survivors are still findable by what they are, wherever they now
@@ -3417,7 +3441,7 @@ describe("graviss", () => {
       expect([...drawn].sort()).toEqual(["B1", "B2"]);
 
       // A facet narrows it the same way, and the counts a panel shows follow.
-      renderer.setElementFilter(createElementFilter({ facets: { group: [12] } }));
+      renderer.setElementFilter(compileRules([{ sign: "+", type: "group", text: "12" }], subjects));
       expect(fill.count).toBe(1);
       expect(renderer.elementCounts().get("beam")).toEqual({ total: 3, shown: 1 });
 
@@ -3460,7 +3484,7 @@ describe("graviss", () => {
             { id: 2, x: 6, y: 0, z: 0 },
             { id: 3, x: 12, y: 0, z: 0 },
           ],
-          facets: [{ id: "group", title: "Group", values: [{ id: 1 }, { id: 2 }] }],
+          filterTypes: [{ id: "group", title: "Group", numeric: true }],
           elements: [
             {
               id: "B1",
@@ -3468,7 +3492,7 @@ describe("graviss", () => {
               number: 1,
               nodeIds: [1, 2],
               sectionId: "R",
-              facetValues: { group: 1 },
+              filterValues: { group: 1 },
             },
             {
               id: "B2",
@@ -3476,7 +3500,7 @@ describe("graviss", () => {
               number: 2,
               nodeIds: [2, 3],
               sectionId: "R",
-              facetValues: { group: 2 },
+              filterValues: { group: 2 },
             },
           ],
           sections: [{ id: "R", shape: { kind: "rectangle", width: 0.2, height: 0.4 } }],
@@ -3581,19 +3605,23 @@ describe("graviss", () => {
         const fill = viewer.renderer.pickables.find(
           (mesh) => mesh.userData.gravissColorKey === "element",
         );
-        viewer.setNumberFilter("1");
+        const id = viewer.addRule({ sign: "+", type: "@number", text: "1" });
         expect(fill.count).toBe(1);
-        expect(viewer.activeGraphic.filter).toEqual({ numbers: "1" });
+        expect(viewer.activeGraphic.filter).toEqual({
+          rules: [{ sign: "+", type: "@number", text: "1" }],
+        });
 
         // Half an expression is not an expression yet, so the model stays where
         // it was rather than emptying while a user is still typing.
-        viewer.setNumberFilter("1-");
+        viewer.updateRule(id, { text: "1-" });
         expect(fill.count).toBe(1);
+        expect(viewer.getFilterState().rules[0].text).toBe("1");
 
-        viewer.setNumberFilter("");
-        viewer.setFacetFilter("group", [2]);
+        viewer.updateRule(id, { type: "group", text: "2" });
         expect(fill.count).toBe(1);
-        expect(viewer.activeGraphic.filter).toEqual({ facets: { group: [2] } });
+        expect(viewer.activeGraphic.filter).toEqual({
+          rules: [{ sign: "+", type: "group", text: "2" }],
+        });
         expect(viewer.elementCounts().get("beam")).toEqual({ total: 2, shown: 1 });
 
         viewer.clearFilter();
@@ -3609,14 +3637,14 @@ describe("graviss", () => {
       try {
         await viewer.selectLoadCase(101);
         viewer.setDeformationScale(50);
-        viewer.setNumberFilter("1");
+        viewer.addRule({ sign: "+", type: "@number", text: "1" });
 
         viewer.addGraphic();
         expect(viewer.getResultsState().loadCaseId).toBeNull();
-        expect(viewer.getFilterState().numbers).toBe("");
+        expect(viewer.getFilterState().rules).toEqual([]);
         expect(viewer.renderer.getDeformation().result).toBeNull();
         await viewer.selectLoadCase(192);
-        viewer.setNumberFilter("2");
+        viewer.addRule({ sign: "+", type: "@number", text: "2" });
 
         viewer.activateGraphic(0);
         await conditionPromise(
@@ -3624,7 +3652,7 @@ describe("graviss", () => {
           "the first graphic's own case to come back",
         );
         expect(viewer.getResultsState().scale).toBe(50);
-        expect(viewer.getFilterState().numbers).toBe("1");
+        expect(viewer.getFilterState().rules.map(({ text }) => text)).toEqual(["1"]);
         // Coming back to a graphic is looking at it, not changing it.
         expect(viewer.activeGraphic.results.loadCaseId).toBe(101);
       } finally {
@@ -3765,7 +3793,12 @@ describe("graviss", () => {
       // A filter reaches the centrelines too. With sections off these are the
       // only members there are, so one that did not would be a filter that
       // worked in one display mode and not the other.
-      renderer.setElementFilter(createElementFilter({ numbers: "2" }));
+      renderer.setElementFilter(
+        compileRules(
+          [{ sign: "+", type: "@number", text: "2" }],
+          subjectsByKey(buildSubjects(renderer.geometry)),
+        ),
+      );
       const collapsed = renderer.memberLines.userData.gravissEntityRanges[first];
       const only = new Set();
       for (let vertex = collapsed.start; vertex < collapsed.start + collapsed.count; vertex += 1) {

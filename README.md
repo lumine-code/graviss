@@ -11,7 +11,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state and conflicted-save handling, records every change in a private `TextBuffer` so Undo and Redo cover the whole view document, and exposes its named graphics to the navigation panel.
 - **Live sources**: rebuilds the scene when a source reports that its geometry changed, keeping the camera the view document holds.
 - **Analysis results**: animates a displacement field over the model at a chosen or automatic amplification, through four cycles that start from zero or swing about it, and colours every element by how far it went.
-- **Model filtering**: narrows the model by element number, range or digit pattern, by any dimension the source declares such as group or material, and by kind, each with its own colour and a count of what survived.
+- **Model filtering**: narrows the model with an ordered list of add and subtract rules over element number, element kind, and any dimension the source declares, each rule reorderable and each saying how many elements it names.
 - **Symbols and connectors**: draws springs as helices or rings by the way they act, couplings as plain links, and sizes every mark with one length in millimetres, scrollable and zeroable.
 
 ## Installation
@@ -107,7 +107,9 @@ Commands available in `lumine-workspace`:
 
 Commands available in `.graviss-panel`:
 
-- `graviss:focus-viewer`: return focus to the model, leaving the panel open.
+- `graviss:focus-viewer`: return focus to the model, leaving the panel open,
+- `graviss:move-rule-up`: move the filter rule holding focus one place earlier,
+- `graviss:move-rule-down`: move the filter rule holding focus one place later.
 
 ## Usage
 

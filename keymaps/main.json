@@ -47,6 +47,12 @@
   // own inputs carry native-key-bindings; their roots do not, which is what
   // leaves escape free to say "back to the model".
   ".graviss-panel": {
-    "escape": "graviss:focus-viewer"
+    "escape": "graviss:focus-viewer",
+    // The arrows are dead inside the rule inputs - core resolves every arrow
+    // under native-key-bindings to native! and that match ends the walk - and
+    // ctrl- is barred package-wide, so reordering takes the one modifier pair
+    // that reaches an input and is not a bare reveal-tier letter.
+    "alt-pageup": "graviss:move-rule-up",
+    "alt-pagedown": "graviss:move-rule-down"
   }
 }
