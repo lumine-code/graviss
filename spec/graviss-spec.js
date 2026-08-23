@@ -3117,6 +3117,89 @@ describe("graviss", () => {
     }
   });
 
+  it("turns a slab rather than shearing it when the model moves", async () => {
+    // Two quads meeting along an edge, thick enough to have two faces. Rotating
+    // them about that edge is the case that decides whether the corner normals
+    // are computed again or frozen: frozen, the mid-surface bends while the
+    // faces stay parallel to the shape at rest, and a slab swinging about its
+    // root renders edge on with no thickness at all.
+    const model = {
+      id: "turning-slab",
+      title: "Turning slab",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+        ],
+        elements: [{ id: 1, kind: "shell", nodeIds: [1, 2, 3, 4], thickness: 0.2 }],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      // Measured from the positions themselves rather than through Box3: a
+      // mesh's bounding box is cached on its geometry, and nothing invalidates
+      // it when the surface is written again.
+      const thickness = () => {
+        const positions = renderer.meshes.shells.geometry.getAttribute("position");
+        const span = { x: [Infinity, -Infinity], z: [Infinity, -Infinity] };
+        for (let vertex = 0; vertex < positions.count; vertex += 1) {
+          span.x[0] = Math.min(span.x[0], positions.getX(vertex));
+          span.x[1] = Math.max(span.x[1], positions.getX(vertex));
+          span.z[0] = Math.min(span.z[0], positions.getZ(vertex));
+          span.z[1] = Math.max(span.z[1], positions.getZ(vertex));
+        }
+        return { x: span.x[1] - span.x[0], z: span.z[1] - span.z[0] };
+      };
+      // At rest: a fifth of a metre thick, lying flat.
+      expect(thickness().z).toBeCloseTo(0.2, 6);
+
+      // Stand it on the edge through nodes 1 and 4, which is a rigid rotation
+      // and not a bend, so it keeps every bit of its thickness - now measured
+      // across x rather than up z.
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: { ids: [2, 3], values: [-1, 0, 1, -1, 0, 1] },
+        extent: 1,
+      });
+      renderer.setDeformationScale(1);
+      const turned = thickness();
+      expect(turned.x).toBeCloseTo(0.2, 5);
+      expect(turned.z).toBeGreaterThan(0.9);
+
+      // What the model measures is what it measures now. A bounding box is
+      // cached on a geometry, and nothing invalidates it when the positions
+      // underneath are written again - so a model that has moved would
+      // otherwise be framed, printed and picked against where it was at rest.
+      const measured = renderer.visibleModelBounds();
+      expect(measured.max.z).toBeGreaterThan(0.9);
+
+      // And back exactly, which is what a scale of zero is for.
+      renderer.setDeformationScale(0);
+      expect(thickness().z).toBeCloseTo(0.2, 6);
+      expect(renderer.visibleModelBounds().max.z).toBeLessThan(0.2);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("narrows the area elements as well as the line ones", async () => {
     const viewer = createFixtureViewer(SHELL_EXAMPLE);
     jasmine.attachToDOM(viewer.element);
@@ -4261,6 +4344,10 @@ describe("graviss", () => {
         return;
       }
       const renderer = viewer.renderer;
+      // The triads are asked for up front, because they are rebuilt lazily: a
+      // model that moves every frame must not dispose and rebuild a geometry
+      // nobody is looking at, so the rebuild is owed until they are shown.
+      renderer.setVisibility("localAxes", true);
       const bounds = new renderer.THREE.Box3().setFromObject(renderer.meshes.shells);
       // Half the thickness either side of a mid-surface half a metre up. Six
       // places, because positions are held in a Float32Array.
