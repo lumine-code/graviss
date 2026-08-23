@@ -71,7 +71,12 @@
   background: var(--graviss-border);
 }
 
-.graviss-toolbar-tail {
+/* The right-hand run starts at the panels: from here on the bar is about
+   surfaces and output rather than about the picture being composed, so it is
+   pushed away from the controls that compose it. Only the first of the two
+   takes the free space — two auto margins would split it and leave a gap in
+   the middle of the run. */
+.graviss-region-panels {
   margin-left: auto;
 }
 

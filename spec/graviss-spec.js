@@ -237,6 +237,8 @@ describe("graviss", () => {
       "grid",
       "axes",
       "local-axes",
+      "filter-panel",
+      "results-panel",
       "save-image",
       "copy-image",
       "open-source",
@@ -248,13 +250,19 @@ describe("graviss", () => {
       [...toolbar.querySelectorAll(":scope > .graviss-toolbar-region")].map((region) =>
         region.getAttribute("aria-label"),
       ),
-    ).toEqual(["Graphics", "Picture", "Layers", "Output, document and renderer"]);
+    ).toEqual(["Graphics", "Picture", "Layers", "Panels", "Output, document and renderer"]);
     const regionOf = (selector) =>
       toolbar.querySelector(selector).closest(".graviss-toolbar-region").getAttribute("aria-label");
     expect(regionOf('[data-action="add-graphic"]')).toBe("Graphics");
     expect(regionOf('[data-action="background"]')).toBe("Picture");
     expect(regionOf('[data-visible="members"]')).toBe("Layers");
     expect(regionOf(".graviss-symbol-input")).toBe("Layers");
+    // The panels are their own region rather than part of the tail: a dock
+    // surface is not output, not the document and not the renderer, and the
+    // region is what pushes the whole right-hand run away from the controls
+    // that compose the picture.
+    expect(regionOf('[data-action="filter-panel"]')).toBe("Panels");
+    expect(regionOf('[data-action="results-panel"]')).toBe("Panels");
     expect(regionOf('[data-action="save-as-image"]')).toBe("Output, document and renderer");
     expect(regionOf('[data-action="open-source"]')).toBe("Output, document and renderer");
     expect(toolbar.querySelector(".graviss-toolbar-tail .graviss-fps-counter")).not.toBeNull();

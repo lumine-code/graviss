@@ -275,6 +275,121 @@ describe("the Graviss dock panels", () => {
     expect(results.legend.querySelector(".graviss-legend-max").textContent).toBe("10.0 mm");
   });
 
+  it("knows whether it is on screen, not merely whether it is open", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    const results = await lumine.workspace.open(RESULTS_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+
+    // Both land in the same dock, so only one of them is its pane's active item
+    // and the other is behind a tab. An open panel nobody can see is not showing.
+    expect(lumine.workspace.paneContainerForURI(FILTER_PANEL_URI)).toBe(
+      lumine.workspace.paneContainerForURI(RESULTS_PANEL_URI),
+    );
+    expect([filter.isShowing(), results.isShowing()].filter(Boolean).length).toBe(1);
+
+    const container = lumine.workspace.paneContainerForURI(FILTER_PANEL_URI);
+    container.getActivePane().activateItem(filter);
+    expect(filter.isShowing()).toBe(true);
+    expect(results.isShowing()).toBe(false);
+
+    // And a dock nobody has opened shows neither.
+    container.hide();
+    expect(filter.isShowing()).toBe(false);
+    expect(results.isShowing()).toBe(false);
+  });
+
+  it("brings a panel up and focuses it, then hands focus back", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+    lumine.workspace.paneContainerForURI(FILTER_PANEL_URI).hide();
+    expect(filter.isShowing()).toBe(false);
+
+    // Not showing: come up and take focus.
+    expect(await filter.toggleFocus()).toBe(true);
+    expect(filter.isShowing()).toBe(true);
+    expect(filter.isFocused()).toBe(true);
+
+    // Showing and focused: hand focus back to the model, and stay open - hiding
+    // a panel you are looking at is not what anyone asks for.
+    expect(await filter.toggleFocus()).toBe(false);
+    expect(filter.isFocused()).toBe(false);
+    expect(filter.isShowing()).toBe(true);
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(viewer);
+
+    // Showing but not focused: take focus without closing anything.
+    expect(await filter.toggleFocus()).toBe(true);
+    expect(filter.isFocused()).toBe(true);
+  });
+
+  it("brings a panel up from the toolbar without taking focus off it", async () => {
+    await openViewer(ANALYSED_MODEL);
+    const button = viewer.element.querySelector('[data-action="filter-panel"]');
+    expect(button).not.toBeNull();
+    expect(button.dataset.command).toBe("graviss:toggle-focus-filter-panel");
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+
+    // A button takes focus on mousedown, and these two are about focus - so the
+    // default is cancelled and the click still lands. Without that the panel
+    // would have lost focus before the command ran, and "hand focus back" could
+    // never happen from the toolbar.
+    const mousedown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    button.dispatchEvent(mousedown);
+    expect(mousedown.defaultPrevented).toBe(true);
+
+    button.click();
+    // Opening a dock item is asynchronous, so the panel is not there the instant
+    // the click returns.
+    await conditionPromise(
+      () => lumine.workspace.getPaneItems().some((i) => i.getURI?.() === FILTER_PANEL_URI),
+      "the filter panel to be opened",
+    );
+    const filter = lumine.workspace.getPaneItems().find((i) => i.getURI?.() === FILTER_PANEL_URI);
+    await conditionPromise(() => filter.isFocused(), "the filter panel to take focus");
+    expect(filter.isShowing()).toBe(true);
+    // Pressed says the panel is on screen, not that it has the cursor.
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(button.classList.contains("selected")).toBe(true);
+
+    // Again, and focus goes back to the model - the panel stays open.
+    button.click();
+    await conditionPromise(() => !filter.isFocused(), "focus to return to the model");
+    expect(filter.isShowing()).toBe(true);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("keeps the toolbar honest about which panel is on screen", async () => {
+    await openViewer(ANALYSED_MODEL);
+    const filterButton = viewer.element.querySelector('[data-action="filter-panel"]');
+    const resultsButton = viewer.element.querySelector('[data-action="results-panel"]');
+
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    await lumine.workspace.open(RESULTS_PANEL_URI);
+    await conditionPromise(
+      () => resultsButton.getAttribute("aria-pressed") === "true",
+      "the results button to report the panel it can see",
+    );
+    // Both are open but they share a dock, so only one is on screen at a time
+    // and only one button may claim it.
+    expect(filterButton.getAttribute("aria-pressed")).toBe("false");
+
+    const container = lumine.workspace.paneContainerForURI(FILTER_PANEL_URI);
+    container.getActivePane().activateItem(filter);
+    await conditionPromise(
+      () => filterButton.getAttribute("aria-pressed") === "true",
+      "the filter button to take over",
+    );
+    expect(resultsButton.getAttribute("aria-pressed")).toBe("false");
+
+    // A dock nobody has open leaves both of them unpressed, without either
+    // button having been touched.
+    container.hide();
+    await conditionPromise(
+      () => filterButton.getAttribute("aria-pressed") === "false",
+      "both buttons to let go when the dock closes",
+    );
+    expect(resultsButton.getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("gets back to the model from the panel", async () => {
     const filter = await lumine.workspace.open(FILTER_PANEL_URI);
     await openViewer(ANALYSED_MODEL);

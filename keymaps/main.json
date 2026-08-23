@@ -23,8 +23,11 @@
     "l": "graviss:toggle-local-axes",
     "d": "graviss:toggle-section-rendering",
     "b": "graviss:choose-background",
-    "c": "graviss:toggle-filter-panel",
-    "v": "graviss:toggle-results-panel",
+    // Focus rather than show-and-hide: hiding a panel you are looking at is not
+    // something anyone asks for, and a second press should return you to the
+    // model. `graviss:toggle-*` keeps the menu entry and takes no keystroke.
+    "c": "graviss:toggle-focus-filter-panel",
+    "v": "graviss:toggle-focus-results-panel",
     "left": "graviss:move-left",
     "right": "graviss:move-right",
     "up": "graviss:move-up",

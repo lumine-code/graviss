@@ -101,7 +101,9 @@ Commands available in `lumine-workspace`:
 - `graviss:open-source`: open the active or selected `.grv` document as JSON source,
 - `graviss:open-source-on-right`: the same, split to the right of the canvas,
 - `graviss:toggle-filter-panel`: show or hide the panel that narrows which elements are drawn,
-- `graviss:toggle-results-panel`: show or hide the panel that shows the analysis results.
+- `graviss:toggle-results-panel`: show or hide the panel that shows the analysis results,
+- `graviss:toggle-focus-filter-panel`: focus the filter panel, or hand focus back to the model,
+- `graviss:toggle-focus-results-panel`: focus the results panel, or hand focus back to the model.
 
 Commands available in `.graviss-panel`:
 
