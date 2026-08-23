@@ -3093,6 +3093,89 @@ describe("graviss", () => {
     }
   });
 
+  it("moves the model by a displacement field, and puts it back exactly", async () => {
+    const model = {
+      id: "deformed",
+      title: "Deformed",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 6, y: 0, z: 0 },
+          { id: 3, x: 12, y: 0, z: 0 },
+        ],
+        elements: [
+          { id: "B1", kind: "beam", nodeIds: [1, 2], sectionId: "R" },
+          { id: "B2", kind: "beam", nodeIds: [2, 3], sectionId: "R" },
+        ],
+        sections: [{ id: "R", shape: { kind: "rectangle", width: 0.2, height: 0.4 } }],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      const fill = renderer.pickables.find((m) => m.userData.gravissColorKey === "element");
+      const rest = Float32Array.from(fill.instanceMatrix.array);
+      const restNodes = Float32Array.from(renderer.nodePositions);
+
+      // The middle node sags a hundredth of a metre.
+      const deformation = renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: { ids: [2], values: [0, 0, -0.01] },
+        extent: 0.01,
+      });
+
+      // It picks its own scale, aiming the largest displacement at a fraction
+      // of the model rather than at its true size.
+      expect(deformation.automatic).toBe(true);
+      expect(deformation.scale).toBeGreaterThan(1);
+
+      // Both members moved, because both meet that node.
+      expect(Array.from(fill.instanceMatrix.array)).not.toEqual(Array.from(rest));
+      const sagged = renderer.nodePositions[1 * 3 + 2];
+      expect(sagged).toBeLessThan(0);
+      expect(sagged).toBeCloseTo(-0.01 * deformation.scale, 6);
+      // The records the shells and the symbols read say the same thing as the
+      // flat array the members read; two shapes of one answer.
+      expect(renderer.drawnNodes[1].z).toBeCloseTo(sagged, 6);
+      // And the ends did not move at all.
+      expect(renderer.nodePositions[0]).toBe(restNodes[0]);
+
+      // A scale of zero is the undeformed model, bit for bit — which is how a
+      // user checks what moved against what did not.
+      renderer.setDeformationScale(0);
+      expect(Array.from(renderer.nodePositions)).toEqual(Array.from(restNodes));
+      expect(Array.from(fill.instanceMatrix.array)).toEqual(Array.from(rest));
+
+      // A phase runs the same field part of the way, and a negative one runs it
+      // the other way — which is what a mode shape needs.
+      renderer.setDeformationScale(100);
+      renderer.setDeformationPhase(1);
+      const up = renderer.nodePositions[1 * 3 + 2];
+      renderer.setDeformationPhase(-1);
+      expect(renderer.nodePositions[1 * 3 + 2]).toBeCloseTo(-up, 6);
+
+      // Dropping the result puts it back for good.
+      renderer.setResult(null);
+      expect(Array.from(renderer.nodePositions)).toEqual(Array.from(restNodes));
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("greys the part of a section that does not carry", async () => {
     // A welded girder whose lower flange is left out: the section is the whole
     // of it and one area of it is drawn without being counted.
