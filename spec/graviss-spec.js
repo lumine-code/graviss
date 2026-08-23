@@ -1322,7 +1322,14 @@ describe("graviss", () => {
       supports: 4,
       pickables: 3,
     });
-    expect(item.renderer.meshes.members).toBeUndefined();
+    // A model of nothing but shells still owns the switch that hides members,
+    // and that switch works through what is registered — so the group is there
+    // and empty rather than missing, or the toolbar would show members as shown
+    // with nothing answering for them.
+    expect(item.renderer.meshes.members.children.length).toBe(0);
+    item.renderer.setVisibility("members", false);
+    expect(item.renderer.meshes.members.visible).toBe(false);
+    item.renderer.setVisibility("members", true);
     expect(item.renderer.meshes.shells.isMesh).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEntityRanges.length).toBe(4900);
     expect([...item.renderer.meshes.shells.userData.gravissFaceToEntityIndex.slice(0, 4)]).toEqual([
@@ -3036,6 +3043,33 @@ describe("graviss", () => {
       // One switch covers the members, whatever they carry.
       renderer.setVisibility("members", false);
       expect(renderer.meshes.members.visible).toBe(false);
+      renderer.setVisibility("members", true);
+
+      // Rebuilding the members paints what it built. The fill is drawn by
+      // vertex colour and a fresh bake carries an attribute of zeros, so a
+      // rebuild that left it alone would render every member black.
+      renderer.setSectionRendering(true);
+      const painted = () => {
+        const mesh = renderer.pickables.find((m) => m.userData.gravissColorKey === "element");
+        const colors = mesh.geometry.getAttribute("color").array;
+        return [...colors].some((value) => value > 0);
+      };
+      expect(painted()).toBe(true);
+      renderer.rebuildMemberMeshes();
+      expect(painted()).toBe(true);
+
+      // And a selection does not outlive the geometry it was picked from.
+      const mesh = renderer.pickables.find((m) => m.userData.gravissColorKey === "element");
+      renderer.setSelected({
+        type: "element",
+        entity: mesh.userData.gravissEntities[0],
+        entityIndex: 0,
+        instanceId: 0,
+        object: mesh,
+      });
+      expect(renderer.selected).not.toBeNull();
+      renderer.rebuildMemberMeshes();
+      expect(renderer.selected).toBeNull();
     } finally {
       viewer.destroy();
     }
