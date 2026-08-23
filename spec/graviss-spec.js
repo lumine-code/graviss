@@ -3733,6 +3733,40 @@ describe("graviss", () => {
       renderer.setDeformationScale(0);
       expect(renderer.bendFactor.value).toBe(0);
 
+      // A member drawn as its centreline bends by the same cubic, because it is
+      // the same member - it just has no card doing it, having no vertices
+      // between its ends to bend. The run becomes the chain of short segments
+      // it takes to look like a curve.
+      renderer.setDeformationScale(1);
+      renderer.setDeformationPhase(1);
+      renderer.setSectionRendering(false);
+      const line = renderer.memberLines.geometry.getAttribute("position");
+      const range = renderer.memberLines.userData.gravissEntityRanges[first];
+      expect(range.count).toBe(renderer.memberBendSteps * 2);
+      // Mid-span of the bent member, against the straight line between its own
+      // two ends. A cantilever's curve stands above its chord.
+      const middle = range.start + renderer.memberBendSteps;
+      const chordZ = (line.getZ(range.start) + line.getZ(range.start + range.count - 1)) / 2;
+      expect(line.getZ(middle) - chordZ).toBeCloseTo(0.09375, 5);
+      // And the member the result said nothing about is straight, as it should
+      // be: every point of it on the line between its ends.
+      const plain = renderer.memberLines.userData.gravissEntityRanges[second];
+      const plainMiddle = plain.start + renderer.memberBendSteps;
+      const plainChord = (line.getZ(plain.start) + line.getZ(plain.start + plain.count - 1)) / 2;
+      expect(line.getZ(plainMiddle) - plainChord).toBeCloseTo(0, 9);
+      // A filter reaches the centrelines too. With sections off these are the
+      // only members there are, so one that did not would be a filter that
+      // worked in one display mode and not the other.
+      renderer.setElementFilter(createElementFilter({ numbers: "2" }));
+      const collapsed = renderer.memberLines.userData.gravissEntityRanges[first];
+      const only = new Set();
+      for (let vertex = collapsed.start; vertex < collapsed.start + collapsed.count; vertex += 1) {
+        only.add(`${line.getX(vertex)}:${line.getY(vertex)}:${line.getZ(vertex)}`);
+      }
+      expect(only.size).toBe(1);
+      renderer.setElementFilter(null);
+      renderer.setSectionRendering(true);
+
       // And a result that goes away takes the tessellation with it.
       renderer.setResult(null);
       expect(renderer.memberBendSteps).toBe(1);

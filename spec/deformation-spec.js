@@ -5,6 +5,7 @@ const {
   alignToNodes,
   automaticScale,
   extentOf,
+  memberBow,
 } = require("../lib/deformation");
 const { Animation, CYCLE_IDS, defaultCycle, phaseOf } = require("../lib/animation");
 const { STOPS, colorScaleStops, sampleColorScale } = require("../lib/color-scale");
@@ -272,5 +273,55 @@ describe("displacement magnitudes", () => {
     expect(Array.from(moved.magnitudes)).toEqual([5, 0, 1]);
     moved.setResult(null);
     expect(moved.magnitudes).toBeNull();
+  });
+});
+
+describe("memberBow", () => {
+  // A ten-metre cantilever whose tip drops half a metre. Its tip slope is one
+  // and a half times the deflection over the length, which is what a cantilever
+  // under a point load at its end does.
+  const TIP = -0.5;
+  const SLOPE = (1.5 * 0.5) / 10;
+  const CANTILEVER = [
+    { x: 0, u: [0, 0, 0], phi: [0, 0, 0] },
+    { x: 10, u: [0, 0, TIP], phi: [0, SLOPE, 0] },
+  ];
+
+  it("is nothing at either end, because the ends are already where they went", () => {
+    expect(memberBow(CANTILEVER, 10, 0)).toEqual({ y: 0, z: 0 });
+    expect(memberBow(CANTILEVER, 10, 1).y).toBeCloseTo(0, 12);
+    expect(memberBow(CANTILEVER, 10, 1).z).toBeCloseTo(0, 12);
+  });
+
+  it("stands the cantilever off its own chord by what the cubic says", () => {
+    // At mid-span the four basis values are 1/2, 1/8, 1/2 and -1/8, so the
+    // curve sits at -0.15625 where the straight line sits at -0.25.
+    expect(memberBow(CANTILEVER, 10, 0.5).z).toBeCloseTo(0.09375, 12);
+    // Bending about the local y axis moves a member along local z and not
+    // along local y - a bow that leaked across would be a sign error.
+    expect(memberBow(CANTILEVER, 10, 0.5).y).toBeCloseTo(0, 12);
+  });
+
+  it("bows a member whose ends did not move at all but turned", () => {
+    // Both ends held, the far one turned about local z: the member has to leave
+    // the line between them, and it leaves it on the side the rotation implies.
+    const turned = [
+      { x: 0, u: [0, 0, 0], phi: [0, 0, 0] },
+      { x: 4, u: [0, 0, 0], phi: [0, 0, 0.01] },
+    ];
+    expect(memberBow(turned, 4, 0.5).y).toBeCloseTo(-0.125 * 4 * 0.01, 12);
+    expect(memberBow(turned, 4, 0.5).z).toBeCloseTo(0, 12);
+  });
+
+  it("has no bow to give without two stations, a length, or a member at all", () => {
+    expect(memberBow(null, 10, 0.5)).toEqual({ y: 0, z: 0 });
+    expect(memberBow([CANTILEVER[0]], 10, 0.5)).toEqual({ y: 0, z: 0 });
+    expect(memberBow(CANTILEVER, 0, 0.5)).toEqual({ y: 0, z: 0 });
+    // A station that states no rotation is a station with none, not an error.
+    const flat = [
+      { x: 0, u: [0, 0, 0] },
+      { x: 10, u: [0, 0, TIP] },
+    ];
+    expect(memberBow(flat, 10, 0.5).z).toBeCloseTo(0, 12);
   });
 });
