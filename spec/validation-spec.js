@@ -28,6 +28,18 @@ describe("Graviss model validation", () => {
     expect(bounds.max).toEqual([8, 10, 7]);
     expect(bounds.center).toEqual([4, 5, 3.5]);
     expect(bounds.radius).toBeCloseTo(7.297, 3);
+    // A portal frame has extent along all three axes, so there is no plane to
+    // name and nothing to look at face on.
+    expect(bounds.planeNormal).toBeNull();
+
+    // Nor is there one when the nodes run in a straight line: a line lies in
+    // infinitely many planes and none of them is the model's.
+    const line = createMain1Geometry();
+    for (const node of line.nodes) {
+      node.y = 0;
+      node.z = 0;
+    }
+    expect(geometryBounds(line).planeNormal).toBeNull();
   });
 
   it("accepts the 5k-node quadrilateral shell geometry", async () => {
@@ -39,12 +51,20 @@ describe("Graviss model validation", () => {
       geometry.elements.every(({ kind, nodeIds }) => kind === "shell" && nodeIds.length === 4),
     ).toBe(true);
     expect(geometry.supports.length).toBe(4);
+    // Every node of a slab lies in one plane, and the axis it has no extent
+    // along is that plane's normal — measured, so a source states nothing.
     expect(geometryBounds(geometry)).toEqual({
       min: [-20, -20, 0],
       max: [20, 20, 0],
       center: [0, 0, 0],
       radius: Math.hypot(40, 40) / 2,
+      planeNormal: [0, 0, 1],
     });
+
+    // A slab with any depth to it at all is a body, not a plane.
+    const domed = createMain2Geometry();
+    domed.nodes[12].z = 0.001;
+    expect(geometryBounds(domed).planeNormal).toBeNull();
 
     const description = validateDescription(await new TestSession(SHELL_MODEL).describe());
     expect(description.capabilities.geometry.elementKinds).toEqual(["shell"]);

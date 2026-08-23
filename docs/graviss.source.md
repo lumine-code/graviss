@@ -185,6 +185,8 @@ Graviss always calls `describe()` before requesting geometry. Geometry validatio
 
 Geometry remains in the provider's model coordinate system. Graviss does not rotate, reflect, swap, or translate it. The signed `coordinateSystem.upAxis` controls the physical-up direction used by orbit navigation, standard views, the view cube, the reference grid, and support symbols; global and local axis graphics continue to show the model's original X, Y, and Z directions.
 
+**A planar model is recognised from its own nodes, and a provider states nothing.** Where every node lies in a plane normal to a global axis, and the nodes span that plane rather than a line, Graviss first shows the model along that normal instead of from the isometric corner, and lays its reference grid in the model's own plane a step behind it. A plane frame, a grillage, a slab meshed flat and a cross-section all read the same way to a viewer, whatever the source calls the system they came from, and the measurement is exact where a declaration could only ever agree with it.
+
 ### Discovery
 
 **Graviss opens `.grv` documents and nothing else.** A provider never registers a file extension or an opener of its own; a model is always reached through the view document that names it. `createSession` receives that document and its path, and the provider either honours an explicit `source` field or looks for a model with the same basename beside it.

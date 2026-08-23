@@ -3022,6 +3022,61 @@ describe("graviss", () => {
     }
   });
 
+  it("opens a planar model on its own plane, with its grid behind it", async () => {
+    // The shell fixture is a slab in the model's x-y plane, and a model that
+    // lies in a plane has nothing to see from anywhere but face on.
+    const item = mainModule.createViewer(new TestSession(SHELL_MODEL), {
+      title: SHELL_MODEL.title,
+    });
+    jasmine.attachToDOM(item.element);
+    try {
+      await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+      const renderer = item.renderer;
+      expect(renderer.bounds.planeNormal).toEqual([0, 0, 1]);
+      expect(renderer.planeView().viewId).toBe("top");
+
+      // Looked at along the plane's normal rather than from the isometric
+      // corner a model with three dimensions opens at.
+      const offset = renderer.camera.position.clone().sub(renderer.controls.target).normalize();
+      expect(Math.abs(offset.z)).toBeCloseTo(1, 6);
+
+      // The grid lies in the model's plane instead of the horizontal one — for
+      // a slab those are the same plane — and stands off it far enough not to
+      // rule lines across what is meshed there.
+      const gridNormal = new renderer.THREE.Vector3(0, 1, 0).applyQuaternion(
+        renderer.grid.quaternion,
+      );
+      expect(Math.abs(gridNormal.z)).toBeCloseTo(1, 6);
+      expect(renderer.grid.position.z).toBeCloseTo(
+        -Math.sign(gridNormal.z) * renderer.bounds.radius * 0.02,
+        6,
+      );
+    } finally {
+      item.destroy();
+    }
+  });
+
+  it("opens a model with three dimensions at the isometric corner", async () => {
+    const item = mainModule.createViewer(new TestSession(FRAME_MODEL), {
+      title: FRAME_MODEL.title,
+    });
+    jasmine.attachToDOM(item.element);
+    try {
+      await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+      const renderer = item.renderer;
+      expect(renderer.bounds.planeNormal).toBeNull();
+      expect(renderer.planeView()).toBeNull();
+      // Every component of the offset is doing something, which is what makes
+      // it a corner rather than a face.
+      const offset = renderer.camera.position.clone().sub(renderer.controls.target).normalize();
+      for (const component of offset.toArray()) expect(Math.abs(component)).toBeGreaterThan(0.2);
+      // And its grid is the ground at the world origin, as it always was.
+      expect(renderer.grid.position.z).toBeCloseTo(0, 6);
+    } finally {
+      item.destroy();
+    }
+  });
+
   it("grades the background lighter towards the top when asked", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
