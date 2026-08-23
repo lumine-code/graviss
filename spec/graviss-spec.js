@@ -3305,6 +3305,82 @@ describe("graviss", () => {
     }
   });
 
+  it("reads the model as a field when asked, and as a structure otherwise", async () => {
+    const model = {
+      id: "coloured",
+      title: "Coloured",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 6, y: 0, z: 0 },
+          { id: 3, x: 12, y: 0, z: 0 },
+        ],
+        elements: [
+          { id: "B1", kind: "beam", nodeIds: [1, 2], sectionId: "R" },
+          { id: "B2", kind: "beam", nodeIds: [2, 3], sectionId: "R" },
+        ],
+        sections: [{ id: "R", shape: { kind: "rectangle", width: 0.2, height: 0.4 } }],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      const fill = renderer.pickables.find((m) => m.userData.gravissColorKey === "element");
+      const of = (id) => {
+        const index = fill.userData.gravissEntities.findIndex((entity) => entity.id === id);
+        const at = fill.userData.gravissEntityRanges[index].start * 3;
+        return Array.from(fill.instanceColor.array.slice(at, at + 3));
+      };
+      const structure = of("B1");
+
+      // A model with nothing to read is still read as a structure, whatever the
+      // switch says.
+      expect(renderer.setColorByDisplacement(true)).toBe(true);
+      expect(renderer.colorScaleRange()).toBeNull();
+      expect(of("B1")).toEqual(structure);
+
+      // Only the far end moves, so the two elements cannot be the same colour.
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: { ids: [2, 3], values: [0, 0, -0.005, 0, 0, -0.02] },
+        extent: 0.02,
+      });
+      expect(renderer.colorScaleRange()).toEqual({ min: 0, max: 0.02 });
+      expect(of("B1")).not.toEqual(structure);
+      expect(of("B2")).not.toEqual(of("B1"));
+      // The scale starts at not having moved, so the element nearer the support
+      // sits lower on it - blue over red, and the ramp is blue at the bottom.
+      expect(of("B1")[2]).toBeGreaterThan(of("B1")[0]);
+      expect(of("B2")[0]).toBeGreaterThan(of("B2")[2]);
+
+      // The phase moves the whole field at once, so it changes no colour.
+      const painted = of("B2");
+      renderer.setDeformationPhase(0.25);
+      renderer.refreshInstanceColors();
+      expect(of("B2")).toEqual(painted);
+
+      // And a selection still says what is selected.
+      renderer.setColorByDisplacement(false);
+      expect(of("B1")).toEqual(structure);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("moves the model by a displacement field, and puts it back exactly", async () => {
     const model = {
       id: "deformed",

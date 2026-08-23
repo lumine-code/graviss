@@ -346,6 +346,8 @@ describe("GravissViewDocument", () => {
           sectionRendering: "yes",
           visibility: { grid: "off", axes: true },
           printRegion: { x: -1, y: 0, width: 4, height: 4 },
+          filter: { numbers: 110001, facets: { group: [11] } },
+          results: { loadCaseId: 101, scale: -3 },
         },
       ],
     });
@@ -356,6 +358,42 @@ describe("GravissViewDocument", () => {
     expect("sectionRendering" in bad.graphics[0]).toBe(false);
     expect("visibility" in bad.graphics[0]).toBe(false);
     expect("printRegion" in bad.graphics[0]).toBe(false);
+    // A whole block goes rather than the one field that could not be read: a
+    // filter half applied is a model showing something nobody asked for.
+    expect("filter" in bad.graphics[0]).toBe(false);
+    expect("results" in bad.graphics[0]).toBe(false);
+
+    // The two blocks a panel writes, kept as they were stated. The expression is
+    // held verbatim rather than as whatever it parsed to, because it is what the
+    // field has to show the user again.
+    const narrowed = normalizeViewDocument({
+      graphics: [
+        {
+          filter: { numbers: "1-10,15,1*,11??", facets: { group: [11, 12], material: ["C30"] } },
+          results: {
+            loadCaseId: 101,
+            scale: "auto",
+            cycle: "pingPong",
+            period: 1500,
+            playing: true,
+            colorByDisplacement: true,
+          },
+        },
+      ],
+    });
+    expect(narrowed.graphics[0].filter).toEqual({
+      numbers: "1-10,15,1*,11??",
+      facets: { group: [11, 12], material: ["C30"] },
+    });
+    expect(narrowed.graphics[0].results.scale).toBe("auto");
+    expect(narrowed.graphics[0].results.playing).toBe(true);
+    // An empty block is a block, and says nothing rather than being refused.
+    expect(normalizeViewDocument({ graphics: [{ filter: {} }] }).graphics[0].filter).toEqual({});
+    // A cycle nobody implements is not a cycle.
+    expect(
+      "results" in
+        normalizeViewDocument({ graphics: [{ results: { cycle: "spin" } }] }).graphics[0],
+    ).toBe(false);
 
     // What it can be read to mean, it keeps.
     const good = normalizeViewDocument({

@@ -7,6 +7,7 @@ const {
   extentOf,
 } = require("../lib/deformation");
 const { Animation, CYCLE_IDS, defaultCycle, phaseOf } = require("../lib/animation");
+const { STOPS, colorScaleStops, sampleColorScale } = require("../lib/color-scale");
 
 const NODES = [
   { id: 1, x: 0, y: 0, z: 0 },
@@ -230,5 +231,46 @@ describe("Animation", () => {
     expect(animation.setPeriod(0)).toBe(2000);
     expect(animation.setPeriod(-5)).toBe(2000);
     expect(animation.setPeriod(10)).toBe(50);
+  });
+});
+
+describe("the colour scale", () => {
+  it("runs from one end of the ramp to the other and stops there", () => {
+    expect(sampleColorScale(0)).toEqual([...STOPS[0]]);
+    expect(sampleColorScale(1)).toEqual([...STOPS.at(-1)]);
+    // A value off either end is drawn as that end rather than as nothing.
+    expect(sampleColorScale(-2)).toEqual([...STOPS[0]]);
+    expect(sampleColorScale(4)).toEqual([...STOPS.at(-1)]);
+    expect(sampleColorScale(Number.NaN)).toEqual([...STOPS[0]]);
+  });
+
+  it("lands on each stop and interpolates between them", () => {
+    STOPS.forEach((stop, index) => {
+      const sampled = sampleColorScale(index / (STOPS.length - 1));
+      sampled.forEach((channel, part) => expect(channel).toBeCloseTo(stop[part], 6));
+    });
+    const middle = sampleColorScale(0.125);
+    middle.forEach((channel, part) =>
+      expect(channel).toBeCloseTo((STOPS[0][part] + STOPS[1][part]) / 2, 6),
+    );
+  });
+
+  it("states its stops as colours a legend can be painted with", () => {
+    expect(colorScaleStops().length).toBe(STOPS.length);
+    expect(colorScaleStops()[0]).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
+  });
+});
+
+describe("displacement magnitudes", () => {
+  it("measures how far each node went, once, whatever the phase is", () => {
+    const moved = new Deformation({ nodes: NODES, indexOfId, radius: 10 });
+    moved.setResult(fieldOf([3, 4, 0, 0, 0, 0, 0, 0, 1]));
+    expect(Array.from(moved.magnitudes)).toEqual([5, 0, 1]);
+    // The phase scales every node by the same factor, so it moves the field up
+    // and down without changing which parts of it are the larger ones.
+    moved.setPhase(0.5);
+    expect(Array.from(moved.magnitudes)).toEqual([5, 0, 1]);
+    moved.setResult(null);
+    expect(moved.magnitudes).toBeNull();
   });
 });
