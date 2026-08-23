@@ -3022,6 +3022,107 @@ describe("graviss", () => {
     }
   });
 
+  it("greys the part of a section that does not carry", async () => {
+    // A welded girder whose lower flange is left out: the section is the whole
+    // of it and one area of it is drawn without being counted.
+    const flange = [
+      [-0.13, 0.498],
+      [0.13, 0.498],
+      [0.13, 0.515],
+      [-0.13, 0.515],
+    ];
+    const geometry = {
+      nodes: [
+        { id: 1, x: 0, y: 0, z: 0 },
+        { id: 2, x: 6, y: 0, z: 0 },
+      ],
+      sections: [
+        {
+          id: "G",
+          shape: {
+            kind: "plates",
+            plates: [
+              { from: [0, -0.498], to: [0, 0.498], thickness: 0.01 },
+              { from: [-0.13, -0.5065], to: [0.13, -0.5065], thickness: 0.017 },
+              { from: [-0.13, 0.5065], to: [0.13, 0.5065], thickness: 0.017 },
+            ],
+          },
+          ineffective: [{ points: flange }],
+        },
+      ],
+      elements: [
+        {
+          id: 1,
+          kind: "beam",
+          nodeIds: [1, 2],
+          sectionId: "G",
+          localAxes: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+        },
+      ],
+      supports: [],
+    };
+    const session = {
+      async describe() {
+        return {
+          model: {
+            id: "ineffective",
+            title: "Ineffective",
+            source: "Spec",
+            coordinateSystem: { upAxis: "z", handedness: "right" },
+          },
+          capabilities: { geometry: { elementKinds: ["beam"], sections: true, localAxes: true } },
+        };
+      },
+      async getGeometry() {
+        return geometry;
+      },
+      dispose() {},
+    };
+    const item = mainModule.createViewer(session, { title: "Ineffective" });
+    jasmine.attachToDOM(item.element);
+    try {
+      await conditionPromise(() => item.renderer != null, "the section scene to initialize");
+      const renderer = item.renderer;
+
+      // Two fills for one member: the section, and the area of it that does
+      // not carry, stamped through the same matrices so the two are exactly
+      // coincident where they meet.
+      const fills = renderer.pickables.filter(
+        (mesh) => mesh.userData.visibilityKey === "members" && mesh.isMesh,
+      );
+      expect(fills.length).toBe(2);
+      const greyed = fills.find((mesh) => mesh.userData.gravissColorKey === "ineffective");
+      expect(greyed).not.toBeUndefined();
+      // One rectangle extruded: the twelve triangles of a box.
+      expect(greyed.geometry.getAttribute("position").count).toBe(36);
+      // It draws after the member so it wins every depth tie it makes.
+      expect(greyed.renderOrder).toBeGreaterThan(fills.find((mesh) => mesh !== greyed).renderOrder);
+
+      // Grey, and nothing like the member colour beside it.
+      const member = renderer.colors.element;
+      const ineffective = renderer.colors.ineffective;
+      expect(ineffective).not.toBeUndefined();
+      const saturation = (color) => {
+        const hsl = { h: 0, s: 0, l: 0 };
+        color.getHSL(hsl);
+        return hsl.s;
+      };
+      expect(saturation(ineffective)).toBeLessThan(saturation(member));
+      // Every scheme carries one, so switching never leaves it undefined.
+      for (const scheme of ["cloud", "midnight", "paper", "white"]) {
+        renderer.setAppearance(scheme);
+        expect(renderer.colors.ineffective).not.toBeUndefined();
+        expect(saturation(renderer.colors.ineffective)).toBeLessThan(0.35);
+      }
+
+      // It hides and shows with the member it belongs to, being part of it.
+      renderer.setVisibility("members", false);
+      expect(renderer.meshes.members.visible).toBe(false);
+    } finally {
+      item.destroy();
+    }
+  });
+
   it("opens a planar model on its own plane, with its grid behind it", async () => {
     // The shell fixture is a slab in the model's x-y plane, and a model that
     // lies in a plane has nothing to see from anywhere but face on.

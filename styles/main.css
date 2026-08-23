@@ -160,6 +160,7 @@
 .graviss[data-appearance="cloud"] {
   --graviss-background: #dcedfa;
   --graviss-member: #5e8bb1;
+  --graviss-ineffective: #9aa4ac;
   --graviss-shell: #85b2d7;
   --graviss-shell-edge: #2a4359;
   --graviss-node: #61b571;
@@ -176,6 +177,7 @@
 .graviss[data-appearance="midnight"] {
   --graviss-background: #101b24;
   --graviss-member: #aad2ef;
+  --graviss-ineffective: #7d858c;
   --graviss-shell: #6995b6;
   --graviss-shell-edge: #c4dbe9;
   --graviss-node: #85e2a6;
@@ -192,6 +194,7 @@
 .graviss[data-appearance="paper"] {
   --graviss-background: #eee9df;
   --graviss-member: #5c809d;
+  --graviss-ineffective: #968f83;
   --graviss-shell: #84aecb;
   --graviss-shell-edge: #304956;
   --graviss-node: #61aa73;
@@ -208,6 +211,7 @@
 .graviss[data-appearance="white"] {
   --graviss-background: #ffffff;
   --graviss-member: #5e8bb1;
+  --graviss-ineffective: #a4adb4;
   --graviss-shell: #85b2d7;
   --graviss-shell-edge: #2a4359;
   --graviss-node: #61b571;

@@ -232,6 +232,26 @@ describe("Graviss model validation", () => {
     expect(() => validateGeometry(geometry)).toThrowError(/plates must be a non-empty array/);
     geometry.sections.pop();
 
+    // The parts of a section that do not carry are plain areas in its own
+    // plane, spelt exactly as a polygon's parts are.
+    geometry.sections[0].ineffective = [
+      {
+        points: [
+          [-0.1, -0.15],
+          [0.1, -0.15],
+          [0.1, -0.05],
+          [-0.1, -0.05],
+        ],
+      },
+    ];
+    expect(validateGeometry(geometry)).toBe(geometry);
+    geometry.sections[0].ineffective[0].points.pop();
+    geometry.sections[0].ineffective[0].points.pop();
+    expect(() => validateGeometry(geometry)).toThrowError(/at least three/);
+    geometry.sections[0].ineffective = [];
+    expect(() => validateGeometry(geometry)).toThrowError(/must be a non-empty array/);
+    delete geometry.sections[0].ineffective;
+
     geometry.elements[0].localAxes.z = [0, 0, 0];
     expect(() => validateGeometry(geometry)).toThrowError(/must not be zero/);
   });
