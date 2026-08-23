@@ -588,6 +588,20 @@ describe("graviss", () => {
         },
         [1, 0.4, 0.25],
       ],
+      // A welded plate girder: a web trimmed to the inner face of each flange,
+      // so the three bands abut and the section stands 2 x 0.5065 + 0.017 deep
+      // rather than the 0.996 of the web's own run.
+      [
+        {
+          kind: "plates",
+          plates: [
+            { from: [0, -0.498], to: [0, 0.498], thickness: 0.01 },
+            { from: [-0.13, -0.5065], to: [0.13, -0.5065], thickness: 0.017 },
+            { from: [-0.13, 0.5065], to: [0.13, 0.5065], thickness: 0.017 },
+          ],
+        },
+        [1, 0.26, 1.03],
+      ],
     ];
     for (const [shape, expectedSize] of sectionCases) {
       const sectionGeometry = item.renderer.createSectionGeometry(shape);
@@ -2837,6 +2851,79 @@ describe("graviss", () => {
       renderer.setVisibility("springs", false);
       expect(renderer.meshes.springs.visible).toBe(false);
       expect(renderer.meshes.couplings.visible).toBe(true);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("draws trusses and cables as members, section and all", async () => {
+    const model = {
+      id: "members",
+      title: "Members",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 4, y: 0, z: 0 },
+          { id: 3, x: 8, y: 0, z: 0 },
+          { id: 4, x: 12, y: 0, z: 0 },
+        ],
+        // A truss and a cable are structure, so they are drawn as members
+        // beside the beams rather than as marks. Neither states local axes —
+        // an axial member has no bending for a section orientation to matter
+        // to, and a source that has none says none.
+        elements: [
+          {
+            id: "B1",
+            kind: "beam",
+            nodeIds: [1, 2],
+            sectionId: "S1",
+            localAxes: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+          },
+          { id: "T1", kind: "truss", nodeIds: [2, 3], sectionId: "S1" },
+          { id: "K1", kind: "cable", nodeIds: [3, 4], sectionId: "S1" },
+        ],
+        sections: [{ id: "S1", shape: { kind: "rectangle", width: 0.2, height: 0.3 } }],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      expect(renderer.getSceneSummary().members).toBe(3);
+      expect(viewer.getGeometrySummary().members).toBe(3);
+
+      // All three share one section, so they are baked into one fill: three
+      // boxes of thirty-six vertices, one entity range each.
+      const memberMesh = renderer.pickables.find(
+        (mesh) => mesh.userData.gravissColorKey === "element",
+      );
+      expect(memberMesh.userData.gravissEntityRanges.length).toBe(3);
+      expect(memberMesh.geometry.getAttribute("position").count).toBe(108);
+      const box = new renderer.THREE.Box3().setFromObject(renderer.meshes.members);
+      expect(box.min.x).toBeCloseTo(0, 5);
+      expect(box.max.x).toBeCloseTo(12, 5);
+
+      // Section rendering off puts every member back on its centreline, and
+      // the axial ones go with the beam rather than disappearing.
+      renderer.setSectionRendering(false);
+      expect(renderer.getSceneSummary().members).toBe(3);
+      const lines = renderer.pickables.find((mesh) => mesh.userData.gravissLineSegments);
+      expect(lines.userData.gravissEntityRanges.length).toBe(3);
+
+      // One switch covers the members, whatever they carry.
+      renderer.setVisibility("members", false);
+      expect(renderer.meshes.members.visible).toBe(false);
     } finally {
       viewer.destroy();
     }

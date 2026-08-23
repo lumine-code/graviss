@@ -85,6 +85,31 @@ describe("Graviss model validation", () => {
     expect(() => validateGeometry(zeroArea)).toThrowError(/zero area|repeats shell nodes/);
   });
 
+  it("accepts trusses and cables as members, and holds them to two nodes of some length", async () => {
+    const description = validateDescription(await new TestSession(FRAME_MODEL).describe());
+    for (const kind of ["truss", "cable"]) {
+      const geometry = createMain1Geometry();
+      geometry.elements[0].kind = kind;
+      expect(validateGeometry(geometry)).toBe(geometry);
+
+      // A provider says which kinds it reads, and these are two of them.
+      description.capabilities.geometry.elementKinds = ["beam", kind];
+      expect(validateDescription(description)).toBe(description);
+
+      const oneNode = createMain1Geometry();
+      oneNode.elements[0].kind = kind;
+      oneNode.elements[0].nodeIds = [oneNode.elements[0].nodeIds[0]];
+      expect(() => validateGeometry(oneNode)).toThrowError(new RegExp(`2 node IDs for a ${kind}`));
+
+      // The zero-length refusal is the members' own, not the beam's: a member
+      // of no length has no axis to orient its section about.
+      const zeroLength = createMain1Geometry();
+      zeroLength.elements[0].kind = kind;
+      zeroLength.elements[0].nodeIds[1] = zeroLength.elements[0].nodeIds[0];
+      expect(() => validateGeometry(zeroLength)).toThrowError(/zero length/);
+    }
+  });
+
   it("validates section shapes, references, thickness, and local axes", () => {
     const geometry = createMain1Geometry();
     geometry.sections = [
@@ -162,6 +187,31 @@ describe("Graviss model validation", () => {
     geometry.sections[1].shape.parts[1].points = [[0, 0]];
     expect(() => validateGeometry(geometry)).toThrowError(/at least three/);
     geometry.sections.pop();
+
+    // A thin-walled section is the plates it is built from, each a run of one
+    // thickness, and every run has to go somewhere.
+    geometry.sections.push({
+      id: "T1",
+      shape: {
+        kind: "plates",
+        plates: [
+          { from: [0, -0.498], to: [0, 0.498], thickness: 0.01 },
+          { from: [-0.13, 0.5065], to: [0.13, 0.5065], thickness: 0.017 },
+        ],
+      },
+    });
+    expect(validateGeometry(geometry)).toBe(geometry);
+    geometry.sections[1].shape.plates[0].thickness = 0;
+    expect(() => validateGeometry(geometry)).toThrowError(/thickness must be a positive/);
+    geometry.sections[1].shape.plates[0].thickness = 0.01;
+    geometry.sections[1].shape.plates[1].to = [-0.13, 0.5065];
+    expect(() => validateGeometry(geometry)).toThrowError(/two different points/);
+    geometry.sections[1].shape.plates[1].to = [0.13, Number.NaN];
+    expect(() => validateGeometry(geometry)).toThrowError(/two finite coordinates/);
+    geometry.sections[1].shape.plates = [];
+    expect(() => validateGeometry(geometry)).toThrowError(/plates must be a non-empty array/);
+    geometry.sections.pop();
+
     geometry.elements[0].localAxes.z = [0, 0, 0];
     expect(() => validateGeometry(geometry)).toThrowError(/must not be zero/);
   });

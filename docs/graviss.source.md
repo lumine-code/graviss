@@ -69,7 +69,7 @@ type ModelDescription = {
     geometry:
       | true
       | {
-          elementKinds: ("beam" | "shell")[];
+          elementKinds: ("beam" | "truss" | "cable" | "shell" | "spring" | "coupling")[];
           supports?: boolean;
           sections?: boolean;
           localAxes?: boolean;
@@ -88,7 +88,7 @@ type Node = { id: Id; x: number; y: number; z: number };
 
 type Element = {
   id: Id;
-  kind: "beam" | "shell" | "spring" | "coupling";
+  kind: "beam" | "truss" | "cable" | "shell" | "spring" | "coupling";
   nodeIds: [Id] | [Id, Id] | [Id, Id, Id] | [Id, Id, Id, Id];
   sectionId?: Id;
   thickness?: number | number[];
@@ -121,11 +121,21 @@ type Section = {
         flangeThickness: number;
       }
     | { kind: "polygon"; points: [number, number][]; holes?: [number, number][][] }
-    | { kind: "polygon"; parts: { points: [number, number][]; holes?: [number, number][][] }[] };
+    | { kind: "polygon"; parts: { points: [number, number][]; holes?: [number, number][][] }[] }
+    | {
+        kind: "plates";
+        plates: { from: [number, number]; to: [number, number]; thickness: number }[];
+      };
 };
 ```
 
 `id` and `createSession` are the required provider fields. `describe`, `getGeometry`, and `dispose` are the required session methods.
+
+### Line elements
+
+**`beam`, `truss` and `cable` are all drawn as members** — a run of structure between two nodes, drawn as its centreline or as its section extruded along it. They are separate kinds because they carry different things: a beam bends, a truss takes axial force alone, and a cable takes only tension. That decides the analysis and not the picture, so a provider says which it read and Graviss draws all three the same way, under one visibility switch and in one colour.
+
+A truss or a cable is usually stored without a cross-section orientation, because it has no bending for one to matter to. A provider that has none states no `localAxes` and Graviss chooses the roll about the member's own axis; a provider that has one states it, and it is honoured exactly as a beam's is. Either way the member's own axis is the run between its two nodes and never the provider's to state.
 
 ### How much of an element is drawn
 
@@ -138,6 +148,8 @@ Graviss draws line and area elements at one of three levels, and the user switch
 | `full`    | its cross-section, extruded | extruded to its real thickness | the above, plus `thickness` on area elements                          |
 
 A provider that supplies no section falls back to a thin centreline, and one that supplies no thickness draws its area elements flat. Neither is an error: the model is drawn as completely as it was described.
+
+A `plates` section is a **thin-walled** one: a cross-section that is not a filled outline but the plates it is built from — a welded plate girder, a rolled angle, a cold-formed channel. Each plate is a straight run of material of one thickness, and the run given is its **middle**: the plate stands half a thickness either side of it and ends square at both ends, so a source that trims two plates to meet has them drawn meeting. Nothing extends or mitres a corner, because lengthening a plate would put material in the section that the source did not put there, and nothing merges the plates into one outline — the seam between two of them is an edge the section really has. Plates may be given in any order and need not touch: the section is what stands where they stand.
 
 An area element's `thickness` may be one number or one per node, in the order its nodes are given. A list is how an element that tapers across itself is described, and it is drawn tapering rather than as parallel plates of its first corner's thickness. A list shorter than the element has nodes repeats its last value. Neighbouring elements that state single numbers which differ are drawn meeting at their mean at the nodes they share — a thickness that varies across a run of elements describes a surface, not a stair — and a single `offset` is read the same way; a list is exact and never averaged. Every corner is displaced along the surface normal at its own node, so a warped quad — four base nodes off one plane — extrudes as the warped surface it is, and a folded or curved run extrudes as one continuous solid.
 
