@@ -288,6 +288,55 @@ describe("the Graviss dock panels", () => {
     expect(document.activeElement).toBe(second.field);
   });
 
+  it("reorders rules by dragging the grip", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+    viewer.applyFilterState({
+      rules: [
+        { sign: "+", type: "@kind", text: "beam" },
+        { sign: "+", type: "@kind", text: "truss" },
+      ],
+    });
+
+    const rows = () => [...filter.list.querySelectorAll(".graviss-rule-row")];
+    const [first, second] = rows();
+
+    // The drag starts on the grip and carries the rule's own id under the
+    // panel's own type - which is also what gates dragover, read from `items`
+    // because that is the half of a DataTransfer a synthetic event can carry.
+    const dataTransfer = {
+      data: {},
+      setData(key, value) {
+        this.data[key] = String(value);
+      },
+      getData(key) {
+        return this.data[key];
+      },
+      get items() {
+        return Object.keys(this.data).map((type) => ({ type }));
+      },
+    };
+    const dragstart = new MouseEvent("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragstart, "dataTransfer", { value: dataTransfer });
+    first.querySelector(".graviss-rule-grip").dispatchEvent(dragstart);
+    expect(dataTransfer.getData("graviss-filter-rule-event")).toBe(first.dataset.ruleId);
+
+    // Dropped below the midpoint of the second row, the first rule lands after
+    // it - and the order is the meaning, so the state says so too.
+    const rect = second.getBoundingClientRect();
+    const drop = new MouseEvent("drop", {
+      bubbles: true,
+      cancelable: true,
+      clientY: rect.bottom + 1,
+    });
+    Object.defineProperty(drop, "dataTransfer", { value: dataTransfer });
+    second.dispatchEvent(drop);
+
+    expect(viewer.getFilterState().rules.map(({ text }) => text)).toEqual(["truss", "beam"]);
+    expect(rows()[0]).toBe(second);
+    expect(rows()[1]).toBe(first);
+  });
+
   it("keeps a rule whose dimension this model has not got, and says so", async () => {
     const filter = await lumine.workspace.open(FILTER_PANEL_URI);
     await openViewer(ANALYSED_MODEL);
