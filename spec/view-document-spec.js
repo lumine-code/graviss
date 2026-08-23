@@ -48,6 +48,23 @@ describe("GravissViewDocument", () => {
     expect(document.isDeleted()).toBe(false);
     expect(modifiedStates).toEqual([true, false]);
     expect(savedEvents).toEqual([{ path: filePath }]);
+
+    // Reordering two filter rules is a REAL change - the rules are applied in
+    // order and the last one that names an element decides it - so swapping
+    // them must stamp the document modified, not read as the same content.
+    document.update((data) => {
+      data.graphics[0].filter = {
+        rules: [
+          { sign: "+", type: "group", text: "11" },
+          { sign: "-", type: "@kind", text: "truss" },
+        ],
+      };
+    });
+    await document.save();
+    document.update((data) => {
+      data.graphics[0].filter.rules.reverse();
+    });
+    expect(document.isModified()).toBe(true);
     expect(JSON.parse(fs.readFileSync(filePath, "utf8")).activeGraphic).toBe(1);
   });
 
