@@ -12,6 +12,7 @@ const {
   createFrameGeometry,
 } = require("./support/test-model");
 const { entityIndexAtVertex } = require("../lib/renderer");
+const { createElementFilter } = require("../lib/element-filter");
 
 const MAIN_EXAMPLE = FRAME_MODEL;
 const MAIN_EXAMPLE_URI = MAIN_EXAMPLE.viewDocumentPath;
@@ -3088,6 +3089,99 @@ describe("graviss", () => {
       expect(renderer.selected).not.toBeNull();
       renderer.rebuildMemberMeshes();
       expect(renderer.selected).toBeNull();
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("draws only the elements a filter keeps, and all of them again when it is dropped", async () => {
+    const model = {
+      id: "filtered",
+      title: "Filtered",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 6, y: 0, z: 0 },
+          { id: 3, x: 12, y: 0, z: 0 },
+          { id: 4, x: 18, y: 0, z: 0 },
+        ],
+        facets: [{ id: "group", title: "Group", values: [{ id: 11, title: "Deck" }, { id: 12 }] }],
+        elements: [
+          {
+            id: "B1",
+            kind: "beam",
+            number: 101,
+            sectionId: "R",
+            nodeIds: [1, 2],
+            facetValues: { group: 11 },
+          },
+          {
+            id: "B2",
+            kind: "beam",
+            number: 102,
+            sectionId: "R",
+            nodeIds: [2, 3],
+            facetValues: { group: 11 },
+          },
+          {
+            id: "B3",
+            kind: "beam",
+            number: 201,
+            sectionId: "R",
+            nodeIds: [3, 4],
+            facetValues: { group: 12 },
+          },
+        ],
+        sections: [{ id: "R", shape: { kind: "rectangle", width: 0.2, height: 0.4 } }],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      const fill = renderer.pickables.find((m) => m.userData.gravissColorKey === "element");
+      const contours = renderer.memberContours[0];
+      expect(fill.count).toBe(3);
+
+      // Hiding is drawing fewer instances rather than drawing them invisibly:
+      // the ones that survive are moved to the front and the count is cut.
+      renderer.setElementFilter(createElementFilter({ numbers: "1*" }));
+      expect(fill.count).toBe(2);
+      expect(contours.geometry.instanceCount).toBe(2);
+      // Both survivors are still findable by what they are, wherever they now
+      // sit in the buffer.
+      const drawn = new Set();
+      for (let instance = 0; instance < fill.count; instance += 1) {
+        drawn.add(
+          fill.userData.gravissEntities[fill.userData.gravissSegmentToEntityIndex[instance]].id,
+        );
+      }
+      expect([...drawn].sort()).toEqual(["B1", "B2"]);
+
+      // A facet narrows it the same way, and the counts a panel shows follow.
+      renderer.setElementFilter(createElementFilter({ facets: { group: [12] } }));
+      expect(fill.count).toBe(1);
+      expect(renderer.elementCounts().get("beam")).toEqual({ total: 3, shown: 1 });
+
+      // Dropping the filter draws everything again, and every element answers
+      // for itself once more — a stale mapping here would name the wrong one.
+      renderer.setElementFilter(null);
+      expect(fill.count).toBe(3);
+      for (let instance = 0; instance < fill.count; instance += 1) {
+        expect(fill.userData.gravissSegmentToEntityIndex[instance]).toBe(instance);
+      }
+      expect(renderer.elementCounts().get("beam")).toEqual({ total: 3, shown: 3 });
     } finally {
       viewer.destroy();
     }
