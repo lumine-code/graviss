@@ -2009,7 +2009,7 @@ describe("graviss", () => {
     // where it ended up has to let it get there.
     const wheel = async (point, deltaY) => {
       spin(point, deltaY);
-      await conditionPromise(() => renderer.dollyFlight == null, "the zoom to settle");
+      await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
     };
     const screenOf = (world) => {
       renderer.camera.updateMatrixWorld(true);
@@ -2039,11 +2039,11 @@ describe("graviss", () => {
     // A notch does not arrive on the frame it is turned: the camera eases onto
     // the depth it asked for.
     spin(under, -240);
-    expect(renderer.dollyFlight).not.toBeNull();
+    expect(renderer.zoomFlight).not.toBeNull();
     expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeGreaterThan(
       depth * 0.64,
     );
-    await conditionPromise(() => renderer.dollyFlight == null, "the zoom to settle");
+    await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
 
     expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeLessThan(
       distanceBefore,
@@ -2082,14 +2082,14 @@ describe("graviss", () => {
     });
     canvas.dispatchEvent(pinch);
     expect(pinch.defaultPrevented).toBe(true);
-    expect(renderer.dollyFlight).toBeNull();
+    expect(renderer.zoomFlight).toBeNull();
     expect(renderer.captureCameraState()).toEqual(settled);
 
     // Without the easing a notch lands on the frame it is turned.
     lumine.config.set("graviss.smoothZoom", false);
     const stepped = renderer.camera.position.distanceTo(renderer.controls.target);
     spin(under, -120);
-    expect(renderer.dollyFlight).toBeNull();
+    expect(renderer.zoomFlight).toBeNull();
     expect(renderer.camera.position.distanceTo(renderer.controls.target)).toBeCloseTo(
       stepped * 0.8,
       6,
@@ -2112,6 +2112,99 @@ describe("graviss", () => {
     spin(under, -240);
     expect(renderer.captureCameraState().position.every(Number.isFinite)).toBe(true);
     expect(renderer.captureCameraState().target.every(Number.isFinite)).toBe(true);
+  });
+
+  it("eases an orthographic notch onto its framing, holding the point under the wheel", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const viewport = item.element.querySelector(".graviss-viewport");
+    viewport.style.width = "800px";
+    viewport.style.height = "400px";
+    renderer.resize();
+    renderer.setProjection("orthographic");
+
+    const canvas = renderer.canvasRenderer.domElement;
+    const bounds = canvas.getBoundingClientRect();
+    const under = { x: bounds.width * 0.28, y: bounds.height * 0.34 };
+    const spin = (deltaY) =>
+      canvas.dispatchEvent(
+        new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          deltaY,
+          clientX: bounds.left + under.x,
+          clientY: bounds.top + under.y,
+        }),
+      );
+    const wheel = async (deltaY) => {
+      spin(deltaY);
+      await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
+    };
+    const framing = () => renderer.orthographicVisibleHeight();
+
+    // An orthographic camera has no gap to close, so a notch narrows the
+    // framing it draws through — and it eases onto it over several frames
+    // exactly as the perspective camera eases onto a depth.
+    const before = framing();
+    spin(-120);
+    expect(renderer.zoomFlight).not.toBeNull();
+    expect(framing()).toBeGreaterThan(before * (1 - 0.2) * 1.05);
+    await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
+    expect(framing()).toBeCloseTo(before * (1 - 0.2), 6);
+
+    // Whatever the wheel is over stays where it is, which for a parallel
+    // projection means the camera slides across its own image plane.
+    const world = renderer
+      .unprojectPointer({
+        x: (under.x / bounds.width) * 2 - 1,
+        y: -(under.y / bounds.height) * 2 + 1,
+      })
+      .toArray();
+    const screenOf = (point) => renderer.projectToScreen(point);
+    const held = screenOf(world);
+    await wheel(-240);
+    const still = screenOf(world);
+    expect(still.x).toBeCloseTo(held.x, 0);
+    expect(still.y).toBeCloseTo(held.y, 0);
+
+    // Turned off, the notch still eases; it simply stops being aimed.
+    lumine.config.set("graviss.zoomTowardPointer", false);
+    const centred = screenOf(world);
+    await wheel(-240);
+    expect(framing()).toBeLessThan(before);
+    expect(
+      Math.hypot(screenOf(world).x - centred.x, screenOf(world).y - centred.y),
+    ).toBeGreaterThan(1);
+    lumine.config.set("graviss.zoomTowardPointer", true);
+
+    // Without the easing a notch lands on the frame it is turned.
+    lumine.config.set("graviss.smoothZoom", false);
+    const stepped = framing();
+    spin(-120);
+    expect(renderer.zoomFlight).toBeNull();
+    expect(framing()).toBeCloseTo(stepped * (1 - 0.2), 6);
+    lumine.config.set("graviss.smoothZoom", true);
+
+    // However long the wheel is turned the framing stays a framing: something
+    // narrower than the model's own coordinates draws nothing.
+    for (let index = 0; index < 60; index += 1) spin(-360);
+    await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
+    expect(framing()).toBeGreaterThan(0);
+    expect(framing()).toBeCloseTo(renderer.bounds.radius * 1e-4, 9);
+    expect(renderer.captureCameraState().frustumHeight).toBeGreaterThan(0);
+    for (let index = 0; index < 90; index += 1) spin(360);
+    await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
+    expect(framing()).toBeCloseTo(renderer.bounds.radius * 1e4, 3);
+
+    // The eased value is a depth in one projection and a framing in the other,
+    // so switching projections lands whatever was in flight rather than
+    // carrying it across.
+    spin(-360);
+    expect(renderer.zoomFlight).not.toBeNull();
+    renderer.setProjection("perspective");
+    expect(renderer.zoomFlight).toBeNull();
+    expect(renderer.captureCameraState().position.every(Number.isFinite)).toBe(true);
   });
 
   it("reveals and crops on resize instead of rescaling the framed view", async () => {
@@ -2201,7 +2294,7 @@ describe("graviss", () => {
     // fast they compound onto one another rather than each starting again from
     // wherever the easing has got to.
     for (let step = 0; step < 300; step += 1) wheel(-120);
-    await conditionPromise(() => renderer.dollyFlight == null, "the zoom to settle");
+    await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
     expect(distance()).toBeGreaterThanOrEqual(floor - 1e-9);
 
     // And the camera is still on this side of what it was aimed at. Scaling the
@@ -2222,17 +2315,17 @@ describe("graviss", () => {
     expect(renderer.camera.position.distanceTo(beforePan)).toBeGreaterThan(floor * 0.1);
     const beforeOut = distance();
     wheel(240);
-    await conditionPromise(() => renderer.dollyFlight == null, "the zoom to settle");
+    await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
     expect(distance()).toBeGreaterThan(beforeOut);
 
     // A drag takes the camera over from a zoom still settling, rather than
     // orbiting against a view that has not come to rest.
     wheel(-120);
-    expect(renderer.dollyFlight).not.toBeNull();
+    expect(renderer.zoomFlight).not.toBeNull();
     canvas.dispatchEvent(
       new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, pointerId: 1 }),
     );
-    expect(renderer.dollyFlight).toBeNull();
+    expect(renderer.zoomFlight).toBeNull();
     canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 1 }));
 
     // A camera that collapsed before there was a floor is pulled back out by

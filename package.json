@@ -54,7 +54,7 @@
     },
     "smoothZoom": {
       "title": "Smooth Zoom",
-      "description": "Settle onto the depth a wheel notch asks for over a few frames instead of arriving in one step. Notches turned in quick succession compound rather than queue.",
+      "description": "Settle onto what a wheel notch asks for over a few frames instead of arriving in one step \u2014 a depth in perspective, a framing in orthographic. Notches turned in quick succession compound rather than queue.",
       "type": "boolean",
       "default": true
     },
