@@ -1,0 +1,234 @@
+const {
+  AUTOMATIC_TARGET,
+  Deformation,
+  SCALE_PRESETS,
+  alignToNodes,
+  automaticScale,
+  extentOf,
+} = require("../lib/deformation");
+const { Animation, CYCLE_IDS, defaultCycle, phaseOf } = require("../lib/animation");
+
+const NODES = [
+  { id: 1, x: 0, y: 0, z: 0 },
+  { id: 2, x: 4, y: 0, z: 0 },
+  { id: 3, x: 8, y: 0, z: 0 },
+];
+const indexOfId = (id) => NODES.findIndex((node) => node.id === id);
+
+function fieldOf(values, ids) {
+  return { kind: "displacement", loadCaseId: 1, components: 3, nodes: { ids, values } };
+}
+
+describe("automaticScale", () => {
+  it("draws the largest displacement as a readable fraction of the model", () => {
+    // A millimetre on a thirty-metre bridge is invisible at true size, which is
+    // the whole reason a viewer amplifies at all.
+    expect(automaticScale(0.001, 30)).toBeCloseTo((30 * AUTOMATIC_TARGET) / 0.001, 6);
+    expect(automaticScale(0.001, 30) * 0.001).toBeCloseTo(30 * AUTOMATIC_TARGET, 9);
+  });
+
+  it("has no answer for a model that did not move", () => {
+    expect(automaticScale(0, 30)).toBeNull();
+    expect(automaticScale(0.01, 0)).toBeNull();
+    expect(automaticScale(Number.NaN, 30)).toBeNull();
+  });
+
+  it("offers zero among its presets, because that is how you see what moved", () => {
+    expect(SCALE_PRESETS).toContain(0);
+    expect(SCALE_PRESETS).toEqual([0, 0.5, 1, 2, 10, 100, 1000]);
+  });
+});
+
+describe("alignToNodes", () => {
+  it("puts a field that names its nodes into the geometry's own order", () => {
+    // The result lists node 3 first; the renderer wants node order.
+    const rows = alignToNodes(fieldOf([9, 0, 0, 1, 0, 0], [3, 1]), NODES, indexOfId);
+    expect(Array.from(rows)).toEqual([1, 0, 0, 0, 0, 0, 9, 0, 0]);
+  });
+
+  it("takes a field that names no nodes as already in that order", () => {
+    const rows = alignToNodes(fieldOf([1, 2, 3, 4, 5, 6, 7, 8, 9]), NODES, indexOfId);
+    expect(Array.from(rows)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("leaves a node the field says nothing about where it is", () => {
+    const rows = alignToNodes(fieldOf([1, 1, 1], [2]), NODES, indexOfId);
+    expect(Array.from(rows)).toEqual([0, 0, 0, 1, 1, 1, 0, 0, 0]);
+    // A node the result names and the model does not is simply dropped.
+    expect(Array.from(alignToNodes(fieldOf([1, 1, 1], [99]), NODES, indexOfId))).toEqual(
+      new Array(9).fill(0),
+    );
+  });
+
+  it("reads six components a node as three translations and three rotations", () => {
+    const result = {
+      components: 6,
+      nodes: { ids: [1], values: [1, 2, 3, 0.1, 0.2, 0.3] },
+    };
+    expect(Array.from(alignToNodes(result, NODES, indexOfId)).slice(0, 3)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("Deformation", () => {
+  function deformation() {
+    return new Deformation({ nodes: NODES, indexOfId, radius: 10 });
+  }
+
+  it("moves a model by the scale and the phase together", () => {
+    const rest = Float32Array.from([0, 0, 0, 4, 0, 0, 8, 0, 0]);
+    const into = new Float32Array(rest.length);
+    const moved = deformation().setResult(fieldOf([0, 0, 0, 0, 0, 1, 0, 0, 0]));
+    moved.setScale(2);
+    moved.setPhase(0.5);
+    moved.apply(rest, into);
+    expect(Array.from(into)).toEqual([0, 0, 0, 4, 0, 1, 8, 0, 0]);
+  });
+
+  it("puts the model back exactly where it was at a scale of zero", () => {
+    // Not approximately: a preset of zero is how a user checks what moved, so
+    // the rest state has to come back bit for bit.
+    const rest = Float32Array.from([0.1, 0.2, 0.3, 4, 0, 0, 8, 0, 0]);
+    const into = new Float32Array(rest.length);
+    const moved = deformation().setResult(fieldOf([1, 1, 1, 1, 1, 1, 1, 1, 1]));
+    moved.setScale(0);
+    moved.apply(rest, into);
+    expect(Array.from(into)).toEqual(Array.from(rest));
+    expect(moved.active).toBe(false);
+  });
+
+  it("chooses its own scale until a user chooses one", () => {
+    const moved = deformation();
+    moved.setResult({ ...fieldOf([0, 0, 0.001], [1]), extent: 0.001 });
+    expect(moved.automatic).toBe(true);
+    expect(moved.scale).toBeCloseTo((10 * AUTOMATIC_TARGET) / 0.001, 6);
+
+    moved.setScale(100);
+    expect(moved.automatic).toBe(false);
+    expect(moved.scale).toBe(100);
+    // Another case does not take the scale back off the user.
+    moved.setResult({ ...fieldOf([0, 0, 0.01], [1]), extent: 0.01 });
+    expect(moved.scale).toBe(100);
+    // Until they ask for it back.
+    moved.setAutomatic(true);
+    expect(moved.scale).toBeCloseTo((10 * AUTOMATIC_TARGET) / 0.01, 6);
+  });
+
+  it("is the undeformed model with no result at all", () => {
+    const rest = Float32Array.from([1, 2, 3]);
+    const into = new Float32Array(3);
+    const moved = deformation().setResult(null);
+    expect(moved.active).toBe(false);
+    expect(moved.factor).toBe(0);
+    expect(Array.from(moved.apply(rest, into))).toEqual([1, 2, 3]);
+  });
+
+  it("measures a field that did not say how far it went", () => {
+    expect(extentOf(fieldOf([3, 4, 0, 0, 0, 0, 0, 0, 0]))).toBeCloseTo(5, 6);
+    expect(extentOf({ ...fieldOf([1, 1, 1]), extent: 0.5 })).toBe(0.5);
+    expect(extentOf(null)).toBe(0);
+  });
+});
+
+describe("animation cycles", () => {
+  it("swings a mode about zero and runs a load case up from it", () => {
+    // A mode shape is defined up to a factor, so it has no sign; a load case is
+    // a real state of the structure and does.
+    expect(defaultCycle({ kind: "eigenmode" })).toBe("pingPong");
+    expect(defaultCycle({ kind: "buckling" })).toBe("pingPong");
+    expect(defaultCycle({ kind: "linear" })).toBe("thereAndBack");
+    expect(defaultCycle(undefined)).toBe("thereAndBack");
+  });
+
+  it("puts each cycle where it belongs at every quarter of its period", () => {
+    expect(phaseOf("pingPong", 0)).toBeCloseTo(0, 9);
+    expect(phaseOf("pingPong", 0.25)).toBeCloseTo(1, 9);
+    expect(phaseOf("pingPong", 0.5)).toBeCloseTo(0, 9);
+    expect(phaseOf("pingPong", 0.75)).toBeCloseTo(-1, 9);
+
+    expect(phaseOf("thereAndBack", 0)).toBeCloseTo(0, 9);
+    expect(phaseOf("thereAndBack", 0.5)).toBeCloseTo(1, 9);
+    expect(phaseOf("thereAndBack", 1)).toBeCloseTo(0, 9);
+
+    expect(phaseOf("ramp", 0)).toBeCloseTo(0, 9);
+    expect(phaseOf("ramp", 0.9)).toBeCloseTo(0.9, 9);
+
+    // Whole periods away is the same place in the swing.
+    expect(phaseOf("pingPong", 3.25)).toBeCloseTo(1, 9);
+    expect(CYCLE_IDS).toEqual(["pingPong", "thereAndBack", "ramp", "sweep"]);
+  });
+});
+
+describe("Animation", () => {
+  function driver() {
+    const frames = [];
+    let time = 0;
+    let scheduled = 0;
+    const animation = new Animation({
+      onFrame: (phase, index) => frames.push([Math.round(phase * 1000) / 1000, index]),
+      requestFrame: () => (scheduled += 1),
+      now: () => time,
+    });
+    return {
+      animation,
+      frames,
+      scheduled: () => scheduled,
+      at: (next) => {
+        time = next;
+        return next;
+      },
+    };
+  }
+
+  it("asks for a frame rather than drawing one", () => {
+    // Rendering is on demand, so an animation that drew would be drawing behind
+    // the renderer's back.
+    const { animation, scheduled, at, frames } = driver();
+    animation.setPeriod(1000);
+    animation.start();
+    expect(scheduled()).toBe(1);
+    // A quarter of the way through, `thereAndBack` is halfway up: it reaches
+    // the full shape at the middle of its period and returns by the end.
+    animation.advance(at(250));
+    expect(frames).toEqual([[0.5, 0]]);
+    expect(scheduled()).toBe(2);
+    animation.advance(at(500));
+    expect(frames.at(-1)).toEqual([1, 0]);
+  });
+
+  it("stops asking when it is stopped, and resumes where it was", () => {
+    const { animation, at, frames } = driver();
+    animation.setPeriod(1000);
+    animation.start();
+    animation.advance(at(250));
+    animation.stop();
+    // A stopped animation advances nothing and schedules nothing.
+    expect(animation.advance(at(500))).toBe(false);
+    expect(frames.length).toBe(1);
+    // Restarting picks the swing up where it was rather than snapping back to
+    // the start, so pausing to look at something does not lose it.
+    animation.start();
+    animation.advance(at(500));
+    expect(frames.at(-1)).toEqual([0.5, 0]);
+    animation.advance(at(750));
+    expect(frames.at(-1)).toEqual([1, 0]);
+  });
+
+  it("steps a sweep through the cases instead of swinging", () => {
+    const { animation, at, frames } = driver();
+    animation.setCycle("sweep");
+    animation.setPeriod(1000);
+    animation.setCount(4);
+    animation.start();
+    for (const time of [0, 300, 600, 900]) animation.advance(at(time));
+    expect(frames.map(([, index]) => index)).toEqual([0, 1, 2, 3]);
+    // Each case is held still and shown whole.
+    expect(frames.every(([phase]) => phase === 1)).toBe(true);
+  });
+
+  it("keeps a period that would otherwise divide by zero above a floor", () => {
+    const { animation } = driver();
+    expect(animation.setPeriod(0)).toBe(2000);
+    expect(animation.setPeriod(-5)).toBe(2000);
+    expect(animation.setPeriod(10)).toBe(50);
+  });
+});
