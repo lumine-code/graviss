@@ -3117,6 +3117,44 @@ describe("graviss", () => {
     }
   });
 
+  it("narrows the area elements as well as the line ones", async () => {
+    const viewer = createFixtureViewer(SHELL_EXAMPLE);
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the Three.js scene to initialize");
+      const renderer = viewer.renderer;
+      const shells = renderer.pickables.find((mesh) => mesh.userData.gravissColorKey === "shell");
+      const positions = shells.geometry.getAttribute("position");
+      const first = renderer.geometry.elements.find((element) => element.kind === "shell");
+      const area = () => {
+        const range = shells.userData.gravissEntityRanges[0];
+        const box = new Set();
+        for (let vertex = range.start; vertex < range.start + range.count; vertex += 1) {
+          box.add(`${positions.getX(vertex)}:${positions.getY(vertex)}:${positions.getZ(vertex)}`);
+        }
+        return box.size;
+      };
+      expect(area()).toBeGreaterThan(1);
+
+      // Folded onto one of its own corners: every offset it had is still where
+      // it was, and a triangle with no area rasterises to nothing.
+      renderer.setElementFilter(() => false);
+      expect(area()).toBe(1);
+      expect(shells.userData.gravissEntityRanges[0].count).toBeGreaterThan(1);
+      expect(renderer.elementCounts().get("shell").shown).toBe(0);
+
+      // And it comes back where it was, not somewhere near it.
+      renderer.setElementFilter((element) => element.id === first.id);
+      expect(area()).toBeGreaterThan(1);
+      expect(renderer.elementCounts().get("shell")).toEqual({
+        total: renderer.elementCounts().get("shell").total,
+        shown: 1,
+      });
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("gives each member kind its own colour and its own switch", async () => {
     const model = {
       id: "kinds",
