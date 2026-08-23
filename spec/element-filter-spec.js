@@ -58,7 +58,7 @@ describe("createElementFilter", () => {
   const elements = [
     { id: "beam-110001", kind: "beam", number: 110001, facetValues: { group: 11, set: ["a"] } },
     { id: "beam-120001", kind: "beam", number: 120001, facetValues: { group: 12 } },
-    { id: "truss-110002", kind: "truss", number: 110002, facetValues: { group: 11 } },
+    { id: "truss-110002", kind: "truss", number: 110002, facetValues: { group: 11, set: ["b"] } },
     { id: "coupling-1-2", kind: "coupling" },
   ];
   const kept = (filter) =>
@@ -76,7 +76,12 @@ describe("createElementFilter", () => {
   it("takes every stated question together", () => {
     expect(kept({ numbers: "11*" })).toEqual(["beam-110001", "truss-110002"]);
     expect(kept({ kinds: ["beam"] })).toEqual(["beam-110001", "beam-120001"]);
-    expect(kept({ facets: { group: [11] } })).toEqual(["beam-110001", "truss-110002"]);
+    // The coupling states no group, so the group question does not reach it.
+    expect(kept({ facets: { group: [11] } })).toEqual([
+      "beam-110001",
+      "truss-110002",
+      "coupling-1-2",
+    ]);
     // All three at once, which is a conjunction and not a union.
     expect(kept({ numbers: "11*", kinds: ["beam"], facets: { group: [11] } })).toEqual([
       "beam-110001",
@@ -88,13 +93,35 @@ describe("createElementFilter", () => {
       "beam-110001",
       "beam-120001",
       "truss-110002",
+      "coupling-1-2",
     ]);
-    // A many-valued facet matches on any of what the element holds.
-    expect(kept({ facets: { set: ["a"] } })).toEqual(["beam-110001"]);
-    // An element silent about a facet is not in it.
-    expect(kept({ facets: { group: [11] } })).not.toContain("coupling-1-2");
+    // A many-valued facet matches on any of what the element holds, and an
+    // element holding something else is out. The two that state no set at all
+    // are a different case, below.
+    expect(kept({ facets: { set: ["a"] } })).not.toContain("truss-110002");
+    expect(kept({ facets: { set: ["a", "b"] } })).toContain("truss-110002");
+    expect(kept({ facets: { group: [11] } })).not.toContain("beam-120001");
   });
 
+  // A dimension an element is not placed on does not narrow it. A source
+  // declares a facet over whatever part of the model it describes - the
+  // geometric entity a member was meshed from says nothing about an area
+  // element - so narrowing by one would otherwise take out every element the
+  // dimension was never about.
+  it("does not narrow an element by a dimension it was never placed on", () => {
+    expect(kept({ facets: { group: [11] } })).toContain("coupling-1-2");
+    // Nobody holds this value, so all that survives is what the dimension was
+    // never about - which is the point: the question reached only the elements
+    // it was asked of.
+    expect(kept({ facets: { set: ["nothing-holds-this"] } })).toEqual([
+      "beam-120001",
+      "coupling-1-2",
+    ]);
+  });
+
+  // A number is the other case, and it answers the other way: it is an identity
+  // every numbered element shares, so an element with no number is not any of
+  // the numbers that were asked for.
   it("drops an element with no number when numbers were asked for", () => {
     expect(kept({ numbers: "1-999999" })).not.toContain("coupling-1-2");
   });

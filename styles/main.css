@@ -659,13 +659,18 @@
   cursor: pointer;
 }
 
-.graviss-facet-heading::before {
+.graviss-facet-name {
+  flex: 1;
+  text-align: left;
+}
+
+.graviss-facet-name::before {
   content: "\25b8";
   margin-right: 0.4em;
   color: var(--text-color-subtle);
 }
 
-.graviss-facet-heading[aria-expanded="true"]::before {
+.graviss-facet-heading[aria-expanded="true"] .graviss-facet-name::before {
   content: "\25be";
 }
 
@@ -769,6 +774,7 @@
 .graviss-scale-presets {
   display: flex;
   flex-wrap: wrap;
+  gap: 0.25em;
 }
 
 .graviss-scale-slider,
