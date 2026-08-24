@@ -242,9 +242,9 @@
 .graviss-region-marquee {
   position: absolute;
   z-index: 3;
-  border: 1px solid var(--text-color-info);
+  border: 1px solid var(--accent-color);
   box-shadow: 0 0 0 1px var(--graviss-region-halo);
-  background: color-mix(in srgb, var(--text-color-info) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
   pointer-events: none;
 }
 
@@ -286,7 +286,7 @@
    its own gestures are claimed from the viewport's capture phase behind the
    command modifier. */
 .graviss-print-region {
-  --graviss-region-line: var(--text-color-info);
+  --graviss-region-line: var(--accent-color);
   --graviss-region-grip: 7px;
 
   position: absolute;
@@ -313,7 +313,7 @@
 }
 
 .graviss-print-region.is-dragging {
-  --graviss-region-line: color-mix(in srgb, var(--text-color-info) 80%, white);
+  --graviss-region-line: color-mix(in srgb, var(--accent-color) 80%, white);
 }
 
 /* The canvas sets its own cursor and sits inside the viewport, so a cursor for
@@ -456,7 +456,7 @@
 }
 
 .graviss-view-cube:focus-visible {
-  outline: 2px solid var(--text-color-info);
+  outline: 2px solid var(--accent-color);
   outline-offset: -2px;
 }
 
@@ -677,11 +677,11 @@
 }
 
 .graviss-drop-above {
-  box-shadow: 0 -2px 0 0 var(--text-color-info);
+  box-shadow: 0 -2px 0 0 var(--accent-color);
 }
 
 .graviss-drop-below {
-  box-shadow: 0 2px 0 0 var(--text-color-info);
+  box-shadow: 0 2px 0 0 var(--accent-color);
 }
 
 .graviss-rule-total {
@@ -723,7 +723,7 @@
 
 .graviss-case-preview {
   background: var(--background-color-highlight);
-  box-shadow: inset 2px 0 0 var(--text-color-info);
+  box-shadow: inset 2px 0 0 var(--accent-color);
 }
 
 .graviss-case-selected {
