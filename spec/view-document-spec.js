@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { TextBuffer } = require("lumine");
+const { FileState, TextBuffer } = require("lumine");
 const { TEST_MODELS: EXAMPLES } = require("./support/test-model");
 const {
   GravissViewDocument,
@@ -30,23 +30,21 @@ describe("GravissViewDocument", () => {
 
   it("tracks edits, saves them, and emits Lumine file-item events", async () => {
     document = GravissViewDocument.load(filePath);
-    const modifiedStates = [];
+    const fileStates = [];
     const savedEvents = [];
-    document.onDidChangeModified((modified) => modifiedStates.push(modified));
+    document.onDidChangeFileState((fileState) => fileStates.push(fileState));
     document.onDidSave((event) => savedEvents.push(event));
 
     document.update((data) => {
       data.activeGraphic = 1;
     });
 
-    expect(document.isModified()).toBe(true);
-    expect(document.isInConflict()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.MODIFIED);
     expect(document.serialize().data.activeGraphic).toBe(1);
     await document.save();
 
-    expect(document.isModified()).toBe(false);
-    expect(document.isDeleted()).toBe(false);
-    expect(modifiedStates).toEqual([true, false]);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(fileStates).toEqual([FileState.MODIFIED, FileState.UNMODIFIED]);
     expect(savedEvents).toEqual([{ path: filePath }]);
 
     // Reordering two filter rules is a REAL change - the rules are applied in
@@ -64,7 +62,7 @@ describe("GravissViewDocument", () => {
     document.update((data) => {
       data.graphics[0].filter.rules.reverse();
     });
-    expect(document.isModified()).toBe(true);
+    expect(document.getFileState()).toBe(FileState.MODIFIED);
     expect(JSON.parse(fs.readFileSync(filePath, "utf8")).activeGraphic).toBe(1);
   });
 
@@ -80,7 +78,7 @@ describe("GravissViewDocument", () => {
     expect(sourceBuffer instanceof TextBuffer).toBe(true);
     expect(sourceBuffer.getPath()).toBe(filePath);
     expect(document.getPath()).toBe(sourceBuffer.getPath());
-    expect(document.isModified()).toBe(sourceBuffer.isModified());
+    expect(document.getFileState()).toBe(sourceBuffer.getFileState());
     expect(buildEditor).not.toHaveBeenCalled();
     expect(registerEditor).not.toHaveBeenCalled();
     expect(lumine.workspace.getPaneItems()).toEqual(paneItemsBefore);
@@ -93,7 +91,7 @@ describe("GravissViewDocument", () => {
     document = GravissViewDocument.load(filePath);
 
     expect(document.isImplicit()).toBe(true);
-    expect(document.isModified()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
     expect(document.getSourceBuffer().getText()).toBe(" \r\n\t");
     // What is read is whole: everything the file did not say, worked out.
     expect(document.getData()).toEqual(
@@ -114,7 +112,7 @@ describe("GravissViewDocument", () => {
     });
 
     expect(document.isImplicit()).toBe(false);
-    expect(document.isModified()).toBe(true);
+    expect(document.getFileState()).toBe(FileState.MODIFIED);
     // The whole of what reaches the file is the one thing that was changed.
     // Everything else stays Graviss's to work out, so nothing else is written
     // down and nothing else can go stale against it.
@@ -169,7 +167,7 @@ describe("GravissViewDocument", () => {
     expect(document.getData().graphics[0].appearance).toBe("cloud");
     expect(document.undo()).toBe(true);
     expect(document.getData().activeGraphic).toBe(0);
-    expect(document.isModified()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
     expect(document.undo()).toBe(false);
 
     expect(document.redo()).toBe(true);
@@ -190,11 +188,11 @@ describe("GravissViewDocument", () => {
     });
     await document.save();
 
-    expect(document.isModified()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
     expect(document.undo()).toBe(true);
-    expect(document.isModified()).toBe(true);
+    expect(document.getFileState()).toBe(FileState.MODIFIED);
     expect(document.redo()).toBe(true);
-    expect(document.isModified()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
 
     document.undo();
     const state = JSON.parse(JSON.stringify(document.serialize()));
@@ -205,7 +203,7 @@ describe("GravissViewDocument", () => {
     expect(document.canRedo()).toBe(true);
     expect(document.redo()).toBe(true);
     expect(document.getData().activeGraphic).toBe(1);
-    expect(document.isModified()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
   });
 
   it("reloads external changes while the document is clean", async () => {
@@ -223,8 +221,7 @@ describe("GravissViewDocument", () => {
     );
 
     expect(document.getData().title).toBe("Externally renamed view");
-    expect(document.isModified()).toBe(false);
-    expect(document.isInConflict()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
     expect(reloaded).toHaveBeenCalled();
   });
 
@@ -240,8 +237,7 @@ describe("GravissViewDocument", () => {
       "the external Graviss view change to reload",
     );
 
-    expect(document.isModified()).toBe(false);
-    expect(document.isInConflict()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
   });
 
   it("keeps local edits and marks a conflict when disk changes overlap them", async () => {
@@ -250,7 +246,8 @@ describe("GravissViewDocument", () => {
     const conflicts = jasmine.createSpy("conflicts");
     const warning = spyOn(lumine.notifications, "addWarning");
     const conflictDetected = new Promise((resolve) => {
-      const subscription = document.onDidConflict(() => {
+      const subscription = document.onDidChangeFileState((fileState) => {
+        if (fileState !== FileState.CONFLICTED) return;
         conflicts();
         subscription.dispose();
         resolve();
@@ -267,14 +264,12 @@ describe("GravissViewDocument", () => {
 
     expect(document.getData().title).toBe(EXAMPLES[0].title);
     expect(document.getData().graphics[0].appearance).toBe("midnight");
-    expect(document.isModified()).toBe(true);
-    expect(document.isInConflict()).toBe(true);
+    expect(document.getFileState()).toBe(FileState.CONFLICTED);
     expect(conflicts).toHaveBeenCalled();
     expect(warning).not.toHaveBeenCalled();
 
     await document.save();
-    expect(document.isModified()).toBe(false);
-    expect(document.isInConflict()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
     expect(JSON.parse(fs.readFileSync(filePath, "utf8")).graphics[0].appearance).toBe("midnight");
   });
 
@@ -290,8 +285,7 @@ describe("GravissViewDocument", () => {
       setTimeout(resolve, document.getSourceBuffer().fileChangeDelay + 250),
     );
 
-    expect(document.isModified()).toBe(true);
-    expect(document.isInConflict()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.MODIFIED);
   });
 
   it("forwards native path, deletion, and save state", async () => {
@@ -307,25 +301,24 @@ describe("GravissViewDocument", () => {
     await waitForWatcher(document);
 
     const deleted = new Promise((resolve) => {
-      const subscription = document.onDidDelete(() => {
+      const subscription = document.onDidChangeFileState((fileState) => {
+        if (fileState !== FileState.REMOVED) return;
         subscription.dispose();
         resolve();
       });
     });
     fs.rmSync(renamedPath);
     await deleted;
-    expect(document.isDeleted()).toBe(true);
-    expect(document.isModified()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.REMOVED);
 
     document.update((data) => {
       data.title = "Recreated view";
     });
-    expect(document.isModified()).toBe(true);
+    expect(document.getFileState()).toBe(FileState.REMOVED);
 
     await document.save();
     expect(document.getPath()).toBe(renamedPath);
-    expect(document.isModified()).toBe(false);
-    expect(document.isDeleted()).toBe(false);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
     expect(fs.existsSync(renamedPath)).toBe(true);
   });
 
