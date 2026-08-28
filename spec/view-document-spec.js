@@ -2,6 +2,9 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { FileState, TextBuffer } = require("lumine");
+const { stopAllWatchers } = require(
+  path.join(lumine.application.getResourcePath(), "src", "path-watcher"),
+);
 const { TEST_MODELS: EXAMPLES } = require("./support/test-model");
 const {
   GravissViewDocument,
@@ -24,8 +27,13 @@ describe("GravissViewDocument", () => {
 
   afterEach(async () => {
     document?.destroy();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    fs.rmSync(directory, { recursive: true, force: true });
+    await stopAllWatchers();
+    fs.rmSync(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 20,
+      retryDelay: 50,
+    });
   });
 
   it("tracks edits, saves them, and emits Lumine file-item events", async () => {
