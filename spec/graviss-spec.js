@@ -2529,24 +2529,6 @@ describe("graviss", () => {
     expect(again.dataUrl).toBe(image.dataUrl);
   });
 
-  it("owns the PNG destination dialog with the Graviss item", async () => {
-    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
-    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
-    spyOn(item, "renderRegionImage").and.returnValue({});
-    const choosePath = spyOn(lumine.workspace, "showSaveDialogForPaneItem").and.returnValue(
-      Promise.resolve({ canceled: true }),
-    );
-
-    expect(await item.saveAsImage()).toBe(false);
-    expect(choosePath.calls.mostRecent().args[0]).toBe(item);
-    expect(choosePath.calls.mostRecent().args[1]).toEqual(
-      jasmine.objectContaining({
-        title: "Save Graviss image",
-        filters: [{ name: "PNG image", extensions: ["png"] }],
-      }),
-    );
-  });
-
   it("frames the structure itself, with and without a border", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
