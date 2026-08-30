@@ -570,8 +570,11 @@ describe("the Graviss dock panels", () => {
     filter.focus();
     expect(filter.isFocused()).toBe(true);
 
+    const reopen = spyOn(lumine.workspace, "open").and.callThrough();
     lumine.commands.dispatch(filter.element, "graviss:focus-viewer");
-    expect(filter.isFocused()).toBe(false);
+    await conditionPromise(() => !filter.isFocused(), "focus to return to the viewer");
+    expect(reopen.calls.mostRecent().args[0]).toBe(viewer);
+    expect(reopen.calls.mostRecent().args[1]).toEqual({ searchAllPanes: true });
     expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(viewer);
   });
 });

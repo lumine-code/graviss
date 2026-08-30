@@ -1610,7 +1610,10 @@ describe("graviss", () => {
     expect(editor.getPath()).toBe(MAIN_EXAMPLE.viewDocumentPath);
     expect(editor.getGrammar().scopeName).toBe("source.json");
     expect(editor.getText()).toContain('"format": "graviss-view"');
+    const reopen = spyOn(lumine.workspace, "open").and.callThrough();
     expect(await mainModule.openSource(MAIN_EXAMPLE.viewDocumentPath)).toBe(editor);
+    expect(reopen.calls.mostRecent().args[0]).toBe(editor);
+    expect(reopen.calls.mostRecent().args[1]).toEqual({ searchAllPanes: true });
 
     treeDisposable.dispose();
     await lumine.workspace.paneForItem(editor).destroyItem(editor, true);
