@@ -153,11 +153,12 @@ describe("the Graviss dock panels", () => {
   // A row's controls, found by what they are rather than by position.
   function ruleRow(filter, index) {
     const row = filter.list.querySelectorAll(".graviss-rule-row")[index];
+    const rowView = filter.rows.get(row.dataset.ruleId);
     return {
       row,
       sign: row.querySelector(".graviss-rule-sign"),
       swatch: row.querySelector(".graviss-rule-swatch"),
-      select: row.querySelector(".graviss-rule-type"),
+      select: rowView.select,
       field: row.querySelector(".graviss-rule-text"),
       count: row.querySelector(".graviss-rule-count"),
       remove: row.querySelector(".graviss-rule-remove"),
@@ -168,8 +169,7 @@ describe("the Graviss dock panels", () => {
     const subjects = filter.viewer.getFilterSubjects();
     const index = subjects.findIndex((subject) => subject.title === title);
     expect(index).toBeGreaterThanOrEqual(0);
-    controls.select.value = String(index);
-    controls.select.dispatchEvent(new Event("change"));
+    controls.select.setValue(String(index), { emit: true });
   }
 
   function typeExpression(controls, text) {
@@ -230,7 +230,11 @@ describe("the Graviss dock panels", () => {
 
     filter.body.querySelector(".graviss-add-rule").click();
     const first = ruleRow(filter, 0);
-    const titles = [...first.select.options].map((option) => option.textContent);
+    await first.select.open();
+    const titles = [...document.querySelectorAll(".select-box-option")].map(
+      (option) => option.textContent,
+    );
+    first.select.close();
     // The two dimensions Graviss owns, the source's own by its declared title,
     // and the kind-narrowed variants this model can actually distinguish.
     expect(titles).toContain("Kind");
@@ -351,9 +355,7 @@ describe("the Graviss dock panels", () => {
     // The rule names nothing here, still holds its place in the fold, and the
     // dropdown shows the stored id rather than quietly rewriting the rule.
     expect(first.row.classList.contains("graviss-rule-unresolved")).toBe(true);
-    expect([...first.select.options].some((option) => option.textContent.includes("storey"))).toBe(
-      true,
-    );
+    expect(first.select.element.querySelector(".select-box-label").textContent).toContain("storey");
     expect(first.count.textContent).toBe("0");
     expect(filter.total.textContent).toBe("1 of 2 elements");
     // And it survives a round trip through the document untouched.
@@ -435,8 +437,7 @@ describe("the Graviss dock panels", () => {
     results.playButton.click();
     expect(viewer.renderer.getAnimation().running).toBe(false);
 
-    results.cycleSelect.value = "pingPong";
-    results.cycleSelect.dispatchEvent(new Event("change"));
+    results.cycleSelect.setValue("pingPong", { emit: true });
     expect(viewer.getResultsState().cycle).toBe("pingPong");
 
     // The legend appears with the colouring and states the ends of the field in
