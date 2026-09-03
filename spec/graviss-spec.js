@@ -345,7 +345,7 @@ describe("graviss", () => {
     expect(toolbar.querySelector("[data-appearance-option]")).toBeNull();
     expect(item.backgroundList).toBeNull();
     backgroundButton.click();
-    expect(item.backgroundList.isVisible()).toBe(true);
+    expect(item.backgroundListHost.isVisible()).toBe(true);
     expect(backgroundButton.getAttribute("aria-expanded")).toBe("true");
     expect(item.backgroundList.getDisplayedItems().map(({ id }) => id)).toEqual([
       "auto",
@@ -354,16 +354,18 @@ describe("graviss", () => {
       "paper",
       "white",
     ]);
+    expect(item.backgroundList.getSelectedItemId()).toBe("paper");
     const whiteBackgroundList = item.backgroundList;
     await item.backgroundList.selectItemById("white");
     await item.backgroundList.confirmSelection();
     expect(item.element.dataset.appearance).toBe("white");
     expect(item.backgroundList).toBe(whiteBackgroundList);
-    expect(item.backgroundList.isVisible()).toBe(false);
+    expect(item.backgroundListHost.isVisible()).toBe(false);
     expect(whiteBackgroundList.isDestroyed()).toBe(false);
     expect(backgroundButton.getAttribute("aria-expanded")).toBe("false");
     expect(backgroundButton.dataset.appearance).toBe("white");
     backgroundButton.click();
+    expect(item.backgroundList.getSelectedItemId()).toBe("white");
     await item.backgroundList.selectItemById("paper");
     await item.backgroundList.confirmSelection();
     expect(item.element.dataset.appearance).toBe("paper");
