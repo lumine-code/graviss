@@ -433,6 +433,11 @@
   user-select: text;
 }
 
+.graviss-error-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .graviss-camera-navigator {
   position: absolute;
   z-index: 2;

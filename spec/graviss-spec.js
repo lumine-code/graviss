@@ -4661,6 +4661,130 @@ describe("graviss", () => {
     restored.destroy();
   });
 
+  it("opens a model source with a different basename from the error pane", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-open-source-"));
+    const viewPath = path.join(directory, "[v] model.grv");
+    const sourcePath = path.join(directory, "[c] main.cdb");
+    fs.writeFileSync(viewPath, "{}\n");
+    fs.writeFileSync(sourcePath, "");
+    let createdSession = null;
+    const createSession = jasmine
+      .createSpy("createSession")
+      .and.callFake(({ viewDocument, filePath }) => {
+        const source = viewDocument.getData().source;
+        if (
+          filePath !== viewPath ||
+          typeof source !== "string" ||
+          path.resolve(path.dirname(filePath), source) !== sourcePath
+        ) {
+          return null;
+        }
+        createdSession = new TestSession(MAIN_EXAMPLE);
+        return createdSession;
+      });
+    const registration = mainModule.consumeGravissSource({
+      id: "spec-manual-source",
+      createSession,
+    });
+    let viewer = null;
+
+    try {
+      viewer = await lumine.workspace.open(viewPath, { searchAllPanes: true });
+      await viewer.viewDocument.whenWatcherReady();
+      const error = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(() => !error.hidden, "the missing source to be reported");
+      const unresolved = viewer.session;
+      const open = error.querySelector('[data-action="open-model-source"]');
+      const showOpenDialog = spyOn(lumine.window, "showOpenDialog").and.resolveTo({
+        canceled: false,
+        filePaths: [sourcePath],
+      });
+
+      expect(open.textContent).toBe("Open");
+      expect(open.dataset.command).toBe("graviss:open-model-source");
+      expect(await viewer.dispatchCommand(open.dataset.command)).toEqual([true]);
+      await conditionPromise(() => viewer.renderer != null, "the manually chosen source to load");
+
+      expect(showOpenDialog).toHaveBeenCalledWith({
+        title: "Open FEM Model Source",
+        defaultPath: directory,
+        properties: ["openFile"],
+      });
+      expect(createSession).toHaveBeenCalledTimes(2);
+      expect(viewer.session).toBe(createdSession);
+      expect(viewer.session).not.toBe(unresolved);
+      expect(unresolved.disposed).toBe(true);
+      expect(error.hidden).toBe(true);
+      expect(viewer.viewDocument.getStoredData()).toEqual({ source: "[c] main.cdb" });
+      expect(JSON.parse(viewer.viewDocument.getSourceBuffer().getText())).toEqual({
+        source: "[c] main.cdb",
+      });
+      expect(viewer.getFileState()).toBe(FileState.MODIFIED);
+
+      const selectedSession = viewer.session;
+      expect(viewer.undo()).toBe(true);
+      const undoneSession = viewer.session;
+      expect(undoneSession).not.toBe(selectedSession);
+      expect(selectedSession.disposed).toBe(true);
+      expect(viewer.renderer).toBeNull();
+      expect(viewer.viewDocument.getStoredData()).toEqual({});
+      expect(viewer.getFileState()).toBe(FileState.UNMODIFIED);
+
+      expect(viewer.redo()).toBe(true);
+      expect(viewer.session).not.toBe(undoneSession);
+      expect(undoneSession.disposed).toBe(true);
+      expect(viewer.viewDocument.getStoredData()).toEqual({ source: "[c] main.cdb" });
+      expect(viewer.getFileState()).toBe(FileState.MODIFIED);
+    } finally {
+      registration.dispose();
+      if (viewer) {
+        const pane = lumine.workspace.paneForItem(viewer);
+        if (pane) await pane.destroyItem(viewer, true);
+        else if (!viewer.destroyed) viewer.destroy();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves an unresolved model alone when opening a source is cancelled", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-cancel-source-"));
+    const viewPath = path.join(directory, "[v] model.grv");
+    fs.writeFileSync(viewPath, "{}\n");
+    let viewer = null;
+
+    try {
+      viewer = await lumine.workspace.open(viewPath, { searchAllPanes: true });
+      await viewer.viewDocument.whenWatcherReady();
+      const error = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(() => !error.hidden, "the missing source to be reported");
+      const unresolved = viewer.session;
+      const sourceText = viewer.viewDocument.getSourceBuffer().getText();
+      const open = error.querySelector('[data-action="open-model-source"]');
+      spyOn(lumine.window, "showOpenDialog").and.resolveTo({
+        canceled: true,
+        filePaths: [],
+      });
+
+      expect(await viewer.dispatchCommand(open.dataset.command)).toEqual([false]);
+      expect(viewer.session).toBe(unresolved);
+      expect(unresolved.disposed).toBe(false);
+      expect(viewer.renderer).toBeNull();
+      expect(error.hidden).toBe(false);
+      expect(viewer.viewDocument.getStoredData()).toEqual({});
+      expect(viewer.viewDocument.getSourceBuffer().getText()).toBe(sourceText);
+      expect(viewer.getFileState()).toBe(FileState.UNMODIFIED);
+    } finally {
+      if (viewer) {
+        const pane = lumine.workspace.paneForItem(viewer);
+        if (pane) await pane.destroyItem(viewer, true);
+        else if (!viewer.destroyed) viewer.destroy();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("leaves a viewer alone when a late provider cannot source it", async () => {
     sourceProviderDisposable.dispose();
     const restored = mainModule.deserialize({ uri: MAIN_EXAMPLE_URI });
