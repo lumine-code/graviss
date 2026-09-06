@@ -417,6 +417,41 @@ describe("graviss", () => {
     restored.destroy();
   });
 
+  it("repaints theme changes immediately and themes the complete view cube", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(
+      () => item.renderer != null || !item.element.querySelector(".graviss-error").hidden,
+      "the Three.js scene to initialize",
+    );
+    if (!item.renderer) fail("Renderer initialization failed");
+    item.setAppearance("cloud");
+    spyOn(item.renderer, "flushRender").and.callThrough();
+
+    const stylesheet = lumine.styles.addStyleSheet(`
+      .graviss[data-appearance="cloud"] {
+        --graviss-selected: rgb(1, 2, 3);
+        --graviss-cube-face: rgb(4, 5, 6);
+        --graviss-cube-border: rgb(7, 8, 9);
+        --graviss-cube-text: rgb(10, 11, 12);
+        --graviss-cube-hover: rgb(13, 14, 15);
+        --graviss-cube-selected: rgb(16, 17, 18);
+      }
+    `);
+    await null;
+
+    const { renderer } = item;
+    expect(renderer.flushRender).toHaveBeenCalled();
+    expect(renderer.colors.selected.getHex()).toBe(0x010203);
+    expect(renderer.viewCube.faceMaterials[0].color.getHex()).toBe(0x040506);
+    expect(renderer.viewCube.outlineMaterial.color.getHex()).toBe(0x070809);
+    expect(renderer.viewCube.labelMaterials[0].color.getHex()).toBe(0x0a0b0c);
+    expect(renderer.viewCube.palette.cubeHover).toBe(0x0d0e0f);
+    expect(renderer.viewCube.palette.cubeSelected).toBe(0x101112);
+
+    stylesheet.dispose();
+    await null;
+  });
+
   it("renders signed model coordinates without rewriting them", async () => {
     const geometry = createFrameGeometry();
     const session = {
