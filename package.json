@@ -36,7 +36,9 @@
     "You can animate a load case over the FEM model with {{ 'graviss:toggle-results-panel' | keystroke }}"
   ],
   "deserializers": {
-    "GravissView": "deserialize"
+    "GravissView": "deserialize",
+    "GravissFilterPanel": "deserializeFilterPanel",
+    "GravissResultsPanel": "deserializeResultsPanel"
   },
   "scripts": {
     "test": "lumine --test spec",

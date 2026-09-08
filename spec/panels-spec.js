@@ -120,8 +120,40 @@ describe("the Graviss dock panels", () => {
     // One of each for the whole window: both follow whichever model is active,
     // so a second copy would be a second view of the same thing.
     expect(await lumine.workspace.open(FILTER_PANEL_URI)).toBe(filter);
-    expect(filter.serialize()).toEqual({ deserializer: "GravissFilterPanel" });
-    expect(mainModule.deserializeResultsPanel()).toBe(results);
+    const filterState = { deserializer: "GravissFilterPanel" };
+    const resultsState = { deserializer: "GravissResultsPanel" };
+    expect(filter.serialize()).toEqual(filterState);
+    expect(results.serialize()).toEqual(resultsState);
+    expect(lumine.deserializers.deserialize(filter.serialize())).toBe(filter);
+    expect(lumine.deserializers.deserialize(results.serialize())).toBe(results);
+
+    await lumine.workspace.paneForItem(filter).destroyItem(filter);
+    expect(mainModule.filterPanel).toBeNull();
+    const replacement = lumine.deserializers.deserialize(filterState);
+    expect(replacement).not.toBe(filter);
+    expect(mainModule.getFilterPanel()).toBe(replacement);
+  });
+
+  it("keeps panels deserialized before activation as the window singletons", async () => {
+    await lumine.packages.deactivatePackage("graviss");
+    const pack = lumine.packages.getLoadedPackage("graviss");
+    mainModule = pack.mainModule;
+    const activate = spyOn(mainModule, "activate").and.callThrough();
+    const initialActivation = spyOn(lumine.packages, "hasActivatedInitialPackages").and.returnValue(
+      false,
+    );
+
+    const filter = lumine.deserializers.deserialize({ deserializer: "GravissFilterPanel" });
+    const results = lumine.deserializers.deserialize({ deserializer: "GravissResultsPanel" });
+    expect(activate).not.toHaveBeenCalled();
+    expect(lumine.deserializers.deserialize(filter.serialize())).toBe(filter);
+    expect(lumine.deserializers.deserialize(results.serialize())).toBe(results);
+
+    initialActivation.and.callThrough();
+    await lumine.packages.activatePackage("graviss");
+    expect(activate.calls.count()).toBe(1);
+    expect(mainModule.getFilterPanel()).toBe(filter);
+    expect(mainModule.getResultsPanel()).toBe(results);
   });
 
   it("says why it is empty rather than merely going blank", async () => {
