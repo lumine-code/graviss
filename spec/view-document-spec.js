@@ -2,9 +2,6 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { FileState, TextBuffer } = require("lumine");
-const { stopAllWatchers } = require(
-  path.join(lumine.application.getResourcePath(), "src", "path-watcher"),
-);
 const { TEST_MODELS: EXAMPLES } = require("./support/test-model");
 const {
   GravissViewDocument,
@@ -27,7 +24,7 @@ describe("GravissViewDocument", () => {
 
   afterEach(async () => {
     document?.destroy();
-    await stopAllWatchers();
+    await lumine.fileWatchClient.disposeAll();
     fs.rmSync(directory, {
       recursive: true,
       force: true,
