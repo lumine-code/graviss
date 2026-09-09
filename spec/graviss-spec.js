@@ -1512,7 +1512,7 @@ describe("graviss", () => {
     } finally {
       registration.dispose();
       if (item) await lumine.workspace.paneForItem(item)?.destroyItem(item, true);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await lumine.fileWatchClient.settlePendingTeardown();
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });
@@ -2923,41 +2923,53 @@ describe("graviss", () => {
         path.extname(filePath) === ".grv" ? new TestSession(MAIN_EXAMPLE) : null,
     });
 
-    // Extension included, exactly as the editor writes it for the source of
-    // the same file, so the icon is what tells the two tabs apart.
-    const viewer = mainModule.createFileViewer(mainPath);
-    expect(viewer.getTitle()).toBe("main.grv");
-    expect(viewer.getIconName()).toBe("graph");
-    await conditionPromise(() => viewer.renderer != null, "the Three.js scene to initialize");
-    // Loading resolves the title again and must not talk itself into the
-    // model's own name.
-    expect(viewer.getTitle()).toBe("main.grv");
+    const viewers = [];
+    let other;
+    try {
+      // Extension included, exactly as the editor writes it for the source of
+      // the same file, so the icon is what tells the two tabs apart.
+      const viewer = mainModule.createFileViewer(mainPath);
+      viewers.push(viewer);
+      expect(viewer.getTitle()).toBe("main.grv");
+      expect(viewer.getIconName()).toBe("graph");
+      await conditionPromise(() => viewer.renderer != null, "the Three.js scene to initialize");
+      // Loading resolves the title again and must not talk itself into the
+      // model's own name.
+      expect(viewer.getTitle()).toBe("main.grv");
 
-    // Nothing to be told apart from, so the tab stays as it is even when the
-    // bar asks — which it does whenever the source of this very file is open.
-    expect(viewer.getLongTitle()).toBe("main.grv");
+      // Nothing to be told apart from, so the tab stays as it is even when the
+      // bar asks — which it does whenever the source of this very file is open.
+      expect(viewer.getLongTitle()).toBe("main.grv");
 
-    // A second render of a same-named file in another folder is the case that
-    // does need it.
-    const other = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-tab-title-"));
-    const otherPath = path.join(other, "main.grv");
-    fs.writeFileSync(otherPath, `${JSON.stringify(untitled, null, 2)}\n`);
-    const opened = await lumine.workspace.open(mainPath, { searchAllPanes: true });
-    const sibling = await lumine.workspace.open(otherPath, { searchAllPanes: true });
-    expect(opened.getLongTitle()).toBe(`main.grv — ${path.basename(directory)}`);
-    expect(sibling.getLongTitle()).toBe(`main.grv — ${path.basename(other)}`);
+      // A second render of a same-named file in another folder is the case that
+      // does need it.
+      other = fs.mkdtempSync(path.join(os.tmpdir(), "graviss-tab-title-"));
+      const otherPath = path.join(other, "main.grv");
+      fs.writeFileSync(otherPath, `${JSON.stringify(untitled, null, 2)}\n`);
+      const opened = await lumine.workspace.open(mainPath, { searchAllPanes: true });
+      viewers.push(opened);
+      const sibling = await lumine.workspace.open(otherPath, { searchAllPanes: true });
+      viewers.push(sibling);
+      expect(opened.getLongTitle()).toBe(`main.grv — ${path.basename(directory)}`);
+      expect(sibling.getLongTitle()).toBe(`main.grv — ${path.basename(other)}`);
 
-    // A document that names itself keeps its name.
-    const named = path.join(directory, "named.grv");
-    fs.writeFileSync(named, `${JSON.stringify(MAIN_EXAMPLE.viewDocument, null, 2)}\n`);
-    const titled = mainModule.createFileViewer(named);
-    expect(titled.getTitle()).toBe(MAIN_EXAMPLE.viewDocument.title);
-
-    titled.destroy();
-    viewer.destroy();
-    providerDisposable.dispose();
-    fs.rmSync(directory, { recursive: true, force: true });
-    fs.rmSync(other, { recursive: true, force: true });
+      // A document that names itself keeps its name.
+      const named = path.join(directory, "named.grv");
+      fs.writeFileSync(named, `${JSON.stringify(MAIN_EXAMPLE.viewDocument, null, 2)}\n`);
+      const titled = mainModule.createFileViewer(named);
+      viewers.push(titled);
+      expect(titled.getTitle()).toBe(MAIN_EXAMPLE.viewDocument.title);
+    } finally {
+      for (const item of new Set(viewers)) {
+        const pane = lumine.workspace.paneForItem(item);
+        if (pane) await pane.destroyItem(item, true);
+        else item.destroy();
+      }
+      providerDisposable.dispose();
+      await lumine.fileWatchClient.settlePendingTeardown();
+      fs.rmSync(directory, { recursive: true, force: true });
+      if (other) fs.rmSync(other, { recursive: true, force: true });
+    }
   });
 
   it("draws springs and couplings as marks between the nodes they join", async () => {
@@ -4643,8 +4655,9 @@ describe("graviss", () => {
       createSession: ({ filePath }) =>
         filePath === viewPath ? new TestSession(MAIN_EXAMPLE) : null,
     });
+    let item;
     try {
-      const item = await lumine.workspace.open(viewPath, { searchAllPanes: true });
+      item = await lumine.workspace.open(viewPath, { searchAllPanes: true });
       expect(item instanceof GravissView).toBe(true);
       await conditionPromise(() => item.renderer != null, "the hand-written view to load");
       // A graphic is where it is, so both survive; the repeated alias picks the
@@ -4655,9 +4668,14 @@ describe("graviss", () => {
       // file is left exactly as it was written.
       expect(item.usesFittedCamera()).toBe(true);
       expect(item.getFileState()).toBe(FileState.UNMODIFIED);
-      await lumine.workspace.paneForItem(item)?.destroyItem(item, true);
     } finally {
+      if (item) {
+        const pane = lumine.workspace.paneForItem(item);
+        if (pane) await pane.destroyItem(item, true);
+        else item.destroy();
+      }
       providerDisposable.dispose();
+      await lumine.fileWatchClient.settlePendingTeardown();
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });
@@ -4777,7 +4795,7 @@ describe("graviss", () => {
         if (pane) await pane.destroyItem(viewer, true);
         else if (!viewer.destroyed) viewer.destroy();
       }
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await lumine.fileWatchClient.settlePendingTeardown();
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });
@@ -4815,7 +4833,7 @@ describe("graviss", () => {
         if (pane) await pane.destroyItem(viewer, true);
         else if (!viewer.destroyed) viewer.destroy();
       }
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await lumine.fileWatchClient.settlePendingTeardown();
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });
