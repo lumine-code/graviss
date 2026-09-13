@@ -117,6 +117,9 @@ describe("the Graviss dock panels", () => {
     expect(filter.getTitle()).toBe("Model Filter");
     expect(results.getTitle()).toBe("Model Results");
     expect(filter.getDefaultLocation()).toBe("right");
+    expect(filter.getAllowedLocations()).toEqual(["right", "left"]);
+    expect(results.getDefaultLocation()).toBe("right");
+    expect(results.getAllowedLocations()).toEqual(["right", "left"]);
     // One of each for the whole window: both follow whichever model is active,
     // so a second copy would be a second view of the same thing.
     expect(await lumine.workspace.open(FILTER_PANEL_URI)).toBe(filter);
