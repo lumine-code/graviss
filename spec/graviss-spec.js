@@ -2714,7 +2714,10 @@ describe("graviss", () => {
       .findCommands({ target: lumine.workspace.getElement() })
       .map(({ name }) => name);
 
-    expect(manifest.activationCommands).toBeUndefined();
+    expect(manifest.activationCommands["lumine-workspace"]).toContain("graviss:open-source");
+    expect(manifest.activationCommands["lumine-workspace"]).toContain(
+      "graviss:open-source-on-right",
+    );
     expect(manifest.consumedServices["tree-view.selection"]).toBeDefined();
     expect(commands).toContain("graviss:open-source");
     expect(commands).toContain("graviss:open-source-on-right");
