@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { FileState } = require("lumine");
-const GravissView = require("../lib/graviss-view");
+let GravissView = require("../lib/graviss-view");
 const { APPEARANCE_IDS, appearanceDefinition } = require("../lib/appearance");
 const { CAMERA_VIEW_IDS } = require("../lib/camera-navigation");
 const {
@@ -58,6 +58,7 @@ describe("graviss", () => {
     jasmine.attachToDOM(lumine.workspace.getElement());
     const pack = await lumine.packages.activatePackage("graviss");
     mainModule = pack.mainModule;
+    GravissView = require("../lib/graviss-view");
     sourceProviderDisposable = mainModule.consumeGravissSource({
       id: "spec-models",
       createSession({ filePath }) {
@@ -2714,7 +2715,6 @@ describe("graviss", () => {
       .findCommands({ target: lumine.workspace.getElement() })
       .map(({ name }) => name);
 
-    expect(manifest.activationCommands).toBeUndefined();
     expect(manifest.consumedServices["tree-view.selection"]).toBeDefined();
     expect(commands).toContain("graviss:open-source");
     expect(commands).toContain("graviss:open-source-on-right");

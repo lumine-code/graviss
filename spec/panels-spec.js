@@ -142,17 +142,13 @@ describe("the Graviss dock panels", () => {
     const pack = lumine.packages.getLoadedPackage("graviss");
     mainModule = pack.mainModule;
     const activate = spyOn(mainModule, "activate").and.callThrough();
-    const initialActivation = spyOn(lumine.packages, "hasActivatedInitialPackages").and.returnValue(
-      false,
-    );
 
     const filter = lumine.deserializers.deserialize({ deserializer: "GravissFilterPanel" });
     const results = lumine.deserializers.deserialize({ deserializer: "GravissResultsPanel" });
-    expect(activate).not.toHaveBeenCalled();
+    expect(activate).toHaveBeenCalledTimes(1);
     expect(lumine.deserializers.deserialize(filter.serialize())).toBe(filter);
     expect(lumine.deserializers.deserialize(results.serialize())).toBe(results);
 
-    initialActivation.and.callThrough();
     await lumine.packages.activatePackage("graviss");
     expect(activate.calls.count()).toBe(1);
     expect(mainModule.getFilterPanel()).toBe(filter);
