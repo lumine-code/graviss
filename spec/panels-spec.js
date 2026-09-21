@@ -145,7 +145,10 @@ describe("the Graviss dock panels", () => {
 
     const filter = lumine.deserializers.deserialize({ deserializer: "GravissFilterPanel" });
     const results = lumine.deserializers.deserialize({ deserializer: "GravissResultsPanel" });
-    expect(activate).toHaveBeenCalledTimes(1);
+    // Workspace deserialization happens before the initial package batch. The
+    // deserializer may construct its singleton panels, but the package's live
+    // activate hook must wait for the normal bootstrap to finish.
+    expect(activate).not.toHaveBeenCalled();
     expect(lumine.deserializers.deserialize(filter.serialize())).toBe(filter);
     expect(lumine.deserializers.deserialize(results.serialize())).toBe(results);
 
