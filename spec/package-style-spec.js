@@ -13,13 +13,15 @@ describe("graviss package conventions", () => {
     expect(manifest.keywords.length).toBeLessThanOrEqual(8);
     expect(manifest.keywords.some((keyword) => manifest.name.includes(keyword))).toBe(false);
     expect(manifest.keywords.some((keyword) => FORBIDDEN_KEYWORDS.has(keyword))).toBe(false);
-    expect(Object.keys(manifest).indexOf("backgroundTips")).toBe(
-      Object.keys(manifest).indexOf("engines") + 1,
+    expect(manifest.providedServices["background-tips.provider"].versions["1.0.0"]).toBe(
+      "provideBackgroundTips",
     );
     // Three, because the package now has three headline features rather than
     // one: framing a model, narrowing it, and reading an analysis over it.
-    expect(manifest.backgroundTips.length).toBeGreaterThanOrEqual(1);
-    expect(manifest.backgroundTips.length).toBeLessThanOrEqual(3);
+    const contribution = require("../lib/main").provideBackgroundTips();
+    expect(contribution.packageName).toBe("graviss");
+    expect(contribution.tips.length).toBeGreaterThanOrEqual(1);
+    expect(contribution.tips.length).toBeLessThanOrEqual(3);
     // The settings view renders a schema in the order it declares, and names
     // every entry from its own title, so neither is optional.
     for (const setting of Object.values(manifest.configSchema)) {
