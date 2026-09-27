@@ -436,11 +436,13 @@ describe("GravissViewDocument", () => {
           graphics: [{ filter: { rules: [{ sign: "+", type: "g", kinds: ["girder"] }] } }],
         }).graphics[0],
     ).toBe(false);
-    // A cycle nobody implements is not a cycle.
-    expect(
-      "results" in
-        normalizeViewDocument({ graphics: [{ results: { cycle: "spin" } }] }).graphics[0],
-    ).toBe(false);
+    // A cycle nobody implements is not a cycle. This includes the two removed
+    // modes, so an older document falls back to the current automatic choice.
+    for (const cycle of ["spin", "ramp", "sweep"]) {
+      expect(
+        "results" in normalizeViewDocument({ graphics: [{ results: { cycle } }] }).graphics[0],
+      ).toBe(false);
+    }
 
     // What it can be read to mean, it keeps.
     const good = normalizeViewDocument({

@@ -179,12 +179,9 @@ describe("animation cycles", () => {
     expect(1 - phaseOf("thereAndBack", 0.5 - epsilon)).toBeLessThan(epsilon * 0.001);
     expect(phaseOf("thereAndBack", 1 - epsilon)).toBeLessThan(epsilon * 0.001);
 
-    expect(phaseOf("ramp", 0)).toBeCloseTo(0, 9);
-    expect(phaseOf("ramp", 0.9)).toBeCloseTo(0.9, 9);
-
     // Whole periods away is the same place in the swing.
     expect(phaseOf("pingPong", 3.25)).toBeCloseTo(1, 9);
-    expect(CYCLE_IDS).toEqual(["pingPong", "thereAndBack", "ramp", "sweep"]);
+    expect(CYCLE_IDS).toEqual(["pingPong", "thereAndBack"]);
   });
 });
 
@@ -194,7 +191,7 @@ describe("Animation", () => {
     let time = 0;
     let scheduled = 0;
     const animation = new Animation({
-      onFrame: (phase, index) => frames.push([Math.round(phase * 1000) / 1000, index]),
+      onFrame: (phase) => frames.push(Math.round(phase * 1000) / 1000),
       requestFrame: () => (scheduled += 1),
       now: () => time,
     });
@@ -219,10 +216,10 @@ describe("Animation", () => {
     // A quarter of the way through, `thereAndBack` is halfway up: it reaches
     // the full shape at the middle of its period and returns by the end.
     animation.advance(at(250));
-    expect(frames).toEqual([[0.5, 0]]);
+    expect(frames).toEqual([0.5]);
     expect(scheduled()).toBe(2);
     animation.advance(at(500));
-    expect(frames.at(-1)).toEqual([1, 0]);
+    expect(frames.at(-1)).toBe(1);
   });
 
   it("stops asking when it is stopped, and resumes where it was", () => {
@@ -238,9 +235,9 @@ describe("Animation", () => {
     // the start, so pausing to look at something does not lose it.
     animation.start();
     animation.advance(at(500));
-    expect(frames.at(-1)).toEqual([0.5, 0]);
+    expect(frames.at(-1)).toBe(0.5);
     animation.advance(at(750));
-    expect(frames.at(-1)).toEqual([1, 0]);
+    expect(frames.at(-1)).toBe(1);
   });
 
   it("changes tempo without moving the running cycle", () => {
@@ -248,7 +245,7 @@ describe("Animation", () => {
     animation.setPeriod(1000);
     animation.start();
     animation.advance(at(250));
-    expect(frames.at(-1)).toEqual([0.5, 0]);
+    expect(frames.at(-1)).toBe(0.5);
 
     // Still one quarter through immediately after slowing down. The next half
     // second is one quarter of the new two-second period, so it reaches the
@@ -256,21 +253,9 @@ describe("Animation", () => {
     animation.setPeriod(2000);
     expect(animation.fractionAt(at(250))).toBeCloseTo(0.25, 9);
     animation.advance(at(250));
-    expect(frames.at(-1)).toEqual([0.5, 0]);
+    expect(frames.at(-1)).toBe(0.5);
     animation.advance(at(750));
-    expect(frames.at(-1)).toEqual([1, 0]);
-  });
-
-  it("steps a sweep through the cases instead of swinging", () => {
-    const { animation, at, frames } = driver();
-    animation.setCycle("sweep");
-    animation.setPeriod(1000);
-    animation.setCount(4);
-    animation.start();
-    for (const time of [0, 300, 600, 900]) animation.advance(at(time));
-    expect(frames.map(([, index]) => index)).toEqual([0, 1, 2, 3]);
-    // Each case is held still and shown whole.
-    expect(frames.every(([phase]) => phase === 1)).toBe(true);
+    expect(frames.at(-1)).toBe(1);
   });
 
   it("keeps a period that would otherwise divide by zero above a floor", () => {

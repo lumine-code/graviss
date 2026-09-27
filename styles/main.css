@@ -113,11 +113,19 @@
 
 .graviss-toolbar-icon .graviss-icon-fill {
   fill: currentColor;
-  opacity: 0.16;
+  fill-opacity: 0.16;
 }
 
 .graviss-toolbar-button.selected .graviss-icon-fill {
-  opacity: 0.24;
+  fill-opacity: 0.24;
+}
+
+/* The orthogonal-view icons use one cube face to say which side will be put
+   towards the camera. It is a direction indicator, not decorative shading, so
+   it needs substantially more contrast than ordinary icon fills. */
+.graviss-toolbar-icon .graviss-icon-active-face {
+  fill-opacity: 0.48;
+  stroke-width: 1.75;
 }
 
 .graviss-graphic-counter.btn {

@@ -247,6 +247,13 @@ describe("graviss", () => {
       "copy-image",
       "open-source",
     ]);
+    for (const view of ["top", "front", "right"]) {
+      const face = toolbar.querySelector(`[data-view="${view}"] .graviss-icon-active-face`);
+      expect(face).not.toBeNull();
+      expect(getComputedStyle(face).fillOpacity).toBe("0.48");
+      expect(getComputedStyle(face).strokeWidth).toBe("1.75px");
+    }
+    expect(toolbar.querySelector('[data-view="iso"] .graviss-icon-active-face')).toBeNull();
     // The bar is split by the scope a control acts at — the set of graphics,
     // the picture the active graphic composes, the layers inside it — with
     // everything document- or renderer-wide held apart in the tail.
@@ -284,6 +291,10 @@ describe("graviss", () => {
     );
     expect(previousGraphic.querySelector('[data-icon="previous-graphic"]')).not.toBeNull();
     expect(nextGraphic.querySelector('[data-icon="next-graphic"]')).not.toBeNull();
+    expect(previousGraphic.querySelectorAll("path").length).toBe(1);
+    expect(nextGraphic.querySelectorAll("path").length).toBe(1);
+    expect(previousGraphic.querySelector("rect")).toBeNull();
+    expect(nextGraphic.querySelector("rect")).toBeNull();
     expect(previousGraphic.closest(".btn-group")).toBe(nextGraphic.closest(".btn-group"));
     const addGraphicButton = toolbar.querySelector('[data-action="add-graphic"]');
     const deleteGraphicButton = toolbar.querySelector('[data-action="delete-graphic"]');
@@ -1449,7 +1460,7 @@ describe("graviss", () => {
     expect(edges.isLineSegments2).toBe(true);
     const edgeShader = { vertexShader: "void main() { gl_Position = clip; }" };
     edges.material.onBeforeCompile(edgeShader);
-    expect(edgeShader.vertexShader).toContain("clip.z -= 0.00001 * clip.w");
+    expect(edgeShader.vertexShader).toContain("clip.z -= 0.00002 * clip.w");
     item.renderer.updateLighting();
     const towardCamera = item.renderer.camera.position
       .clone()
@@ -3422,6 +3433,104 @@ describe("graviss", () => {
     }
   });
 
+  it("uses nodal rotations to curve a QUAD between its translated corners", async () => {
+    const model = {
+      id: "rotation-shaped-quad",
+      title: "Rotation-shaped QUAD",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+        ],
+        elements: [{ id: 1, kind: "shell", nodeIds: [1, 2, 3, 4] }],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the curved QUAD scene to initialize");
+      const renderer = viewer.renderer;
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 6,
+        nodes: {
+          ids: [1, 2, 3, 4],
+          // The corners do not translate. Their rotations prescribe a positive
+          // arch: the left tangent rises and the right tangent falls.
+          values: [
+            0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0, -0.5, 0,
+          ],
+        },
+        extent: 0,
+      });
+      renderer.setDeformationScale(1);
+
+      const positions = renderer.meshes.shells.geometry.getAttribute("position");
+      expect(positions.count).toBe(25);
+      let highestSurface = -Infinity;
+      for (let vertex = 0; vertex < positions.count; vertex += 1) {
+        highestSurface = Math.max(highestSurface, positions.getZ(vertex));
+      }
+      expect(highestSurface).toBeGreaterThan(0.1);
+      const normals = renderer.meshes.shells.geometry.getAttribute("normal");
+      const tangentS = new renderer.THREE.Vector3(
+        positions.getX(7) - positions.getX(5),
+        positions.getY(7) - positions.getY(5),
+        positions.getZ(7) - positions.getZ(5),
+      );
+      const tangentT = new renderer.THREE.Vector3(
+        positions.getX(11) - positions.getX(1),
+        positions.getY(11) - positions.getY(1),
+        positions.getZ(11) - positions.getZ(1),
+      );
+      const surfaceNormal = tangentS.cross(tangentT).normalize();
+      const lightingNormal = new renderer.THREE.Vector3(
+        normals.getX(6),
+        normals.getY(6),
+        normals.getZ(6),
+      );
+      expect(lightingNormal.dot(surfaceNormal)).toBeGreaterThan(0.999999);
+      // Mesh lines use the same boundary samples as the fill instead of
+      // remaining straight chords through the now-curved surface.
+      expect(
+        Math.max(...renderer.shellState.edgePositions.filter((unused, at) => at % 3 === 2)),
+      ).toBeGreaterThan(0.1);
+      let edge = 0;
+      for (const boundary of renderer.shellState.prepared[0].surfaceLayout.boundaries) {
+        for (let segment = 0; segment + 1 < boundary.length; segment += 1) {
+          const from = boundary[segment];
+          const to = boundary[segment + 1];
+          expect(
+            Array.from(renderer.shellState.edgePositions.slice(edge * 6, edge * 6 + 6)),
+          ).toEqual([
+            positions.getX(from),
+            positions.getY(from),
+            positions.getZ(from),
+            positions.getX(to),
+            positions.getY(to),
+            positions.getZ(to),
+          ]);
+          edge += 1;
+        }
+      }
+
+      renderer.setDeformationScale(0);
+      let returned = 0;
+      for (let vertex = 0; vertex < positions.count; vertex += 1) {
+        returned = Math.max(returned, Math.abs(positions.getZ(vertex)));
+      }
+      expect(returned).toBeLessThan(1e-7);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("turns a shell's thickness director with the nodal rotations", async () => {
     const model = {
       id: "rotating-director",
@@ -3888,16 +3997,24 @@ describe("graviss", () => {
         expect(viewer.renderer.getDeformation().extent).toBeCloseTo(0.01, 9);
         // A load case is a real state of the structure, so it runs up from zero;
         // a mode shape has no sign, so it swings about it.
-        expect(viewer.getResultsState().cycle).toBe("thereAndBack");
+        expect(viewer.getResultsState().cycle).toBeNull();
+        expect(viewer.renderer.getAnimation().cycle).toBe("thereAndBack");
 
         await viewer.selectLoadCase(901);
         expect(viewer.renderer.getDeformation().extent).toBeCloseTo(0.05, 9);
-        // The cycle a user chose is theirs to keep; only a case arriving where
-        // nobody chose one picks its own.
+        // No explicit choice was made, so changing from statics to a mode also
+        // changes the inferred cycle.
+        expect(viewer.getResultsState().cycle).toBeNull();
+        expect(viewer.renderer.getAnimation().cycle).toBe("pingPong");
+
+        // A cycle the user actually chose is theirs to keep across cases.
+        viewer.setAnimationCycle("thereAndBack");
+        await viewer.selectLoadCase(901);
         expect(viewer.getResultsState().cycle).toBe("thereAndBack");
         viewer.setAnimationCycle(null);
         await viewer.selectLoadCase(901);
-        expect(viewer.getResultsState().cycle).toBe("pingPong");
+        expect(viewer.getResultsState().cycle).toBeNull();
+        expect(viewer.renderer.getAnimation().cycle).toBe("pingPong");
 
         // And a case nobody has is no case at all rather than an error.
         await viewer.selectLoadCase(404);
@@ -3911,7 +4028,7 @@ describe("graviss", () => {
       const viewer = await analysedViewer();
       try {
         await viewer.selectLoadCase(101);
-        // Chosen by the viewer until a user chooses one, and kept after.
+        // Automatic until a user chooses one, and kept after.
         expect(viewer.getResultsState().scale).toBe("auto");
         expect(viewer.renderer.getDeformation().automatic).toBe(true);
         viewer.setDeformationScale(100);
@@ -3933,7 +4050,6 @@ describe("graviss", () => {
         expect(viewer.activeGraphic.results).toEqual({
           loadCaseId: 101,
           scale: 100,
-          cycle: "thereAndBack",
           colorByDisplacement: true,
         });
       } finally {

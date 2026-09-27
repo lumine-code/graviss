@@ -1,5 +1,6 @@
 const { FILTER_PANEL_URI } = require("../lib/filter-panel");
 const {
+  CYCLE_LABELS,
   RESULTS_PANEL_URI,
   formatDisplacement,
   scaleForSlider,
@@ -923,6 +924,10 @@ describe("the Graviss dock panels", () => {
 });
 
 describe("the results panel's own arithmetic", () => {
+  it("names the one-sided animation Positive", () => {
+    expect(CYCLE_LABELS).toEqual({ pingPong: "Swing", thereAndBack: "Positive" });
+  });
+
   it("moves the amplification slider in factors, not in numbers", () => {
     // A hundredfold is one step of interest and a hundred and one is not, so
     // the slider runs over decades. A thousand steps across six of them is one
