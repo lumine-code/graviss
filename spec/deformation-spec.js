@@ -8,7 +8,13 @@ const {
   extentOf,
   memberBow,
 } = require("../lib/deformation");
-const { Animation, CYCLE_IDS, defaultCycle, phaseOf } = require("../lib/animation");
+const {
+  ANIMATION_MODE_IDS,
+  Animation,
+  CYCLE_IDS,
+  defaultCycle,
+  phaseOf,
+} = require("../lib/animation");
 const { STOPS, colorScaleStops, sampleColorScale } = require("../lib/color-scale");
 
 const NODES = [
@@ -182,6 +188,7 @@ describe("animation cycles", () => {
     // Whole periods away is the same place in the swing.
     expect(phaseOf("pingPong", 3.25)).toBeCloseTo(1, 9);
     expect(CYCLE_IDS).toEqual(["pingPong", "thereAndBack"]);
+    expect(ANIMATION_MODE_IDS).toEqual(["default", "pingPong", "thereAndBack"]);
   });
 });
 

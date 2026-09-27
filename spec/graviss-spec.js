@@ -465,6 +465,46 @@ describe("graviss", () => {
     await null;
   });
 
+  it("re-resolves the theme when a restored background tab becomes active", async () => {
+    const foreground = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => foreground.renderer != null, "the foreground model to load");
+    const background = mainModule.createViewer(new TestSession(MAIN_EXAMPLE), {
+      title: "Restored background model",
+      graphics: [{ title: "Auto background", appearance: "auto" }],
+    });
+    await conditionPromise(() => background.renderer != null, "the detached model to load");
+    expect(background.element.isConnected).toBe(false);
+
+    const stylesheet = lumine.styles.addStyleSheet(`
+      lumine-workspace {
+        --base-background-color: rgb(250, 250, 250);
+      }
+    `);
+    await null;
+    // Detached computed styles have no inherited workspace colour, so the
+    // renderer could only take its dark fallback while this tab was restored.
+    expect(background.renderer.activeAppearance).toBe("midnight");
+
+    const pane = lumine.workspace.paneForItem(foreground);
+    pane.addItem(background);
+    expect(pane.getActiveItem()).toBe(foreground);
+    const applyTheme = spyOn(background.renderer, "applyTheme").and.callThrough();
+    pane.activateItem(background);
+    pane.activate();
+    await null;
+
+    expect(applyTheme).toHaveBeenCalled();
+    expect(background.renderer.activeAppearance).toBe("cloud");
+    expect(
+      background.renderer.canvasRenderer
+        .getClearColor(new background.renderer.THREE.Color())
+        .getHex(),
+    ).toBe(appearanceDefinition("cloud").background);
+
+    stylesheet.dispose();
+    await pane.destroyItem(background, true);
+  });
+
   it("renders signed model coordinates without rewriting them", async () => {
     const geometry = createFrameGeometry();
     const session = {
@@ -4254,7 +4294,7 @@ describe("graviss", () => {
         viewer.setAnimationCycle("thereAndBack");
         await viewer.selectLoadCase(901);
         expect(viewer.getResultsState().cycle).toBe("thereAndBack");
-        viewer.setAnimationCycle(null);
+        viewer.setAnimationCycle("default");
         await viewer.selectLoadCase(901);
         expect(viewer.getResultsState().cycle).toBeNull();
         expect(viewer.renderer.getAnimation().cycle).toBe("pingPong");

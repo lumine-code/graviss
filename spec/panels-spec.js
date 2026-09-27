@@ -720,8 +720,12 @@ describe("the Graviss dock panels", () => {
     results.playButton.click();
     expect(animation.running).toBe(false);
 
+    expect(results.cycleSelect.value).toBe("default");
     results.cycleSelect.setValue("pingPong", { emit: true });
     expect(viewer.getResultsState().cycle).toBe("pingPong");
+    results.cycleSelect.setValue("default", { emit: true });
+    expect(viewer.getResultsState().cycle).toBeNull();
+    expect(viewer.renderer.getAnimation().cycle).toBe("thereAndBack");
 
     // The legend appears with the colouring and states the ends of the field in
     // the unit somebody would say them in.
@@ -925,7 +929,11 @@ describe("the Graviss dock panels", () => {
 
 describe("the results panel's own arithmetic", () => {
   it("names the one-sided animation Positive", () => {
-    expect(CYCLE_LABELS).toEqual({ pingPong: "Swing", thereAndBack: "Positive" });
+    expect(CYCLE_LABELS).toEqual({
+      default: "Default",
+      pingPong: "Swing",
+      thereAndBack: "Positive",
+    });
   });
 
   it("moves the amplification slider in factors, not in numbers", () => {
