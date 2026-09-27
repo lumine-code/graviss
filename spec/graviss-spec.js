@@ -13,6 +13,7 @@ const {
   createFrameGeometry,
 } = require("./support/test-model");
 const { entityIndexAtVertex } = require("../lib/renderer");
+const { sampleColorScale } = require("../lib/color-scale");
 const { compileRules } = require("../lib/filter-rules");
 const { buildSubjects, subjectsByKey } = require("../lib/filter-types");
 
@@ -4707,6 +4708,9 @@ describe("graviss", () => {
         const at = fill.userData.gravissEntityRanges[index].start * 3;
         return Array.from(fill.instanceColor.array.slice(at, at + 3));
       };
+      const expectColor = (actual, expected) => {
+        expected.forEach((channel, index) => expect(actual[index]).toBeCloseTo(channel, 6));
+      };
       const structure = of("B1");
 
       // A model with nothing to read is still read as a structure, whatever the
@@ -4724,12 +4728,12 @@ describe("graviss", () => {
         extent: 0.02,
       });
       expect(renderer.colorScaleRange()).toEqual({ min: 0, max: 0.02 });
-      expect(of("B1")).not.toEqual(structure);
-      expect(of("B2")).not.toEqual(of("B1"));
-      // The scale starts at not having moved, so the element nearer the support
-      // sits lower on it - blue over red, and the ramp is blue at the bottom.
-      expect(of("B1")[2]).toBeGreaterThan(of("B1")[0]);
-      expect(of("B2")[0]).toBeGreaterThan(of("B2")[2]);
+      expect(of("B1")).toEqual([0, 0.25, 2]);
+      expect(of("B2")).toEqual([0.25, 1, 2]);
+      // The existing instance-colour attribute carries the two end values and
+      // a field marker. The shader samples the shared ramp between them, which
+      // avoids another vertex attribute on already full WebGL layouts.
+      expect(fill.material.customProgramCacheKey()).toBe("graviss-bend-displacement-field");
 
       // The phase moves the whole field at once, so it changes no colour.
       const painted = of("B2");
@@ -4737,9 +4741,104 @@ describe("graviss", () => {
       renderer.refreshInstanceColors();
       expect(of("B2")).toEqual(painted);
 
-      // And a selection still says what is selected.
+      // A selection still says what is selected, and dropping it restores the
+      // two-end field rather than its former constant average.
+      renderer.setSelected({
+        type: "element",
+        entity: fill.userData.gravissEntities[1],
+        entityIndex: 1,
+        instanceId: 1,
+        object: fill,
+      });
+      expectColor(of("B2"), renderer.colors.selected.toArray());
+      renderer.setSelected(null);
+      expect(of("B2")).toEqual(painted);
+
+      // Centreline mode interpolates the same field into its vertex colours.
+      renderer.setSectionRendering(false);
+      const lineColors = renderer.memberLines.geometry.getAttribute("color");
+      const firstRange = renderer.memberLines.userData.gravissEntityRanges[0];
+      expectColor(
+        Array.from(lineColors.array.slice(firstRange.start * 3, firstRange.start * 3 + 3)),
+        sampleColorScale(0),
+      );
+      expectColor(
+        Array.from(lineColors.array.slice(firstRange.start * 3 + 3, firstRange.start * 3 + 6)),
+        sampleColorScale(0.25),
+      );
+
       renderer.setColorByDisplacement(false);
-      expect(of("B1")).toEqual(structure);
+      renderer.setSectionRendering(true);
+      const rebuilt = renderer.pickables.find(
+        (mesh) => mesh.userData.gravissColorKey === "element",
+      );
+      expect(Array.from(rebuilt.instanceColor.array.slice(0, 3))).toEqual(structure);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("interpolates displacement colours with the shell shape functions", async () => {
+    const model = {
+      id: "shell-field",
+      title: "Shell field",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 2, y: 0, z: 0 },
+          { id: 3, x: 2, y: 2, z: 0 },
+          { id: 4, x: 0, y: 2, z: 0 },
+        ],
+        elements: [{ id: "Q1", kind: "shell", nodeIds: [1, 2, 3, 4] }],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the shell field to initialize");
+      const renderer = viewer.renderer;
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: {
+          ids: [1, 2, 3, 4],
+          values: [0, 0, 0, 0.25, 0, 0, 0.5, 0, 0, 1, 0, 0],
+        },
+        extent: 1,
+      });
+      renderer.setColorByDisplacement(true);
+
+      const shell = renderer.meshes.shells;
+      const colors = shell.geometry.getAttribute("color");
+      const displacement = shell.geometry.getAttribute("gravissDisplacement");
+      const colorAt = (vertex) => Array.from(colors.array.slice(vertex * 3, vertex * 3 + 3));
+      const expectColor = (actual, expected) => {
+        expected.forEach((channel, index) => expect(actual[index]).toBeCloseTo(channel, 6));
+      };
+      expect(Array.from(displacement.array.slice(0, 4))).toEqual([0, 0.25, 0.5, 1]);
+      // The fifth Q4 vertex is the natural centre: four equal shape-function
+      // weights, hence one quarter of the four nodal scalar values. The scalar
+      // reaches the fragment shader before the ramp is sampled, so a blue-red
+      // span still passes through cyan, green and yellow rather than purple.
+      expect(displacement.getX(4)).toBeCloseTo((0 + 0.25 + 0.5 + 1) / 4, 6);
+      expect(shell.material.customProgramCacheKey()).toBe("graviss-shell-displacement-field");
+
+      const entity = shell.userData.gravissEntities[0];
+      renderer.setSelected({
+        type: "element",
+        entity,
+        entityIndex: 0,
+        instanceId: 0,
+        object: shell,
+      });
+      expect(displacement.getX(4)).toBe(-1);
+      expectColor(colorAt(4), renderer.colors.selected.toArray());
+      renderer.setSelected(null);
+      expect(displacement.getX(4)).toBeCloseTo((0 + 0.25 + 0.5 + 1) / 4, 6);
     } finally {
       viewer.destroy();
     }
