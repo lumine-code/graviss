@@ -113,6 +113,27 @@ describe("Graviss model validation", () => {
     expect(() => validateGeometry(zeroArea)).toThrowError(/zero area|repeats shell nodes/);
   });
 
+  it("validates provider-selected shell surface interpolation", () => {
+    for (const surfaceInterpolation of ["linear", "q4", "hermite"]) {
+      const geometry = createMain2Geometry();
+      geometry.elements[0].surfaceInterpolation = surfaceInterpolation;
+      expect(validateGeometry(geometry)).toBe(geometry);
+    }
+
+    const unknown = createMain2Geometry();
+    unknown.elements[0].surfaceInterpolation = "adapted";
+    expect(() => validateGeometry(unknown)).toThrowError(/surfaceInterpolation must be one of/);
+
+    const triangle = createMain2Geometry();
+    triangle.elements[0].nodeIds.pop();
+    triangle.elements[0].surfaceInterpolation = "hermite";
+    expect(() => validateGeometry(triangle)).toThrowError(/hermite requires four nodes/);
+
+    const member = createMain1Geometry();
+    member.elements[0].surfaceInterpolation = "q4";
+    expect(() => validateGeometry(member)).toThrowError(/belongs only to shell elements/);
+  });
+
   it("accepts trusses and cables as members, and holds them to two nodes of some length", async () => {
     const description = validateDescription(await new TestSession(FRAME_MODEL).describe());
     for (const kind of ["truss", "cable"]) {

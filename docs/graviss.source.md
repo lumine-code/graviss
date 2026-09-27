@@ -138,6 +138,7 @@ type Element = {
   sectionId?: Id;
   thickness?: number | number[];
   offset?: number | number[];
+  surfaceInterpolation?: "linear" | "q4" | "hermite";
   direction?: Vector3;
   rotational?: boolean;
   localAxes?: { x: Vector3; y: Vector3; z: Vector3 };
@@ -199,6 +200,8 @@ Graviss draws line and area elements at one of three levels, and the user switch
 | `full`    | its cross-section, extruded | extruded to its real thickness | the above, plus `thickness` on area elements                          |
 
 A provider that supplies no section falls back to a thin centreline, and one that supplies no thickness draws its area elements flat. Neither is an error: the model is drawn as completely as it was described.
+
+`surfaceInterpolation` tells Graviss how an area element's displaced mid-surface is reconstructed between its nodes. `linear` joins its corners by triangles, `q4` applies the four-node bilinear isoparametric shape functions, and `hermite` forms a Coons patch whose boundary tangents come from the nodal rotations in a six- or seven-component result. A triangle defaults to `linear` and a four-node shell to `q4`; a provider states `hermite` only when its element formulation defines rotations as surface slopes. This belongs to the provider because the same six nodal values mean different kinematics in a Kirchhoff shell and in a shear-deformable shell whose rotations describe an independent director. If a Hermite element receives a result without rotations, Graviss falls back to Q4 rather than inventing slopes.
 
 A `plates` section is a **thin-walled** one: a cross-section that is not a filled outline but the plates it is built from — a welded plate girder, a rolled angle, a cold-formed channel. Each plate is a straight run of material of one thickness, and the run given is its **middle**: the plate stands half a thickness either side of it and ends square at both ends, so a source that trims two plates to meet has them drawn meeting. Nothing extends or mitres a corner, because lengthening a plate would put material in the section that the source did not put there, and nothing merges the plates into one outline — the seam between two of them is an edge the section really has. Plates may be given in any order and need not touch: the section is what stands where they stand.
 

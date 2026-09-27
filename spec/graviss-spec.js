@@ -2497,7 +2497,9 @@ describe("graviss", () => {
     // clicks are enough to decay it by six orders of magnitude. Turned this
     // fast they compound onto one another rather than each starting again from
     // wherever the easing has got to.
+    const zoomRaycast = spyOn(renderer, "zoomIntersectionAt").and.callThrough();
     for (let step = 0; step < 300; step += 1) wheel(-120);
+    expect(zoomRaycast).toHaveBeenCalledTimes(1);
     await conditionPromise(() => renderer.zoomFlight == null, "the zoom to settle");
     expect(distance()).toBeGreaterThanOrEqual(floor - 1e-9);
 
@@ -3433,10 +3435,10 @@ describe("graviss", () => {
     }
   });
 
-  it("uses nodal rotations to curve a QUAD between its translated corners", async () => {
+  it("keeps adapted-shell rotations out of the Q4 translation field", async () => {
     const model = {
-      id: "rotation-shaped-quad",
-      title: "Rotation-shaped QUAD",
+      id: "adapted-shell-quad",
+      title: "Adapted-shell QUAD",
       format: "Spec fixture",
       createGeometry: () => ({
         nodes: [
@@ -3453,7 +3455,7 @@ describe("graviss", () => {
     const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
     jasmine.attachToDOM(viewer.element);
     try {
-      await conditionPromise(() => viewer.renderer != null, "the curved QUAD scene to initialize");
+      await conditionPromise(() => viewer.renderer != null, "the adapted QUAD scene to initialize");
       const renderer = viewer.renderer;
       renderer.setResult({
         kind: "displacement",
@@ -3461,23 +3463,42 @@ describe("graviss", () => {
         components: 6,
         nodes: {
           ids: [1, 2, 3, 4],
-          // The corners do not translate. Their rotations prescribe a positive
-          // arch: the left tangent rises and the right tangent falls.
+          // Only node 3 translates. The rotations are independent directors of
+          // an adapted shell, not Hermite derivatives of that translation.
           values: [
-            0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0, -0.5, 0,
+            0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 1, 0, 0.5, 0, 0, 0, 0, 0, -0.5, 0,
           ],
         },
-        extent: 0,
+        extent: 1,
       });
       renderer.setDeformationScale(1);
 
       const positions = renderer.meshes.shells.geometry.getAttribute("position");
       expect(positions.count).toBe(25);
-      let highestSurface = -Infinity;
-      for (let vertex = 0; vertex < positions.count; vertex += 1) {
-        highestSurface = Math.max(highestSurface, positions.getZ(vertex));
-      }
-      expect(highestSurface).toBeGreaterThan(0.1);
+      const zoomProxy = renderer.meshes.shells.userData.gravissZoomProxy;
+      expect(zoomProxy.geometry.getAttribute("position")).toBe(positions);
+      expect(zoomProxy.geometry.index.count).toBe(12);
+      expect(renderer.meshes.shells.geometry.index.count).toBe(96);
+      // Wheel depth uses the four-triangle live proxy, not the 32 triangles
+      // that make the displayed sampled patch. Exact selection keeps the full
+      // surface; only the depth-only zoom path substitutes it.
+      renderer.host.style.width = "800px";
+      renderer.host.style.height = "400px";
+      renderer.resize();
+      const raycast = spyOn(renderer.raycaster, "intersectObjects").and.returnValue([]);
+      const canvasBounds = renderer.canvasRenderer.domElement.getBoundingClientRect();
+      renderer.zoomIntersectionAt({
+        clientX: canvasBounds.left + canvasBounds.width / 2,
+        clientY: canvasBounds.top + canvasBounds.height / 2,
+      });
+      expect(raycast).toHaveBeenCalled();
+      const zoomObjects = raycast.calls.mostRecent().args[0];
+      expect(zoomObjects).toContain(zoomProxy);
+      expect(zoomObjects).not.toContain(renderer.meshes.shells);
+      // Q4 shape functions put the natural centre at one quarter of the one
+      // translated corner. Treating the rotations as slopes changes this value
+      // and can turn a true displacement maximum into an inward cusp.
+      expect(positions.getZ(12)).toBeCloseTo(0.25, 6);
       const normals = renderer.meshes.shells.geometry.getAttribute("normal");
       const tangentS = new renderer.THREE.Vector3(
         positions.getX(7) - positions.getX(5),
@@ -3496,8 +3517,7 @@ describe("graviss", () => {
         normals.getZ(6),
       );
       expect(lightingNormal.dot(surfaceNormal)).toBeGreaterThan(0.999999);
-      // Mesh lines use the same boundary samples as the fill instead of
-      // remaining straight chords through the now-curved surface.
+      // Mesh lines use the same boundary samples as the fill.
       expect(
         Math.max(...renderer.shellState.edgePositions.filter((unused, at) => at % 3 === 2)),
       ).toBeGreaterThan(0.1);
@@ -3526,6 +3546,125 @@ describe("graviss", () => {
         returned = Math.max(returned, Math.abs(positions.getZ(vertex)));
       }
       expect(returned).toBeLessThan(1e-7);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("draws a provider-selected linear QUAD as two displaced triangles", async () => {
+    const model = {
+      id: "linear-shell-quad",
+      title: "Linear shell QUAD",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+        ],
+        elements: [
+          {
+            id: 1,
+            kind: "shell",
+            nodeIds: [1, 2, 3, 4],
+            surfaceInterpolation: "linear",
+          },
+        ],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the linear QUAD scene to initialize");
+      const renderer = viewer.renderer;
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 6,
+        nodes: {
+          ids: [1, 2, 3, 4],
+          values: [
+            0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 1, 0, 0.5, 0, 0, 0, 0, 0, -0.5, 0,
+          ],
+        },
+        extent: 1,
+      });
+      renderer.setDeformationScale(1);
+
+      const shell = renderer.meshes.shells;
+      const positions = shell.geometry.getAttribute("position");
+      expect(positions.count).toBe(4);
+      expect(shell.geometry.index.count).toBe(6);
+      expect(Array.from({ length: positions.count }, (unused, at) => positions.getZ(at))).toEqual([
+        0, 0, 1, 0,
+      ]);
+      expect(shell.userData.gravissZoomProxy.geometry.index.count).toBe(6);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("uses nodal slopes only when the provider selects Hermite shell interpolation", async () => {
+    const model = {
+      id: "hermite-shell-quad",
+      title: "Hermite shell QUAD",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+        ],
+        elements: [
+          {
+            id: 1,
+            kind: "shell",
+            nodeIds: [1, 2, 3, 4],
+            surfaceInterpolation: "hermite",
+          },
+        ],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the Hermite QUAD scene to initialize");
+      const renderer = viewer.renderer;
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 6,
+        nodes: {
+          ids: [1, 2, 3, 4],
+          values: [
+            0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0, -0.5, 0,
+          ],
+        },
+        extent: 0,
+      });
+      renderer.setDeformationScale(1);
+
+      const positions = renderer.meshes.shells.geometry.getAttribute("position");
+      expect(positions.count).toBe(25);
+      expect(positions.getZ(12)).toBeGreaterThan(0.1);
+
+      // Both natural directions at a corner are transformed by that corner's
+      // one rotation. Their plane therefore agrees with its director and every
+      // incident Hermite element meets there without the inward cusp caused by
+      // borrowing a different neighbour's rotation for each tangent.
+      const tangents = new Float64Array(24);
+      const shell = renderer.shellState.prepared[0];
+      expect(renderer.prepareShellSurfaceTangents(renderer.shellState, shell, tangents)).toBe(true);
+      const alongS = new renderer.THREE.Vector3(tangents[0], tangents[1], tangents[2]);
+      const alongT = new renderer.THREE.Vector3(tangents[18], tangents[19], tangents[20]);
+      const tangentNormal = alongS.cross(alongT).normalize();
+      expect(tangentNormal.dot(shell.normals[0])).toBeGreaterThan(0.999999);
     } finally {
       viewer.destroy();
     }
