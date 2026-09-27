@@ -894,9 +894,12 @@ describe("graviss", () => {
       nodes: { ids: [2], values: [0, 0, 0.1] },
       extent: 0.1,
     });
-    // Animation replaces the expensive scene walk with a node-derived box, but
-    // the static grid is larger than this little model and must stay in that
-    // box or the camera's near plane cuts it off while the model moves.
+    // Animation replaces the expensive scene walk with a node-derived box.
+    // Hidden reference geometry stays out of it, or a large invisible grid
+    // holds the near plane back and wastes depth precision at middle zoom.
+    expect(renderer.grid.visible).toBe(false);
+    expect(renderer.sceneBox.containsBox(gridBox)).toBe(false);
+    renderer.setVisibility("grid", true);
     expect(renderer.sceneBox.containsBox(gridBox)).toBe(true);
     const box = renderer.computeSceneBox();
     const middle = box.getCenter(new renderer.THREE.Vector3());
