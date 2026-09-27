@@ -195,6 +195,11 @@ describe("graviss", () => {
     // the field sitting in the browser's red :invalid state.
     expect(symbolInput.step).toBe("any");
     expect(symbolInput.validity.valid).toBe(true);
+    const springScaleButton = toolbar.querySelector(
+      '[data-action="toggle-spring-stiffness-scaling"]',
+    );
+    expect(springScaleButton.getAttribute("aria-pressed")).toBe("false");
+    expect(springScaleButton.getAttribute("aria-label")).toBe("Scale springs by stiffness");
     const toolbarButtons = [...toolbar.querySelectorAll("button")];
     const perspectiveButton = toolbar.querySelector('[data-projection="perspective"]');
     const orthographicButton = toolbar.querySelector('[data-projection="orthographic"]');
@@ -236,6 +241,7 @@ describe("graviss", () => {
       "nodes",
       "supports",
       "springs",
+      "spring-scale",
       "couplings",
       "mesh",
       "grid",
@@ -267,6 +273,7 @@ describe("graviss", () => {
     expect(regionOf('[data-action="add-graphic"]')).toBe("Graphics");
     expect(regionOf('[data-action="background"]')).toBe("Picture");
     expect(regionOf('[data-visible="members"]')).toBe("Layers");
+    expect(regionOf('[data-action="toggle-spring-stiffness-scaling"]')).toBe("Layers");
     expect(regionOf(".graviss-symbol-input")).toBe("Layers");
     // The panels are their own region rather than part of the tail: a dock
     // surface is not output, not the document and not the renderer, and the
@@ -1302,6 +1309,14 @@ describe("graviss", () => {
     );
     lumine.commands.dispatch(item.element, "graviss:toggle-nodes");
     expect(item.renderer.meshes.nodes.visible).toBe(true);
+    const springScaling = item.element.querySelector(
+      '[data-action="toggle-spring-stiffness-scaling"]',
+    );
+    lumine.commands.dispatch(item.element, "graviss:toggle-spring-stiffness-scaling");
+    expect(item.renderer.isScalingSpringsByStiffness()).toBe(true);
+    expect(springScaling.getAttribute("aria-pressed")).toBe("true");
+    expect(springScaling.getAttribute("aria-label")).toBe("Use equal spring sizes");
+    expect(item.activeGraphic.scaleSpringsByStiffness).toBe(true);
     lumine.commands.dispatch(item.element, "graviss:background-midnight");
     expect(item.element.dataset.appearance).toBe("midnight");
   });
@@ -3090,11 +3105,11 @@ describe("graviss", () => {
           { id: 5, x: 8, y: 0, z: 0 },
         ],
         elements: [
-          { id: "S1", kind: "spring", nodeIds: [1, 2] },
+          { id: "S1", kind: "spring", nodeIds: [1, 2], stiffness: 1000 },
           { id: "C1", kind: "coupling", nodeIds: [3, 4] },
           // A spring between a node and the ground names one node and says
           // which way it acts.
-          { id: "S2", kind: "spring", nodeIds: [5], direction: [0, 0, 1] },
+          { id: "S2", kind: "spring", nodeIds: [5], direction: [0, 0, 1], stiffness: 250 },
         ],
         sections: [],
         supports: [],
@@ -3140,22 +3155,29 @@ describe("graviss", () => {
       // was told to, rather than joining anything.
       expect(springs.max.x).toBeCloseTo(8 + size, 5);
 
-      // A spring acting about its axis is drawn as a turn about it instead: a
-      // ring across the axis, at the middle of the length it spans.
-      renderer.geometry.elements[0].rotational = true;
-      renderer.placeConnectorSymbols("spring");
-      const turning = new renderer.THREE.Box3().setFromObject(renderer.meshes.springs);
-      expect(turning.getSize(new renderer.THREE.Vector3()).y).toBeCloseTo(size * 2, 5);
-      // A ring lies across the axis, so it reaches no further along it than the
-      // nodes do — a helix would, having to climb between them.
-      expect(turning.max.z).toBeCloseTo(2, 5);
-      renderer.geometry.elements[0].rotational = false;
-      renderer.placeConnectorSymbols("spring");
+      const springLines = renderer.connectors.spring.lines;
+      const springRanges = springLines.userData.gravissEntityRanges;
+      const springWidth = (index) => {
+        const positions = springLines.geometry.getAttribute("position");
+        const range = springRanges[index];
+        let minimum = Infinity;
+        let maximum = -Infinity;
+        for (let vertex = range.start; vertex < range.start + range.count; vertex += 1) {
+          minimum = Math.min(minimum, positions.getY(vertex));
+          maximum = Math.max(maximum, positions.getY(vertex));
+        }
+        return maximum - minimum;
+      };
+      expect(springWidth(1)).toBeCloseTo(springWidth(0), 5);
+      expect(renderer.isScalingSpringsByStiffness()).toBe(false);
+      renderer.setScaleSpringsByStiffness(true);
+      expect(springWidth(1)).toBeCloseTo(springWidth(0) * 0.25, 5);
 
       // Both are marks, so the one size covers them with the nodes.
       const before = spread(renderer.meshes.springs).y;
       renderer.setSymbolSize(renderer.getSymbolSize() * 2);
       expect(spread(renderer.meshes.springs).y).toBeCloseTo(before * 2, 5);
+      expect(springWidth(1)).toBeCloseTo(springWidth(0) * 0.25, 5);
 
       // Clicking anywhere on a spring selects that spring. A helix owns a whole
       // run of vertices rather than the two a straight member does, so which
@@ -3179,6 +3201,73 @@ describe("graviss", () => {
       renderer.setVisibility("springs", false);
       expect(renderer.meshes.springs.visible).toBe(false);
       expect(renderer.meshes.couplings.visible).toBe(true);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("draws transverse springs in their plane and rotational springs about their axis", async () => {
+    const model = {
+      id: "spring-components",
+      title: "Spring components",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 0, y: 0, z: 2 },
+          { id: 3, x: 4, y: 0, z: 0 },
+          { id: 4, x: 4, y: 0, z: 2 },
+        ],
+        elements: [
+          {
+            id: "transverse",
+            kind: "spring",
+            nodeIds: [1, 2],
+            transverseStiffness: 1000,
+          },
+          {
+            id: "rotational",
+            kind: "spring",
+            nodeIds: [3, 4],
+            rotational: true,
+            rotationalStiffness: 500,
+          },
+        ],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the spring components to initialize");
+      const renderer = viewer.renderer;
+      const lines = renderer.connectors.spring.lines;
+      const positions = lines.geometry.getAttribute("position");
+      const ranges = lines.userData.gravissEntityRanges;
+      const extent = (index) => {
+        const box = new renderer.THREE.Box3();
+        const point = new renderer.THREE.Vector3();
+        const range = ranges[index];
+        for (let vertex = range.start; vertex < range.start + range.count; vertex += 1) {
+          box.expandByPoint(point.fromBufferAttribute(positions, vertex));
+        }
+        return box.getSize(new renderer.THREE.Vector3());
+      };
+      const size = renderer.getSymbolSize();
+      const transverse = extent(0);
+      const rotational = extent(1);
+
+      // CQ is a plane, not an axial coil: both directions square to Z carry a
+      // full helix, while the principal axis still identifies the connection.
+      expect(transverse.x).toBeGreaterThan(size * 4);
+      expect(transverse.y).toBeGreaterThan(size * 4);
+      expect(transverse.z).toBeCloseTo(2, 5);
+      // CM is a ring about the same axis, so its transverse diameter is only
+      // the requested symbol size twice rather than a pair of long coils.
+      expect(rotational.x).toBeCloseTo(size * 2, 5);
+      expect(rotational.y).toBeCloseTo(size * 2, 5);
+      expect(rotational.z).toBeCloseTo(2, 5);
     } finally {
       viewer.destroy();
     }

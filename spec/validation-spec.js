@@ -134,6 +134,28 @@ describe("Graviss model validation", () => {
     expect(() => validateGeometry(member)).toThrowError(/belongs only to shell elements/);
   });
 
+  it("validates optional spring stiffness", () => {
+    const geometry = createMain1Geometry();
+    geometry.elements[0] = {
+      id: geometry.elements[0].id,
+      kind: "spring",
+      nodeIds: geometry.elements[0].nodeIds,
+      stiffness: 2500,
+      transverseStiffness: 1250,
+      rotationalStiffness: 500,
+    };
+    expect(validateGeometry(geometry)).toBe(geometry);
+
+    geometry.elements[0].stiffness = 0;
+    expect(() => validateGeometry(geometry)).toThrowError(/stiffness must be a positive/);
+    geometry.elements[0].stiffness = 2500;
+    geometry.elements[0].transverseStiffness = -1;
+    expect(() => validateGeometry(geometry)).toThrowError(/transverseStiffness must be a positive/);
+    delete geometry.elements[0].transverseStiffness;
+    geometry.elements[1].stiffness = 1000;
+    expect(() => validateGeometry(geometry)).toThrowError(/stiffness belongs only to spring/);
+  });
+
   it("accepts trusses and cables as members, and holds them to two nodes of some length", async () => {
     const description = validateDescription(await new TestSession(FRAME_MODEL).describe());
     for (const kind of ["truss", "cable"]) {

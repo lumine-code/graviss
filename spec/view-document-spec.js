@@ -359,6 +359,7 @@ describe("GravissViewDocument", () => {
           camera: { projection: "perspective", position: "over there" },
           appearance: "chartreuse",
           sectionRendering: "yes",
+          scaleSpringsByStiffness: "yes",
           visibility: { grid: "off", axes: true },
           printRegion: { x: -1, y: 0, width: 4, height: 4 },
           filter: { rules: [{ sign: "x", type: "group", text: "11" }] },
@@ -371,6 +372,7 @@ describe("GravissViewDocument", () => {
     expect("camera" in bad.graphics[0]).toBe(false);
     expect("appearance" in bad.graphics[0]).toBe(false);
     expect("sectionRendering" in bad.graphics[0]).toBe(false);
+    expect("scaleSpringsByStiffness" in bad.graphics[0]).toBe(false);
     expect("visibility" in bad.graphics[0]).toBe(false);
     expect("printRegion" in bad.graphics[0]).toBe(false);
     // A whole block goes rather than the one field that could not be read: a
@@ -387,6 +389,7 @@ describe("GravissViewDocument", () => {
     const narrowed = normalizeViewDocument({
       graphics: [
         {
+          scaleSpringsByStiffness: true,
           filter: {
             rules: [
               { sign: "+", type: "group", text: "11,12,21-29" },
@@ -418,6 +421,7 @@ describe("GravissViewDocument", () => {
     });
     expect(narrowed.graphics[0].results.scale).toBe("auto");
     expect(narrowed.graphics[0].results.playing).toBe(true);
+    expect(narrowed.graphics[0].scaleSpringsByStiffness).toBe(true);
     // An empty block is a block, and says nothing rather than being refused.
     expect(normalizeViewDocument({ graphics: [{ filter: {} }] }).graphics[0].filter).toEqual({});
     // The shape this replaced is refused whole rather than kept and misread:

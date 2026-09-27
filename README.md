@@ -12,7 +12,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Live sources**: rebuilds the scene when a source reports that its geometry changed, keeping the camera the view document holds.
 - **Analysis results**: animates a displacement field over the model at a chosen or automatic amplification, starting from zero or swinging about it, and colours every element by how far it went.
 - **Model filtering**: narrows the model with an ordered list of add and subtract rules over element number, element kind, and any dimension the source declares, each rule reorderable and each saying how many elements it names.
-- **Symbols and connectors**: draws springs as helices or rings by the way they act, couplings as plain links, and sizes every mark with one length in millimetres, scrollable and zeroable.
+- **Symbols and connectors**: draws axial springs as helices, transverse springs as crossed in-plane helices, rotational springs as rings, and couplings as plain links; sizes every mark with one length in millimetres and can scale springs relative to the stiffest one.
 
 ## Installation
 
@@ -64,6 +64,7 @@ Commands available in `.graviss`:
 - `graviss:toggle-nodes`: show or hide nodes,
 - `graviss:toggle-supports`: show or hide support symbols,
 - `graviss:toggle-springs`: show or hide springs,
+- `graviss:toggle-spring-stiffness-scaling`: scale spring symbols relative to the stiffest spring,
 - `graviss:toggle-couplings`: show or hide couplings,
 - `graviss:toggle-mesh`: show or hide the mesh lines over shell surfaces,
 - `graviss:toggle-grid`: show or hide the engineering grid,

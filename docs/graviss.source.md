@@ -141,6 +141,9 @@ type Element = {
   surfaceInterpolation?: "linear" | "q4" | "hermite";
   direction?: Vector3;
   rotational?: boolean;
+  stiffness?: number;
+  transverseStiffness?: number;
+  rotationalStiffness?: number;
   localAxes?: { x: Vector3; y: Vector3; z: Vector3 };
 };
 
@@ -213,9 +216,9 @@ An area element's `thickness` may be one number or one per node, in the order it
 
 `offset` moves an area element off the nodes it was meshed on, along its own normal — the right-handed normal of its node order, so the sign follows the order the nodes were given in. It is the distance from that plane to the element's mid-surface, in metres, and it may be negative. A slab modelled at its top face and a deck sitting on beams both mesh at nodes the element does not physically occupy; the analysis keeps the nodes where it put them and Graviss draws the element where it is. Nodes are shared between elements that offset differently, so this belongs to the element and never to the node, and a provider must not fold it into node coordinates. Like `thickness` it may be one number or one per node. An eccentric element that tapers needs the list: its nodes sit on a face of the plate, and a face is a different distance from the middle wherever the plate is a different thickness. It positions the body, so it applies while sections render — with or without a thickness, an offset flat surface is still drawn where it physically sits. Without section rendering the element is the analysis surface itself, drawn on its nodes, which is where the supports, springs and couplings that meet it attach. Line elements ignore it.
 
-A `spring` and a `coupling` join two nodes without being structure, so Graviss draws them as marks rather than as members: a helix for a spring, and for a coupling the plain line that a rigid link is the whole of. A spring that acts about its axis rather than along it says so with `rotational`, and is drawn as a turn about that axis — a ring across it — instead of a helix along it. A spring may instead name a single node and a `direction`, which is how a spring between a node and the ground is expressed — it is then drawn reaching out that way from the node it holds. Neither takes a section or a thickness.
+A `spring` and a `coupling` join two nodes without being structure, so Graviss draws them as marks rather than as members: a helix for a spring, and for a coupling the plain line that a rigid link is the whole of. `stiffness` is the spring's positive axial stiffness in N/m. `transverseStiffness`, also in N/m, acts isotropically in the plane perpendicular to the spring axis and is drawn as two perpendicular helices in that plane. `rotationalStiffness`, in Nm/rad, acts about the axis and is drawn as a ring; the older `rotational: true` remains the shorthand for a purely rotational spring whose one `stiffness` value is rotational. Components may coexist and are then all drawn. A spring may name a single node and a `direction`, which is how a spring between a node and the ground states its principal axis. These values let Graviss optionally scale each component against the stiffest spring of the same dimensional kind; a missing value means the source cannot make that comparison and leaves that component at full size. Neither connector takes a section or a thickness.
 
-Everything Graviss draws as a mark rather than as structure — nodes, supports, springs, couplings — is sized by one length the user holds, taken from the model until they say otherwise, so a provider says where these are and never how big they should look.
+Everything Graviss draws as a mark rather than as structure — nodes, supports, springs, couplings — takes one base length the user holds, taken from the model until they say otherwise. With relative spring scaling off that is every mark's size; with it on the stiffest spring keeps the base size and the other known spring stiffnesses scale linearly beneath it. A provider therefore says where marks are and may state spring stiffness, but never chooses their display size.
 
 ### Units
 
