@@ -1475,7 +1475,8 @@ describe("graviss", () => {
     expect(edges.isLineSegments2).toBe(true);
     const edgeShader = { vertexShader: "void main() { gl_Position = clip; }" };
     edges.material.onBeforeCompile(edgeShader);
-    expect(edgeShader.vertexShader).toContain("clip.z -= 0.00002 * clip.w");
+    expect(edgeShader.vertexShader).toContain("clip.z -= 0.00002;");
+    expect(edgeShader.vertexShader).not.toContain("clip.z -= 0.00002 * clip.w");
     item.renderer.updateLighting();
     const towardCamera = item.renderer.camera.position
       .clone()
@@ -4562,6 +4563,74 @@ describe("graviss", () => {
       renderer.setResult(null);
       expect(renderer.memberBendSteps).toBe(1);
       expect(unitVertices()).toBe(straight);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("keeps provider-selected linear members on their displaced chord", async () => {
+    const model = {
+      id: "linear-member",
+      title: "Linear member",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 10, y: 0, z: 0 },
+        ],
+        elements: [
+          {
+            id: "B1",
+            kind: "beam",
+            nodeIds: [1, 2],
+            lineInterpolation: "linear",
+            localAxes: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+          },
+        ],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the linear member to initialize");
+      const renderer = viewer.renderer;
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: { ids: [2], values: [0, 0, -0.5] },
+        extent: 0.5,
+        elements: [
+          {
+            id: "B1",
+            stations: [
+              { x: 0, u: [0, 0, 0], phi: [0.01, 0, 0], warping: -0.003 },
+              { x: 10, u: [0, 0, -0.5], phi: [0.02, 0.2, 0], warping: 0.004 },
+            ],
+          },
+        ],
+      });
+      renderer.setDeformationScale(1);
+      const placement = renderer.memberInstances[0];
+      expect(placement.bendLength.array[0]).toBeCloseTo(-10, 6);
+      expect(placement.bendA.array[3]).toBeCloseTo(0.01, 6);
+      expect(placement.bendW.array[0]).toBeCloseTo(-0.003, 6);
+      expect(placement.bendW.array[1]).toBeCloseTo(0.004, 6);
+
+      // The stations still carry twist and warping for the section, but the
+      // centreline itself is exactly the chord between translated end nodes.
+      renderer.setSectionRendering(false);
+      const line = renderer.memberLines.geometry.getAttribute("position");
+      const range = renderer.memberLines.userData.gravissEntityRanges[0];
+      for (let vertex = range.start; vertex < range.start + range.count; vertex += 1) {
+        const local = vertex - range.start;
+        const fraction = (Math.floor(local / 2) + (local % 2)) / renderer.memberBendSteps;
+        expect(line.getX(vertex)).toBeCloseTo(10 * fraction, 6);
+        expect(line.getY(vertex)).toBeCloseTo(0, 6);
+        expect(line.getZ(vertex)).toBeCloseTo(-0.5 * fraction, 6);
+      }
     } finally {
       viewer.destroy();
     }

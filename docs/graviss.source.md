@@ -139,6 +139,7 @@ type Element = {
   thickness?: number | number[];
   offset?: number | number[];
   surfaceInterpolation?: "linear" | "q4" | "hermite";
+  lineInterpolation?: "linear" | "hermite";
   direction?: Vector3;
   rotational?: boolean;
   stiffness?: number;
@@ -192,6 +193,8 @@ type Section = {
 
 A truss or a cable is often stored without a cross-section orientation, because an axial member has no bending for one to matter to. **A provider that knows the convention its source is written in should state `localAxes` anyway**, computed if need be: the roll Graviss picks when none is given is arbitrary, so an asymmetric section left to it may well be drawn upside down against every beam beside it. A provider with nothing to go on leaves it out and Graviss chooses. Either way the member's own axis is the run between its two nodes and never the provider's to state.
 
+`lineInterpolation` tells Graviss whether a displaced member follows the straight chord between its translated end nodes or a cubic Hermite curve whose end slopes come from result stations. Members default to `hermite` when stations are supplied and to `linear` without them; a provider states `linear` when its own result viewer represents each finite element as a straight displaced segment. This choice affects the member axis and section alignment, not twist or warping: station rotations about the axis and the seventh degree of freedom remain available on a linear path.
+
 ### How much of an element is drawn
 
 Graviss draws line and area elements at one of three levels, and the user switches between them. What a provider supplies decides how far it can go:
@@ -234,7 +237,7 @@ A source that has analysis results says so with `capabilities.results` and answe
 
 `getResult()` returns true displacements, never amplified ones. **The scale factor and the animation phase belong to Graviss**, exactly as the symbol size and the camera do: a provider that pre-multiplied its own numbers would make the viewer's scale meaningless and its readout a lie. `nodes.values` runs three, six or seven components a node — translations, then rotations where the source has them, then `d(phi-x)/dx` for a beam model with warping — in `geometry.nodes` order unless `ids` says otherwise. `extent` is the largest resultant translation, and stating it saves Graviss a pass over the whole field to choose an automatic scale.
 
-`elements[].stations` is how a member bends. A line element drawn between its two displaced end nodes is a straight chord, which is what a deflected beam is not; a source that solved for the deflection along the member can hand back the stations it computed, in the element's own local frame, and Graviss sweeps the section along the curve they describe. `x` is the distance from the element's start. Two stations and their rotations already determine the curve, so a source with only the ends is worth reporting. `localAxes` is the rotation into global, which is one more reason for an axial member to state it.
+`elements[].stations` carries a member's local displacement, rotation and warping along its axis. On a Hermite member Graviss uses the end rotations to bend the axis; on a provider-selected linear member the translated nodal chord remains straight while twist and warping still act on the section. `x` is the distance from the element's start. Two stations already determine the cubic, twist and warping progression, so a source with only the ends is worth reporting. `localAxes` is the rotation into global, which is one more reason for an axial member to state it.
 
 ### Filter types
 

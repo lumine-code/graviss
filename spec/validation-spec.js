@@ -134,6 +134,22 @@ describe("Graviss model validation", () => {
     expect(() => validateGeometry(member)).toThrowError(/belongs only to shell elements/);
   });
 
+  it("validates provider-selected line interpolation", () => {
+    for (const lineInterpolation of ["linear", "hermite"]) {
+      const geometry = createMain1Geometry();
+      geometry.elements[0].lineInterpolation = lineInterpolation;
+      expect(validateGeometry(geometry)).toBe(geometry);
+    }
+
+    const unknown = createMain1Geometry();
+    unknown.elements[0].lineInterpolation = "spline";
+    expect(() => validateGeometry(unknown)).toThrowError(/lineInterpolation must be one of/);
+
+    const shell = createMain2Geometry();
+    shell.elements[0].lineInterpolation = "linear";
+    expect(() => validateGeometry(shell)).toThrowError(/belongs only to line elements/);
+  });
+
   it("validates optional spring stiffness", () => {
     const geometry = createMain1Geometry();
     geometry.elements[0] = {
