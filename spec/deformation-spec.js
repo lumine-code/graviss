@@ -2,6 +2,7 @@ const {
   AUTOMATIC_TARGET,
   Deformation,
   SCALE_PRESETS,
+  alignRotationsToNodes,
   alignToNodes,
   automaticScale,
   extentOf,
@@ -68,6 +69,24 @@ describe("alignToNodes", () => {
       nodes: { ids: [1], values: [1, 2, 3, 0.1, 0.2, 0.3] },
     };
     expect(Array.from(alignToNodes(result, NODES, indexOfId)).slice(0, 3)).toEqual([1, 2, 3]);
+  });
+
+  it("reads seven components without mistaking beam warping for a translation", () => {
+    const result = {
+      components: 7,
+      nodes: {
+        ids: [1, 2],
+        values: [1, 2, 3, 0.1, 0.2, 0.3, 99, 4, 5, 6, 0.4, 0.5, 0.6, 88],
+      },
+    };
+    expect(Array.from(alignToNodes(result, NODES, indexOfId)).slice(0, 6)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+    const rotations = Array.from(alignRotationsToNodes(result, NODES, indexOfId)).slice(0, 6);
+    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6].forEach((value, index) =>
+      expect(rotations[index]).toBeCloseTo(value, 6),
+    );
+    expect(alignRotationsToNodes(fieldOf([1, 2, 3], [1]), NODES, indexOfId)).toBeNull();
   });
 });
 
@@ -148,8 +167,17 @@ describe("animation cycles", () => {
     expect(phaseOf("pingPong", 0.75)).toBeCloseTo(-1, 9);
 
     expect(phaseOf("thereAndBack", 0)).toBeCloseTo(0, 9);
+    expect(phaseOf("thereAndBack", 0.125)).toBeCloseTo((1 - Math.SQRT1_2) / 2, 9);
     expect(phaseOf("thereAndBack", 0.5)).toBeCloseTo(1, 9);
     expect(phaseOf("thereAndBack", 1)).toBeCloseTo(0, 9);
+
+    // It arrives at both ends and at the turn with zero velocity. A triangle
+    // wave has a first-order change here and visibly snaps; this half swing has
+    // only the tiny second-order displacement left.
+    const epsilon = 1e-4;
+    expect(phaseOf("thereAndBack", epsilon)).toBeLessThan(epsilon * 0.001);
+    expect(1 - phaseOf("thereAndBack", 0.5 - epsilon)).toBeLessThan(epsilon * 0.001);
+    expect(phaseOf("thereAndBack", 1 - epsilon)).toBeLessThan(epsilon * 0.001);
 
     expect(phaseOf("ramp", 0)).toBeCloseTo(0, 9);
     expect(phaseOf("ramp", 0.9)).toBeCloseTo(0.9, 9);
@@ -210,6 +238,24 @@ describe("Animation", () => {
     // the start, so pausing to look at something does not lose it.
     animation.start();
     animation.advance(at(500));
+    expect(frames.at(-1)).toEqual([0.5, 0]);
+    animation.advance(at(750));
+    expect(frames.at(-1)).toEqual([1, 0]);
+  });
+
+  it("changes tempo without moving the running cycle", () => {
+    const { animation, at, frames } = driver();
+    animation.setPeriod(1000);
+    animation.start();
+    animation.advance(at(250));
+    expect(frames.at(-1)).toEqual([0.5, 0]);
+
+    // Still one quarter through immediately after slowing down. The next half
+    // second is one quarter of the new two-second period, so it reaches the
+    // full shape rather than restarting from the undeformed one.
+    animation.setPeriod(2000);
+    expect(animation.fractionAt(at(250))).toBeCloseTo(0.25, 9);
+    animation.advance(at(250));
     expect(frames.at(-1)).toEqual([0.5, 0]);
     animation.advance(at(750));
     expect(frames.at(-1)).toEqual([1, 0]);

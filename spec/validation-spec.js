@@ -223,7 +223,12 @@ describe("Graviss model validation", () => {
       shape: {
         kind: "plates",
         plates: [
-          { from: [0, -0.498], to: [0, 0.498], thickness: 0.01 },
+          {
+            from: [0, -0.498],
+            to: [0, 0.498],
+            thickness: 0.01,
+            unitWarping: [-0.02, 0.02],
+          },
           { from: [-0.13, 0.5065], to: [0.13, 0.5065], thickness: 0.017 },
         ],
       },
@@ -232,6 +237,9 @@ describe("Graviss model validation", () => {
     geometry.sections[1].shape.plates[0].thickness = 0;
     expect(() => validateGeometry(geometry)).toThrowError(/thickness must be a positive/);
     geometry.sections[1].shape.plates[0].thickness = 0.01;
+    geometry.sections[1].shape.plates[0].unitWarping = [0];
+    expect(() => validateGeometry(geometry)).toThrowError(/unitWarping must be two finite/);
+    geometry.sections[1].shape.plates[0].unitWarping = [-0.02, 0.02];
     geometry.sections[1].shape.plates[1].to = [-0.13, 0.5065];
     expect(() => validateGeometry(geometry)).toThrowError(/two different points/);
     geometry.sections[1].shape.plates[1].to = [0.13, Number.NaN];
@@ -380,7 +388,13 @@ describe("Graviss model validation", () => {
 
     result.components = 6;
     expect(() => validateResult(result, geometry)).toThrowError(/6 components for each of/);
+    result.components = 7;
+    result.nodes.values = new Float32Array(nodes * 7);
+    expect(validateResult(result, geometry)).toBe(result);
+    result.components = 5;
+    expect(() => validateResult(result, geometry)).toThrowError(/must be 3, 6 or 7/);
     result.components = 3;
+    result.nodes.values = new Float32Array(nodes * 3);
 
     result.nodes.values = new Float32Array(nodes * 3).fill(Number.NaN);
     expect(() => validateResult(result, geometry)).toThrowError(/must be finite/);
@@ -408,8 +422,8 @@ describe("Graviss model validation", () => {
         {
           id: geometry.elements[0].id,
           stations: [
-            { x: 0, u: [0, 0, 0], phi: [0, 0, 0] },
-            { x: 4, u: [0, 0, -0.01] },
+            { x: 0, u: [0, 0, 0], phi: [0, 0, 0], warping: -0.001 },
+            { x: 4, u: [0, 0, -0.01], warping: 0.001 },
           ],
         },
       ],
@@ -422,6 +436,8 @@ describe("Graviss model validation", () => {
     expect(() => validateResult(result, geometry)).toThrowError(/\.x must be finite/);
     result.elements[0].stations = [{ x: 0, u: [0, 0] }];
     expect(() => validateResult(result, geometry)).toThrowError(/three finite numbers/);
+    result.elements[0].stations = [{ x: 0, u: [0, 0, 0], warping: Number.NaN }];
+    expect(() => validateResult(result, geometry)).toThrowError(/warping must be finite/);
   });
 
   it("lists what a model was solved for, and what it only names", () => {

@@ -108,6 +108,9 @@ describe("graviss", () => {
       supports: 6,
       pickables: 3,
     });
+    const overviewNodesButton = item.element.querySelector('[data-visible="nodes"]');
+    expect(overviewNodesButton.getAttribute("aria-pressed")).toBe("true");
+    expect(overviewNodesButton.getAttribute("aria-label")).toBe("Show nodes");
     expect(item.renderer.hovered).toBeUndefined();
     expect(item.renderer.colors.hover).toBeUndefined();
     // Fills carry no polygon offset and lose depth ties instead: any sink,
@@ -596,6 +599,16 @@ describe("graviss", () => {
       supports: 0,
       sections: 1,
     });
+    // A graphic that says nothing begins without node symbols. An explicit
+    // `nodes: true` in a document still overrides this default.
+    expect(item.renderer.meshes.nodes.visible).toBe(false);
+    expect(item.element.querySelector('[data-visible="nodes"]').getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+    expect(item.renderer.grid.visible).toBe(false);
+    expect(item.element.querySelector('[data-visible="grid"]').getAttribute("aria-pressed")).toBe(
+      "false",
+    );
     // The member fill is instanced: the section is uploaded once and each
     // member is sixteen floats of placement. Baking it vertex by vertex cost a
     // fifth of a second a frame on a real model, which is not something an
@@ -781,12 +794,12 @@ describe("graviss", () => {
 
     // Section rendering draws a closed solid: both faces half the thickness
     // either side, plus a side face for each of the four perimeter edges.
-    expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(36);
+    expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(26);
     expect(zSpan()).toBeCloseTo(0.2, 6);
 
     // Without it the element is its reference surface alone.
     expect(item.toggleSectionRendering()).toBe(false);
-    expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(6);
+    expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(5);
     expect(zSpan()).toBe(0);
     item.destroy();
   });
@@ -835,9 +848,10 @@ describe("graviss", () => {
     // Two elements continuing through their seam: the walls either would put
     // there coincide exactly, twins the depth buffer cannot order, so neither
     // is drawn — three exposed side faces each beside the four parallel-face
-    // triangles, thirty vertices per element.
+    // triangles. Indexed faces share their corner and centre samples, so both
+    // elements together carry 44 vertices without the old biased diagonal.
     const continuous = await buildViewer([0.2, 0.2]);
-    expect(continuous.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(60);
+    expect(continuous.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(44);
     const shellFill = continuous.renderer.meshes.shells.material;
     expect(shellFill.polygonOffset).toBe(false);
     expect(shellFill.depthFunc).toBe(continuous.renderer.THREE.LessDepth);
@@ -854,7 +868,7 @@ describe("graviss", () => {
       [0.2, 0.2, 0.2, 0.2],
       [0.3, 0.3, 0.3, 0.3],
     ]);
-    expect(stepped.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(72);
+    expect(stepped.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(52);
     stepped.destroy();
 
     // Depth resolution does not fall as the camera backs away: from outside
@@ -864,6 +878,18 @@ describe("graviss", () => {
     // exactly the height above it.
     const viewer = await buildViewer([0.2, 0.2]);
     const renderer = viewer.renderer;
+    const gridBox = new renderer.THREE.Box3().setFromObject(renderer.grid);
+    renderer.setResult({
+      kind: "displacement",
+      loadCaseId: 1,
+      components: 3,
+      nodes: { ids: [2], values: [0, 0, 0.1] },
+      extent: 0.1,
+    });
+    // Animation replaces the expensive scene walk with a node-derived box, but
+    // the static grid is larger than this little model and must stay in that
+    // box or the camera's near plane cuts it off while the model moves.
+    expect(renderer.sceneBox.containsBox(gridBox)).toBe(true);
     const box = renderer.computeSceneBox();
     const middle = box.getCenter(new renderer.THREE.Vector3());
     renderer.controls.target.copy(middle);
@@ -1400,9 +1426,11 @@ describe("graviss", () => {
     expect(item.renderer.meshes.shells.isMesh).toBe(true);
     expect(item.renderer.meshes.shells.userData.gravissEntityRanges.length).toBe(4900);
     expect([...item.renderer.meshes.shells.userData.gravissFaceToEntityIndex.slice(0, 4)]).toEqual([
-      0, 0, 1, 1,
+      0, 0, 0, 0,
     ]);
-    expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(29400);
+    expect(item.renderer.meshes.shells.geometry.getAttribute("position").count).toBe(24500);
+    expect(item.renderer.meshes.shells.geometry.getAttribute("normal")).toBeDefined();
+    expect(item.renderer.meshes.shells.material.flatShading).toBe(false);
     expect(item.renderer.meshes.nodes.visible).toBe(false);
     expect(item.element.querySelector('[data-visible="shells"]').getAttribute("aria-pressed")).toBe(
       "true",
@@ -1416,6 +1444,18 @@ describe("graviss", () => {
     const edges = item.renderer.meshes.shells.userData.gravissEdges;
     expect(item.renderer.meshes.mesh).toBe(edges);
     expect(edges.material.transparent).toBe(false);
+    expect(edges.material.depthWrite).toBe(true);
+    expect(edges.material.linewidth).toBeCloseTo(1.25, 6);
+    expect(edges.isLineSegments2).toBe(true);
+    const edgeShader = { vertexShader: "void main() { gl_Position = clip; }" };
+    edges.material.onBeforeCompile(edgeShader);
+    expect(edgeShader.vertexShader).toContain("clip.z -= 0.00001 * clip.w");
+    item.renderer.updateLighting();
+    const towardCamera = item.renderer.camera.position
+      .clone()
+      .sub(item.renderer.controls.target)
+      .normalize();
+    expect(item.renderer.fillLight.position.clone().normalize().dot(towardCamera)).toBeLessThan(0);
     expect(edges.material.depthWrite).toBe(true);
     expect(edges.renderOrder).toBe(1);
     // After the member fills and their contours, whose flush faces and
@@ -1500,7 +1540,10 @@ describe("graviss", () => {
       expect(item.viewDocument.getData().title).toBeUndefined();
       expect(item.viewDocument.isImplicit()).toBe(true);
       expect(item.getFileState()).toBe(FileState.UNMODIFIED);
-      expect(item.renderer.controls.target.toArray()).toEqual([4, 5, 3.5]);
+      const fitted = item.renderer.modelScreenRect();
+      expect(fitted.x + fitted.width / 2).toBeCloseTo(0.5, 1);
+      expect(fitted.y + fitted.height / 2).toBeCloseTo(0.5, 1);
+      expect(Math.max(fitted.width, fitted.height)).toBeGreaterThan(0.75);
 
       item.toggleVisibility("grid");
       expect(item.viewDocument.isImplicit()).toBe(false);
@@ -1508,7 +1551,7 @@ describe("graviss", () => {
       // Only what was touched reaches the file: no format, no version, no ids,
       // titles or camera Graviss worked out for itself.
       expect(JSON.parse(item.viewDocument.getSourceBuffer().getText())).toEqual({
-        graphics: [{ visibility: { grid: false } }],
+        graphics: [{ visibility: { grid: true } }],
       });
     } finally {
       registration.dispose();
@@ -2355,6 +2398,54 @@ describe("graviss", () => {
     expect(orthoAfter.y).toBeCloseTo(orthoBefore.y, 3);
   });
 
+  it("fits a long model by its projection instead of its circumscribed sphere", async () => {
+    const model = {
+      id: "long-fit",
+      title: "Long fit",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: -50, y: 0, z: 0 },
+          { id: 2, x: 50, y: 0, z: 0 },
+        ],
+        elements: [{ id: 1, kind: "beam", nodeIds: [1, 2], sectionId: 1 }],
+        sections: [{ id: 1, shape: { kind: "rectangle", width: 0.4, height: 0.4 } }],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      const failure = viewer.element.querySelector(".graviss-error");
+      await conditionPromise(
+        () => viewer.renderer != null || !failure.hidden,
+        "the Three.js scene to initialize",
+      );
+      if (!viewer.renderer) {
+        fail(viewer.element.querySelector(".graviss-error-message").textContent);
+        return;
+      }
+      const renderer = viewer.renderer;
+      renderer.host.style.width = "1000px";
+      renderer.host.style.height = "500px";
+      renderer.resize();
+
+      const assertTight = () => {
+        const rect = renderer.modelScreenRect();
+        expect(rect.width).toBeGreaterThan(0.86);
+        expect(rect.width).toBeLessThan(0.94);
+        expect(rect.x + rect.width / 2).toBeCloseTo(0.5, 2);
+      };
+      renderer.setStandardView("front");
+      assertTight();
+      renderer.setProjection("orthographic");
+      renderer.setStandardView("front");
+      assertTight();
+    } finally {
+      viewer.destroy();
+    }
+  });
+
   it("keeps a floor under the camera however long the wheel is turned", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
@@ -3147,6 +3238,7 @@ describe("graviss", () => {
       expect(renderer.getSceneSummary().members).toBe(3);
       const lines = renderer.pickables.find((mesh) => mesh.userData.gravissLineSegments);
       expect(lines.userData.gravissEntityRanges.length).toBe(3);
+      const detachedPositions = lines.geometry.getAttribute("position");
 
       // One switch covers the members, whatever they carry.
       renderer.setVisibility("members", false);
@@ -3157,6 +3249,19 @@ describe("graviss", () => {
       // vertex colour and a fresh bake carries an attribute of zeros, so a
       // rebuild that left it alone would render every member black.
       renderer.setSectionRendering(true);
+      expect(renderer.memberLines).toBeNull();
+      const detachedVersion = detachedPositions.version;
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: { ids: [renderer.geometry.nodes[0].id], values: [0, 0, 0.1] },
+        extent: 0.1,
+      });
+      // The centreline was detached and disposed when sections returned. An
+      // animation frame must not keep rewriting that dead buffer behind the
+      // visible section meshes.
+      expect(detachedPositions.version).toBe(detachedVersion);
       const painted = () => {
         const mesh = renderer.pickables.find((m) => m.userData.gravissColorKey === "element");
         const colors = mesh.instanceColor?.array;
@@ -3261,6 +3366,113 @@ describe("graviss", () => {
       renderer.setDeformationScale(0);
       expect(thickness().z).toBeCloseTo(0.2, 6);
       expect(renderer.visibleModelBounds().max.z).toBeLessThan(0.2);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("interpolates a four-node shell with its bilinear QUAD shape functions", async () => {
+    const model = {
+      id: "bilinear-quad",
+      title: "Bilinear QUAD",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+        ],
+        elements: [{ id: 1, kind: "shell", nodeIds: [1, 2, 3, 4] }],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the QUAD scene to initialize");
+      const renderer = viewer.renderer;
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: { ids: [3], values: [0, 0, 1] },
+        extent: 1,
+      });
+      renderer.setDeformationScale(1);
+
+      // At the natural centre every corner has weight 1/4, hence z=0.25. A
+      // split into the two corner triangles puts this same point on their
+      // diagonal at z=0.5 and is the sharp facet this test rules out.
+      const positions = renderer.meshes.shells.geometry.getAttribute("position");
+      let centre = null;
+      for (let vertex = 0; vertex < positions.count; vertex += 1) {
+        if (
+          Math.abs(positions.getX(vertex) - 0.5) < 1e-6 &&
+          Math.abs(positions.getY(vertex) - 0.5) < 1e-6
+        ) {
+          centre = positions.getZ(vertex);
+          break;
+        }
+      }
+      expect(centre).toBeCloseTo(0.25, 6);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("turns a shell's thickness director with the nodal rotations", async () => {
+    const model = {
+      id: "rotating-director",
+      title: "Rotating director",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+        ],
+        elements: [{ id: 1, kind: "shell", nodeIds: [1, 2, 3, 4], thickness: 0.2 }],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the director scene to initialize");
+      const renderer = viewer.renderer;
+      const values = [];
+      for (let node = 0; node < 4; node += 1) {
+        values.push(0, 0, 0, 0, Math.PI / 2, 0);
+      }
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 6,
+        nodes: { ids: [1, 2, 3, 4], values },
+        extent: 0,
+      });
+      renderer.setDeformationScale(1);
+
+      const positions = renderer.meshes.shells.geometry.getAttribute("position");
+      let minimumX = Infinity;
+      let maximumX = -Infinity;
+      let minimumZ = Infinity;
+      let maximumZ = -Infinity;
+      for (let vertex = 0; vertex < positions.count; vertex += 1) {
+        minimumX = Math.min(minimumX, positions.getX(vertex));
+        maximumX = Math.max(maximumX, positions.getX(vertex));
+        minimumZ = Math.min(minimumZ, positions.getZ(vertex));
+        maximumZ = Math.max(maximumZ, positions.getZ(vertex));
+      }
+      // +Z rotated 90 degrees about +Y is +X: the thickness follows the
+      // solver's rotational DOF even though none of the nodes translated.
+      expect(minimumX).toBeCloseTo(-0.1, 5);
+      expect(maximumX).toBeCloseTo(1.1, 5);
+      expect(maximumZ - minimumZ).toBeLessThan(1e-5);
     } finally {
       viewer.destroy();
     }
@@ -3495,18 +3707,32 @@ describe("graviss", () => {
         );
       }
       expect([...drawn].sort()).toEqual(["B1", "B2"]);
+      expect(fill.boundingBox).toBeNull();
+      fill.computeBoundingBox();
+      expect(fill.boundingBox.max.x).toBeLessThan(13);
 
       // A facet narrows it the same way, and the counts a panel shows follow.
       renderer.setElementFilter(compileRules([{ sign: "+", type: "group", text: "12" }], subjects));
       expect(fill.count).toBe(1);
       expect(renderer.elementCounts().get("beam")).toEqual({ total: 3, shown: 1 });
+      // The last member lies beyond the bound just cached for the first two.
+      // Changing a filter must invalidate that lazy instance bound or measuring
+      // and picking would keep missing the member that has just appeared.
+      expect(fill.boundingBox).toBeNull();
+      fill.computeBoundingBox();
+      expect(fill.boundingBox.max.x).toBeGreaterThan(17);
 
       // Dropping the filter draws everything again, and every element answers
       // for itself once more — a stale mapping here would name the wrong one.
       renderer.setElementFilter(null);
       expect(fill.count).toBe(3);
+      const matrix = new renderer.THREE.Matrix4();
+      const position = new renderer.THREE.Vector3();
       for (let instance = 0; instance < fill.count; instance += 1) {
         expect(fill.userData.gravissSegmentToEntityIndex[instance]).toBe(instance);
+        fill.getMatrixAt(instance, matrix);
+        position.setFromMatrixPosition(matrix);
+        expect(position.x).toBeCloseTo(3 + instance * 6, 6);
       }
       expect(renderer.elementCounts().get("beam")).toEqual({ total: 3, shown: 3 });
     } finally {
@@ -3784,11 +4010,11 @@ describe("graviss", () => {
           {
             id: "B1",
             stations: [
-              { x: 0, u: [0, 0, 0], phi: [0, 0, 0] },
+              { x: 0, u: [0, 0, 0], phi: [0, 0, 0], warping: -0.003 },
               // Twist about the member's own axis first, then the rotation
               // that bends it: the tip of a cantilever turns by one and a half
               // times its deflection over its length.
-              { x: 10, u: [0, 0, tip], phi: [0.02, slope, 0] },
+              { x: 10, u: [0, 0, tip], phi: [0.02, slope, 0], warping: 0.004 },
             ],
           },
         ],
@@ -3806,14 +4032,38 @@ describe("graviss", () => {
       expect(farEnd.slice(0, 3)).toEqual([0, 0, tip]);
       expect(farEnd[3]).toBeCloseTo(0.02, 6);
       expect(placement.bendR.array[first * 4 + 2]).toBeCloseTo(slope, 6);
+      expect(placement.bendW.array[first * 2]).toBeCloseTo(-0.003, 6);
+      expect(placement.bendW.array[first * 2 + 1]).toBeCloseTo(0.004, 6);
+      expect(placement.bendLength.array[first]).toBeCloseTo(10, 6);
       expect(Array.from(placement.bendB.array.slice(second * 4, second * 4 + 4))).toEqual([
         0, 0, 0, 0,
       ]);
+
+      // Filtering compacts every per-instance field together. A matrix moved
+      // into slot zero with another member's station data would put the wrong
+      // bow on the right beam, and changing the filter must start from source
+      // order rather than from the already compacted buffer.
+      const memberSubjects = subjectsByKey(buildSubjects(renderer.geometry));
+      renderer.setElementFilter(
+        compileRules([{ sign: "+", type: "@number", text: "2" }], memberSubjects),
+      );
+      expect(Array.from(placement.bendB.array.slice(0, 4))).toEqual([0, 0, 0, 0]);
+      expect(placement.bendLength.array[0]).toBe(0);
+      renderer.setElementFilter(
+        compileRules([{ sign: "+", type: "@number", text: "1" }], memberSubjects),
+      );
+      expect(Array.from(placement.bendB.array.slice(0, 4))).toEqual(farEnd);
+      expect(placement.bendLength.array[0]).toBeCloseTo(10, 6);
+      renderer.setElementFilter(null);
 
       // The arrises read the very same three buffers as the fill they lie on,
       // for the same reason they read the same instance matrix.
       const contours = renderer.memberContours[0];
       expect(contours.geometry.getAttribute("instanceBendA")).toBe(placement.bendA);
+      expect(contours.geometry.getAttribute("instanceBendW")).toBe(placement.bendW);
+      expect(contours.geometry.getAttribute("instanceBendLength")).toBe(placement.bendLength);
+      expect(contours.geometry.getAttribute("instanceBendY")).toBe(placement.bendY);
+      expect(contours.geometry.getAttribute("instanceBendZ")).toBe(placement.bendZ);
       expect(contours.material.defines.GRAVISS_BEND).toBe("");
 
       // How far the bow is drawn is one number the materials share, so a frame
@@ -3836,10 +4086,13 @@ describe("graviss", () => {
       const range = renderer.memberLines.userData.gravissEntityRanges[first];
       expect(range.count).toBe(renderer.memberBendSteps * 2);
       // Mid-span of the bent member, against the straight line between its own
-      // two ends. A cantilever's curve stands above its chord.
+      // two ends. A cantilever's curve stands above its chord. The endpoint
+      // rotation is treated as a finite direction, so this is the Hermite
+      // answer to first order and remains bounded when a factor makes the angle
+      // large.
       const middle = range.start + renderer.memberBendSteps;
       const chordZ = (line.getZ(range.start) + line.getZ(range.start + range.count - 1)) / 2;
-      expect(line.getZ(middle) - chordZ).toBeCloseTo(0.09375, 5);
+      expect(line.getZ(middle) - chordZ).toBeCloseTo((1.25 * slope) / Math.hypot(1, slope), 5);
       // And the member the result said nothing about is straight, as it should
       // be: every point of it on the line between its ends.
       const plain = renderer.memberLines.userData.gravissEntityRanges[second];
@@ -3864,6 +4117,43 @@ describe("graviss", () => {
       renderer.setElementFilter(null);
       renderer.setSectionRendering(true);
 
+      // A display factor can make the drawn chord many times longer than the
+      // element. The cubic still uses the ten-metre reference length:
+      // using the hundred-metre drawn chord here was the feedback that made
+      // highly amplified members wave and loop.
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 3,
+        components: 7,
+        nodes: { ids: [2], values: [0.09, 0, 0, 0, 0, 0, 0] },
+        extent: 0.09,
+        elements: [
+          {
+            id: "B1",
+            stations: [
+              { x: 0, u: [0, 0, 0], phi: [0, 0, 0], warping: 0 },
+              { x: 10, u: [0.09, 0, 0], phi: [0, 0, 0.01], warping: 0 },
+            ],
+          },
+        ],
+      });
+      renderer.setDeformationScale(1000);
+      renderer.setDeformationPhase(1);
+      renderer.setSectionRendering(false);
+      const stretchedLine = renderer.memberLines.geometry.getAttribute("position");
+      const stretchedRange = renderer.memberLines.userData.gravissEntityRanges[first];
+      const stretchedMiddle = stretchedRange.start + renderer.memberBendSteps;
+      const stretchedChordY =
+        (stretchedLine.getY(stretchedRange.start) +
+          stretchedLine.getY(stretchedRange.start + stretchedRange.count - 1)) /
+        2;
+      expect(stretchedLine.getY(stretchedMiddle) - stretchedChordY).toBeCloseTo(
+        (-1.25 * 10) / Math.hypot(1, 10),
+        5,
+      );
+      expect(placement.bendLength.array[first]).toBeCloseTo(10, 6);
+      renderer.setSectionRendering(true);
+
       // And a result that goes away takes the tessellation with it.
       renderer.setResult(null);
       expect(renderer.memberBendSteps).toBe(1);
@@ -3871,6 +4161,26 @@ describe("graviss", () => {
     } finally {
       viewer.destroy();
     }
+  });
+
+  it("maps a thin-walled section's unit warping onto its drawn vertices", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const geometry = item.renderer.createSectionGeometry({
+      kind: "plates",
+      plates: [
+        {
+          from: [0, -1],
+          to: [0, 1],
+          thickness: 0.1,
+          unitWarping: [-0.25, 0.25],
+        },
+      ],
+    });
+    const warping = Array.from(geometry.getAttribute("gravissSectionWarping").array);
+    expect(Math.min(...warping)).toBeCloseTo(-0.25, 5);
+    expect(Math.max(...warping)).toBeCloseTo(0.25, 5);
+    geometry.dispose();
   });
 
   it("reads the model as a field when asked, and as a structure otherwise", async () => {
@@ -4010,6 +4320,24 @@ describe("graviss", () => {
       // And the ends did not move at all.
       expect(renderer.nodePositions[0]).toBe(restNodes[0]);
 
+      // Hidden marks do not rewrite thousands of instance matrices on every
+      // frame. Revealing them catches them up once to the phase that is current
+      // then, so the optimisation can never expose stale positions.
+      renderer.setVisibility("nodes", false);
+      const placeNodeSymbols = spyOn(renderer, "placeNodeSymbols").and.callThrough();
+      const nodeIndex = spyOn(renderer, "nodeIndex").and.callThrough();
+      renderer.setDeformationPhase(0.5);
+      expect(placeNodeSymbols).not.toHaveBeenCalled();
+      expect(nodeIndex).not.toHaveBeenCalled();
+      renderer.setVisibility("nodes", true);
+      expect(placeNodeSymbols).toHaveBeenCalledTimes(1);
+      const nodeMatrix = new renderer.THREE.Matrix4();
+      const nodePosition = new renderer.THREE.Vector3();
+      renderer.nodeMesh.getMatrixAt(1, nodeMatrix);
+      nodePosition.setFromMatrixPosition(nodeMatrix);
+      expect(nodePosition.z).toBeCloseTo(renderer.nodePositions[1 * 3 + 2], 6);
+      renderer.setVisibility("nodes", false);
+
       // A scale of zero is the undeformed model, bit for bit — which is how a
       // user checks what moved against what did not.
       renderer.setDeformationScale(0);
@@ -4109,6 +4437,41 @@ describe("graviss", () => {
       // It draws after the member so it wins every depth tie it makes.
       expect(greyed.renderOrder).toBeGreaterThan(fills.find((mesh) => mesh !== greyed).renderOrder);
 
+      // Once a result bends the member, both coincident fills carry the same
+      // rings along its length. Leaving the grey overlay with only its two end
+      // rings makes its long triangles cut through the finely bent section.
+      renderer.setResult({
+        kind: "displacement",
+        loadCaseId: 1,
+        components: 3,
+        nodes: { ids: [2], values: [0, 0, -0.2] },
+        extent: 0.2,
+        elements: [
+          {
+            id: 1,
+            stations: [
+              { x: 0, u: [0, 0, 0], phi: [0, 0, 0] },
+              { x: 6, u: [0, 0, -0.2], phi: [0, 0.05, 0] },
+            ],
+          },
+        ],
+      });
+      const bentFills = renderer.pickables.filter(
+        (mesh) => mesh.userData.visibilityKey === "members" && mesh.isMesh,
+      );
+      const bentMember = bentFills.find((mesh) => mesh.userData.gravissColorKey === "element");
+      const bentGreyed = bentFills.find((mesh) => mesh.userData.gravissColorKey === "ineffective");
+      const rings = (mesh) =>
+        [
+          ...new Set(
+            Array.from(mesh.geometry.getAttribute("position").array, (value, index) =>
+              index % 3 === 0 ? (Math.abs(value) < 1e-6 ? "0.000000" : value.toFixed(6)) : null,
+            ).filter((value) => value != null),
+          ),
+        ].sort();
+      expect(rings(bentMember).length).toBe(renderer.memberBendSteps + 1);
+      expect(rings(bentGreyed)).toEqual(rings(bentMember));
+
       // Grey, and nothing like the member colour beside it.
       const member = renderer.colors.element;
       const ineffective = renderer.colors.ineffective;
@@ -4189,19 +4552,16 @@ describe("graviss", () => {
     }
   });
 
-  it("grades the background lighter towards the top when asked", async () => {
+  it("grades the background lighter towards the top by default", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
     const renderer = item.renderer;
     const button = item.element.querySelector('[data-action="toggle-gradient"]');
 
-    // Flat until somebody asks otherwise: one colour, and nothing to dispose.
-    expect(renderer.isBackgroundGradient()).toBe(false);
-    expect(renderer.scene.background.isColor).toBe(true);
-    expect(button.getAttribute("aria-pressed")).toBe("false");
-
-    button.click();
+    // Lit until somebody asks otherwise: omitting the field means the world
+    // gradient, and the button offers the flat alternative.
     expect(renderer.isBackgroundGradient()).toBe(true);
+    expect(renderer.scene.background.isColor).toBe(true);
     expect(button.getAttribute("aria-pressed")).toBe("true");
     expect(button.classList.contains("selected")).toBe(true);
     const sky = renderer.sky;
@@ -4251,19 +4611,26 @@ describe("graviss", () => {
 
     // It belongs to the graphic, and it is taken out of the scene when the
     // background goes back to flat rather than left in it unseen.
-    expect(item.viewDocument.getData().graphics[0].backgroundGradient).toBe(true);
     button.click();
+    expect(item.viewDocument.getData().graphics[0].backgroundGradient).toBe(false);
     expect(renderer.isBackgroundGradient()).toBe(false);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
     expect(renderer.sky).toBeNull();
     expect(renderer.scene.children.includes(sky)).toBe(false);
     expect(renderer.scene.background.isColor).toBe(true);
+    button.click();
+    expect(renderer.isBackgroundGradient()).toBe(true);
+    expect(renderer.sky).not.toBeNull();
 
     // Switching graphics restores what each of them holds.
-    item.setBackgroundGradient(true);
     item.activateGraphic(1);
+    expect(renderer.isBackgroundGradient()).toBe(true);
+    item.setBackgroundGradient(false);
     expect(renderer.isBackgroundGradient()).toBe(false);
     item.activateGraphic(0);
     expect(renderer.isBackgroundGradient()).toBe(true);
+    item.activateGraphic(1);
+    expect(renderer.isBackgroundGradient()).toBe(false);
   });
 
   it("sizes every mark from one field, as the length it is", async () => {
@@ -4416,12 +4783,10 @@ describe("graviss", () => {
     composed.dispose();
   });
 
-  it("meets neighbouring thicknesses and offsets at their mean, not at a step", async () => {
-    // A plate whose thickness varies continuously is meshed as a run of
-    // elements each carrying one number, and its eccentricity with them. Taken
-    // at face value the run is a stair; the surface those elements describe
-    // between them meets at the mean at every shared node, which is what the
-    // source's own viewer draws.
+  it("keeps neighbouring scalar thicknesses and offsets exact", async () => {
+    // Two elements sharing nodes may intentionally have different ranges. A
+    // scalar belongs to its own element; only explicit per-node lists describe
+    // a taper and authorise interpolation.
     const model = {
       id: "stepped",
       title: "Stepped plates",
@@ -4461,17 +4826,62 @@ describe("graviss", () => {
       for (let index = 0; index < position.count; index += 1) {
         if (Math.abs(position.getX(index) - 1) < 1e-6) seam.push(position.getZ(index));
       }
-      // Both elements sit on their nodes, so the node face stays put — and the
-      // far faces meet at the mean of the two thicknesses, not at either one.
+      // Both elements sit on their nodes, while their far faces remain at the
+      // two values they declared. The shared edge is a real step, not a mean.
       expect(seam.length).toBeGreaterThan(0);
       expect(Math.min(...seam)).toBeCloseTo(0, 5);
-      expect(Math.max(...seam)).toBeCloseTo(0.3, 5);
-      expect(seam.some((z) => Math.abs(z - 0.2) < 1e-3 || Math.abs(z - 0.4) < 1e-3)).toBe(false);
+      expect(Math.max(...seam)).toBeCloseTo(0.4, 5);
+      expect(seam.some((z) => Math.abs(z - 0.2) < 1e-3)).toBe(true);
+      expect(seam.some((z) => Math.abs(z - 0.4) < 1e-3)).toBe(true);
 
       // The corners nothing is shared with keep their own element's numbers.
       const box = new renderer.THREE.Box3().setFromObject(renderer.meshes.shells);
       expect(box.max.z).toBeCloseTo(0.4, 5);
       expect(box.min.z).toBeCloseTo(0, 5);
+    } finally {
+      viewer.destroy();
+    }
+  });
+
+  it("does not average thickness or directors across a folded shell corner", async () => {
+    const model = {
+      id: "folded-thickness",
+      title: "Folded thickness",
+      format: "Spec fixture",
+      createGeometry: () => ({
+        nodes: [
+          { id: 1, x: 0, y: 0, z: 0 },
+          { id: 2, x: 1, y: 0, z: 0 },
+          { id: 3, x: 1, y: 1, z: 0 },
+          { id: 4, x: 0, y: 1, z: 0 },
+          { id: 5, x: 0, y: 0, z: 1 },
+          { id: 6, x: 1, y: 0, z: 1 },
+        ],
+        elements: [
+          { id: "floor", kind: "shell", nodeIds: [1, 2, 3, 4], thickness: 0.2 },
+          { id: "wall", kind: "shell", nodeIds: [1, 5, 6, 2], thickness: 0.6 },
+        ],
+        sections: [],
+        supports: [],
+      }),
+    };
+    const viewer = mainModule.createViewer(new TestSession(model), { title: model.title });
+    jasmine.attachToDOM(viewer.element);
+    try {
+      await conditionPromise(() => viewer.renderer != null, "the folded shell to initialize");
+      const [floor, wall] = viewer.renderer.shellState.prepared;
+      // Sharing nodes does not make perpendicular surfaces one taper. Each
+      // keeps its declared range and its own director at the fold.
+      expect(floor.half[0]).toBeCloseTo(0.1, 6);
+      expect(floor.half[1]).toBeCloseTo(0.1, 6);
+      expect(wall.half[0]).toBeCloseTo(0.3, 6);
+      expect(wall.half[3]).toBeCloseTo(0.3, 6);
+      expect(floor.normals[0].x).toBeCloseTo(0, 6);
+      expect(floor.normals[0].y).toBeCloseTo(0, 6);
+      expect(floor.normals[0].z).toBeCloseTo(1, 6);
+      expect(wall.normals[0].x).toBeCloseTo(0, 6);
+      expect(wall.normals[0].y).toBeCloseTo(1, 6);
+      expect(wall.normals[0].z).toBeCloseTo(0, 6);
     } finally {
       viewer.destroy();
     }

@@ -100,12 +100,12 @@ type ResultRequest = { loadCaseId: Id; kind: "displacement" };
 type Result = {
   kind: "displacement";
   loadCaseId: Id;
-  components: 3 | 6;
+  components: 3 | 6 | 7;
   nodes: { ids?: Id[]; values: Float32Array | number[] };
   extent?: number;
   elements?: {
     id: Id;
-    stations: { x: number; u: Vector3; phi?: Vector3 }[];
+    stations: { x: number; u: Vector3; phi?: Vector3; warping?: number }[];
   }[];
 };
 
@@ -170,7 +170,12 @@ type Section = {
     | { kind: "polygon"; parts: { points: [number, number][]; holes?: [number, number][][] }[] }
     | {
         kind: "plates";
-        plates: { from: [number, number]; to: [number, number]; thickness: number }[];
+        plates: {
+          from: [number, number];
+          to: [number, number];
+          thickness: number;
+          unitWarping?: [number, number];
+        }[];
       };
 };
 ```
@@ -197,7 +202,9 @@ A provider that supplies no section falls back to a thin centreline, and one tha
 
 A `plates` section is a **thin-walled** one: a cross-section that is not a filled outline but the plates it is built from — a welded plate girder, a rolled angle, a cold-formed channel. Each plate is a straight run of material of one thickness, and the run given is its **middle**: the plate stands half a thickness either side of it and ends square at both ends, so a source that trims two plates to meet has them drawn meeting. Nothing extends or mitres a corner, because lengthening a plate would put material in the section that the source did not put there, and nothing merges the plates into one outline — the seam between two of them is an edge the section really has. Plates may be given in any order and need not touch: the section is what stands where they stand.
 
-An area element's `thickness` may be one number or one per node, in the order its nodes are given. A list is how an element that tapers across itself is described, and it is drawn tapering rather than as parallel plates of its first corner's thickness. A list shorter than the element has nodes repeats its last value. Neighbouring elements that state single numbers which differ are drawn meeting at their mean at the nodes they share — a thickness that varies across a run of elements describes a surface, not a stair — and a single `offset` is read the same way; a list is exact and never averaged. Every corner is displaced along the surface normal at its own node, so a warped quad — four base nodes off one plane — extrudes as the warped surface it is, and a folded or curved run extrudes as one continuous solid.
+`unitWarping` optionally gives the section's unit-warping ordinate `W0` at a plate's `from` and `to` points, in square metres. A seven-component displacement result puts `d(phi-x)/dx` in its seventh nodal component, in inverse metres, and a beam station repeats that value as `warping`; Graviss multiplies the station value by `W0` to draw the resulting axial displacement of each point in the section. A source that has the seventh degree of freedom but no unit-warping shape data still reports all seven components and the station values, but the cross-section cannot be warped from information it was not given.
+
+An area element's `thickness` may be one number or one per node, in the order its nodes are given. A list is how an element that tapers across itself is described, and it is drawn tapering rather than as parallel plates of its first corner's thickness. A list shorter than the element has nodes repeats its last value. A single number is exact for that element: neighbouring elements may state different thicknesses and then meet with a real step; Graviss never invents a nodal mean. `offset` follows the same rule. Every corner is displaced along that element's own surface normal, never a normal averaged with its neighbours, so a warped quad — four base nodes off one plane — extrudes as the warped surface it is and a shared node cannot bevel or rotate another panel's end.
 
 `ineffective` names the parts of a section that do not carry — a slender plate past its effective width, a deck slab left out of a construction stage, an area a code sets aside — and Graviss draws them in a grey rather than in the member colour, so what is being counted is visible without a legend. Each is an area in the section's own plane, in the same coordinates and the same spelling as a polygon shape's parts, and **each is already cut to the section**: a source states the material that does not count, not the rule that produced it. A rule is what a source has and an area is what a viewer can draw, and only the source can turn one into the other. Areas may overlap and need not be connected. Stating them changes nothing about the section's own `shape`, which is still the whole of it.
 
@@ -219,7 +226,7 @@ A source that has analysis results says so with `capabilities.results` and answe
 
 `getLoadCases()` lists what the model was solved for. `title` is the source's own designation and is shown as written; `kind` is the one classification Graviss asks a provider to make, because **an eigenmode and a buckling mode have no sign**. A mode shape is defined only up to a factor, so Graviss animates one about zero and swings it both ways; an ordinary load case is a real state of the structure and is animated from zero up to itself. A provider that cannot tell leaves `kind` out and gets the ordinary treatment. `hasResults` says a case exists but was never solved, which is commoner than it sounds — a model may name a hundred cases and hold results for three.
 
-`getResult()` returns true displacements, never amplified ones. **The scale factor and the animation phase belong to Graviss**, exactly as the symbol size and the camera do: a provider that pre-multiplied its own numbers would make the viewer's scale meaningless and its readout a lie. `nodes.values` runs three or six components a node — translations, then rotations where the source has them — in `geometry.nodes` order unless `ids` says otherwise. `extent` is the largest resultant translation, and stating it saves Graviss a pass over the whole field to choose an automatic scale.
+`getResult()` returns true displacements, never amplified ones. **The scale factor and the animation phase belong to Graviss**, exactly as the symbol size and the camera do: a provider that pre-multiplied its own numbers would make the viewer's scale meaningless and its readout a lie. `nodes.values` runs three, six or seven components a node — translations, then rotations where the source has them, then `d(phi-x)/dx` for a beam model with warping — in `geometry.nodes` order unless `ids` says otherwise. `extent` is the largest resultant translation, and stating it saves Graviss a pass over the whole field to choose an automatic scale.
 
 `elements[].stations` is how a member bends. A line element drawn between its two displaced end nodes is a straight chord, which is what a deflected beam is not; a source that solved for the deflection along the member can hand back the stations it computed, in the element's own local frame, and Graviss sweeps the section along the curve they describe. `x` is the distance from the element's start. Two stations and their rotations already determine the curve, so a source with only the ends is worth reporting. `localAxes` is the rotation into global, which is one more reason for an axial member to state it.
 

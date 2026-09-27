@@ -7,11 +7,11 @@
           "label": "Graviss",
           "submenu": [
             {
-              "label": "Model Filter",
+              "label": "Filter",
               "command": "graviss:toggle-filter-panel"
             },
             {
-              "label": "Model Results",
+              "label": "Results",
               "command": "graviss:toggle-results-panel"
             },
             {

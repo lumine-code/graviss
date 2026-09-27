@@ -80,6 +80,32 @@ const PLAIN_MODEL = {
   }),
 };
 
+const OTHER_ANALYSED_MODEL = {
+  ...ANALYSED_MODEL,
+  id: "other-analysed",
+  title: "Other analysed",
+  loadCases: [
+    { id: 301, title: "wind", kind: "linear", hasResults: true },
+    { id: 302, title: "temperature", kind: "linear", hasResults: true },
+    { id: 903, title: "2nd mode", kind: "eigenmode", hasResults: true },
+  ],
+  createGeometry: () => {
+    const geometry = ANALYSED_MODEL.createGeometry();
+    geometry.filterTypes = [
+      {
+        id: "group",
+        title: "Storey",
+        numeric: true,
+        values: [
+          { id: 1, title: "Lower" },
+          { id: 2, title: "Upper" },
+        ],
+      },
+    ];
+    return geometry;
+  },
+};
+
 describe("the Graviss dock panels", () => {
   let mainModule;
   let viewer;
@@ -114,8 +140,8 @@ describe("the Graviss dock panels", () => {
   it("opens each panel by URI and gives it a place in the dock", async () => {
     const filter = await lumine.workspace.open(FILTER_PANEL_URI);
     const results = await lumine.workspace.open(RESULTS_PANEL_URI);
-    expect(filter.getTitle()).toBe("Model Filter");
-    expect(results.getTitle()).toBe("Model Results");
+    expect(filter.getTitle()).toBe("Filter");
+    expect(results.getTitle()).toBe("Results");
     expect(filter.getDefaultLocation()).toBe("right");
     expect(filter.getAllowedLocations()).toEqual(["right", "left"]);
     expect(results.getDefaultLocation()).toBe("right");
@@ -158,11 +184,53 @@ describe("the Graviss dock panels", () => {
     expect(mainModule.getResultsPanel()).toBe(results);
   });
 
+  it("removes panels on deactivation and replaces an orphan left by an older generation", async () => {
+    await lumine.workspace.open(FILTER_PANEL_URI);
+    await lumine.workspace.open(RESULTS_PANEL_URI);
+    await lumine.packages.deactivatePackage("graviss");
+    expect(
+      lumine.workspace
+        .getPaneItems()
+        .filter((item) => [FILTER_PANEL_URI, RESULTS_PANEL_URI].includes(item?.getURI?.())),
+    ).toEqual([]);
+
+    // This is the exact broken state produced by the old lifecycle: the pane
+    // still owns a Results item whose view has already been destroyed, so it
+    // can display stale DOM but has no live centre observer.
+    const staleElement = document.createElement("div");
+    staleElement.textContent = "stale model results";
+    const stale = {
+      element: staleElement,
+      destroyed: false,
+      getTitle: () => "Results",
+      getURI: () => RESULTS_PANEL_URI,
+      destroy() {
+        this.destroyed = true;
+        this.element.remove();
+      },
+    };
+    const pane = lumine.workspace.getRightDock().getActivePane();
+    pane.addItem(stale);
+    pane.activateItem(stale);
+
+    const pack = await lumine.packages.activatePackage("graviss");
+    mainModule = pack.mainModule;
+    const replacement = mainModule.getResultsPanel();
+    expect(stale.destroyed).toBe(true);
+    expect(pane.getItems()).not.toContain(stale);
+    expect(pane.getItems()).toContain(replacement);
+    expect(pane.getActiveItem()).toBe(replacement);
+    expect(replacement.empty.textContent).toBe("The active item is not supported.");
+  });
+
   it("says why it is empty rather than merely going blank", async () => {
     const results = await lumine.workspace.open(RESULTS_PANEL_URI);
     // Nothing open at all.
     expect(results.empty.hidden).toBe(false);
-    expect(results.empty.textContent).toMatch(/Open a model/);
+    expect(results.empty.textContent).toBe("The active item is not supported.");
+    expect(results.empty.tagName).toBe("BACKGROUND-TIPS");
+    expect(results.empty.querySelector("ul.centered.background-message")).not.toBeNull();
+    expect(getComputedStyle(results.body).display).toBe("none");
 
     // A model, but one that carries no analysis - which is the ordinary case,
     // and not an error to report.
@@ -170,6 +238,7 @@ describe("the Graviss dock panels", () => {
     expect(results.viewer).toBe(viewer);
     expect(results.empty.textContent).toMatch(/no analysis results/);
     expect(results.body.hidden).toBe(true);
+    expect(getComputedStyle(results.body).display).toBe("none");
   });
 
   it("follows the model in the centre, and does not let go of it when clicked", async () => {
@@ -182,6 +251,153 @@ describe("the Graviss dock panels", () => {
     // the model the moment it was clicked on.
     lumine.workspace.paneForItem(filter).activateItem(filter);
     expect(filter.viewer).toBe(viewer);
+  });
+
+  it("follows the active item across tabs in the workspace centre", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    const results = await lumine.workspace.open(RESULTS_PANEL_URI);
+    const analysed = await openViewer(ANALYSED_MODEL);
+    const pane = lumine.workspace.paneForItem(analysed);
+    analysed.applyFilterState({
+      rules: [{ id: "shared", sign: "+", type: "group", text: "1" }],
+    });
+    analysed.setAnimationPeriod(1000);
+
+    const otherDocument = mainModule.createViewDocument({ fallbackData: { graphics: [{}] } });
+    const other = mainModule.createViewer(new TestSession(OTHER_ANALYSED_MODEL), {
+      title: OTHER_ANALYSED_MODEL.title,
+      viewDocument: otherDocument,
+    });
+    pane.addItem(other);
+    await conditionPromise(() => other.renderer != null, "the second Three.js scene to initialize");
+    other.applyFilterState(
+      { rules: [{ id: "shared", sign: "+", type: "group", text: "2" }] },
+      { record: false },
+    );
+    other.setAnimationPeriod(3000);
+
+    // Keep the dock active while the centre changes underneath it. This is the
+    // distinction that a global workspace observer misses, and a focused field
+    // must not keep A's value or cached options once B becomes current.
+    lumine.workspace.paneForItem(filter).activateItem(filter);
+    filter.rows.get("shared").field.focus();
+    results.previewTo(1);
+    pane.activateItem(other);
+
+    expect(lumine.workspace.getActivePaneItem()).toBe(filter);
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(other);
+    expect(filter.viewer).toBe(other);
+    expect(results.viewer).toBe(other);
+    expect(results.previewIndex).toBeNull();
+    expect(results.previewTimer).toBeNull();
+    expect(results.caseList.children.length).toBe(OTHER_ANALYSED_MODEL.loadCases.length + 1);
+    expect(results.caseList.children[1].textContent).toContain("wind");
+    const otherRow = filter.rows.get("shared");
+    expect(otherRow.field.value).toBe("2");
+    expect(otherRow.select.element.querySelector(".select-box-label").textContent).toBe("Storey");
+
+    pane.activateItem(analysed);
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(analysed);
+    expect(filter.viewer).toBe(analysed);
+    expect(results.viewer).toBe(analysed);
+    expect(results.caseList.children.length).toBe(ANALYSED_MODEL.loadCases.length + 1);
+    expect(filter.rows.get("shared").field.value).toBe("1");
+    expect(
+      filter.rows.get("shared").select.element.querySelector(".select-box-label").textContent,
+    ).toBe("Group");
+
+    // Focused controls are normally protected from incidental rerenders. A
+    // viewer switch is not incidental: the new model's value must win.
+    lumine.workspace.paneForItem(results).activateItem(results);
+    results.periodSlider.focus();
+    expect(results.periodSlider.value).toBe("1000");
+    pane.activateItem(other);
+    expect(lumine.workspace.getActivePaneItem()).toBe(results);
+    expect(results.periodSlider.value).toBe("3000");
+    pane.activateItem(analysed);
+
+    // Activating either dock tab changes the workspace's global active item,
+    // but never which item is current in the centre.
+    lumine.workspace.paneForItem(filter).activateItem(filter);
+    expect(filter.viewer).toBe(analysed);
+    lumine.workspace.paneForItem(results).activateItem(results);
+    expect(results.viewer).toBe(analysed);
+  });
+
+  it("clears both panels as soon as a text editor becomes the active centre item", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    const results = await lumine.workspace.open(RESULTS_PANEL_URI);
+    const analysed = await openViewer(ANALYSED_MODEL);
+    const pane = lumine.workspace.paneForItem(analysed);
+    expect(filter.viewer).toBe(analysed);
+    expect(results.viewer).toBe(analysed);
+    expect(results.body.hidden).toBe(false);
+
+    const editor = lumine.workspace.buildTextEditor();
+    pane.addItem(editor);
+    pane.activateItem(editor);
+    pane.activate();
+
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(editor);
+    expect(lumine.workspace.getActivePaneItem()).toBe(editor);
+    for (const panel of [filter, results]) {
+      expect(panel.viewer).toBeNull();
+      expect(panel.body.hidden).toBe(true);
+      expect(panel.empty.hidden).toBe(false);
+      expect(panel.empty.textContent).toBe("The active item is not supported.");
+    }
+    expect(results.caseList.children.length).toBe(0);
+    expect(filter.rows.size).toBe(0);
+
+    // Returning to the model repopulates the same panel instances rather than
+    // leaving them detached after the unsupported item.
+    pane.activateItem(analysed);
+    expect(filter.viewer).toBe(analysed);
+    expect(results.viewer).toBe(analysed);
+    expect(results.body.hidden).toBe(false);
+    await pane.destroyItem(editor, true);
+  });
+
+  it("follows the next centre item when the active viewer is destroyed", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    const results = await lumine.workspace.open(RESULTS_PANEL_URI);
+    const first = await openViewer(ANALYSED_MODEL);
+    const pane = lumine.workspace.paneForItem(first);
+    const secondDocument = mainModule.createViewDocument({ fallbackData: { graphics: [{}] } });
+    const second = mainModule.createViewer(new TestSession(OTHER_ANALYSED_MODEL), {
+      title: OTHER_ANALYSED_MODEL.title,
+      viewDocument: secondDocument,
+    });
+    pane.addItem(second);
+    await conditionPromise(
+      () => second.renderer != null,
+      "the second Three.js scene to initialize",
+    );
+    pane.activateItem(first);
+
+    first.destroy();
+
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(second);
+    expect(filter.viewer).toBe(second);
+    expect(results.viewer).toBe(second);
+    expect(results.caseList.children[1].textContent).toContain("wind");
+  });
+
+  it("clears both panels when the last centre viewer closes", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    const results = await lumine.workspace.open(RESULTS_PANEL_URI);
+    const only = await openViewer(ANALYSED_MODEL);
+    const pane = lumine.workspace.paneForItem(only);
+
+    await pane.destroyItem(only, true);
+
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBeUndefined();
+    for (const panel of [filter, results]) {
+      expect(panel.viewer).toBeNull();
+      expect(panel.body.hidden).toBe(true);
+      expect(panel.empty.hidden).toBe(false);
+      expect(panel.empty.textContent).toBe("The active item is not supported.");
+    }
   });
 
   // A row's controls, found by what they are rather than by position.
@@ -426,7 +642,8 @@ describe("the Graviss dock panels", () => {
 
     expect(
       [...results.caseList.querySelectorAll(".graviss-case-title")].map((n) => n.textContent),
-    ).toEqual(["self-weight", "dead-load", "1st mode"]);
+    ).toEqual(["System", "self-weight", "dead-load", "1st mode"]);
+    expect(results.caseList.children[0].classList).toContain("graviss-case-selected");
 
     // A preview moves the cursor and reads nothing, because reading a case is
     // thousands of records and a list being stepped through would queue one a
@@ -437,12 +654,15 @@ describe("the Graviss dock panels", () => {
     results.previewBy(1);
     expect(results.previewIndex).toBe(2);
     expect(session.lastResultRequest).toBeUndefined();
+    results.previewBy(1);
+    expect(results.previewIndex).toBe(3);
+    expect(session.lastResultRequest).toBeUndefined();
 
     // What is under the cursor is shown once the stepping stops.
     results.commitPreview();
     await conditionPromise(() => viewer.result != null, "the case under the cursor to be read");
     expect(session.lastResultRequest).toEqual({ loadCaseId: 901, kind: "displacement" });
-    expect(results.caseList.children[2].classList.contains("graviss-case-selected")).toBe(true);
+    expect(results.caseList.children[3].classList.contains("graviss-case-selected")).toBe(true);
 
     // And a cursor moved and then abandoned leaves the model where it was.
     results.previewBy(-1);
@@ -451,10 +671,30 @@ describe("the Graviss dock panels", () => {
     expect(viewer.result.loadCaseId).toBe(901);
   });
 
+  it("lets the wheel scroll the case list without changing the active case", async () => {
+    const results = await lumine.workspace.open(RESULTS_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+    results.caseList.children[1].click();
+    await conditionPromise(() => viewer.result != null, "the first case to be read");
+
+    const wheel = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 120,
+    });
+    results.caseList.dispatchEvent(wheel);
+
+    expect(wheel.defaultPrevented).toBe(false);
+    expect(results.previewIndex).toBeNull();
+    expect(results.previewTimer).toBeNull();
+    expect(viewer.getResultsState().loadCaseId).toBe(101);
+    expect(results.caseList.children[1].classList).toContain("graviss-case-selected");
+  });
+
   it("drives the amplification, the animation and the legend", async () => {
     const results = await lumine.workspace.open(RESULTS_PANEL_URI);
     await openViewer(ANALYSED_MODEL);
-    results.caseList.children[0].click();
+    results.caseList.children[1].click();
     await conditionPromise(() => viewer.result != null, "the first case to be read");
 
     // The scale reads back as a factor rather than as a slider position.
@@ -467,9 +707,17 @@ describe("the Graviss dock panels", () => {
 
     results.playButton.click();
     expect(results.playButton.textContent).toBe("Pause");
-    expect(viewer.renderer.getAnimation().running).toBe(true);
+    const animation = viewer.renderer.getAnimation();
+    expect(animation.running).toBe(true);
+    viewer.renderer.setDeformationPhase(0.25);
+    results.scalePresets.querySelector('[data-scale="100"]').click();
+    expect(viewer.renderer.getDeformation().phase).toBe(0.25);
+    expect(animation.running).toBe(true);
+    results.scalePresets.querySelector(".graviss-scale-auto").click();
+    expect(viewer.renderer.getDeformation().phase).toBe(0.25);
+    expect(animation.running).toBe(true);
     results.playButton.click();
-    expect(viewer.renderer.getAnimation().running).toBe(false);
+    expect(animation.running).toBe(false);
 
     results.cycleSelect.setValue("pingPong", { emit: true });
     expect(viewer.getResultsState().cycle).toBe("pingPong");
@@ -481,6 +729,14 @@ describe("the Graviss dock panels", () => {
     expect(viewer.renderer.colorByDisplacement).toBe(true);
     expect(results.legend.hidden).toBe(false);
     expect(results.legend.querySelector(".graviss-legend-max").textContent).toBe("10.0 mm");
+
+    // System is the undeformed state, not another result to read.
+    results.caseList.children[0].click();
+    expect(viewer.getResultsState().loadCaseId).toBeNull();
+    expect(viewer.result).toBeNull();
+    expect(viewer.renderer.getDeformation().result).toBeNull();
+    expect(viewer.renderer.getAnimation().running).toBe(false);
+    expect(results.caseList.children[0].classList).toContain("graviss-case-selected");
   });
 
   it("knows whether it is on screen, not merely whether it is open", async () => {
@@ -536,13 +792,12 @@ describe("the Graviss dock panels", () => {
     expect(button.dataset.command).toBe("graviss:toggle-focus-filter-panel");
     expect(button.getAttribute("aria-pressed")).toBe("false");
 
-    // A button takes focus on mousedown, and these two are about focus - so the
-    // default is cancelled and the click still lands. Without that the panel
-    // would have lost focus before the command ran, and "hand focus back" could
-    // never happen from the toolbar.
+    // With the panel elsewhere, ordinary button focus is allowed: in a split
+    // centre that is what activates the model whose toolbar was clicked.
     const mousedown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
     button.dispatchEvent(mousedown);
-    expect(mousedown.defaultPrevented).toBe(true);
+    expect(mousedown.defaultPrevented).toBe(false);
+    button.focus();
 
     button.click();
     // Opening a dock item is asynchronous, so the panel is not there the instant
@@ -558,11 +813,64 @@ describe("the Graviss dock panels", () => {
     expect(button.getAttribute("aria-pressed")).toBe("true");
     expect(button.classList.contains("selected")).toBe(true);
 
-    // Again, and focus goes back to the model - the panel stays open.
+    // Once the panel has focus, the default is cancelled so the click can see
+    // that state and hand focus back to the model. The panel stays open.
+    const returnMouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    button.dispatchEvent(returnMouseDown);
+    expect(returnMouseDown.defaultPrevented).toBe(true);
     button.click();
     await conditionPromise(() => !filter.isFocused(), "focus to return to the model");
     expect(filter.isShowing()).toBe(true);
     expect(button.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("addresses the model whose panel button is clicked in a split centre", async () => {
+    const first = await openViewer(ANALYSED_MODEL);
+    const left = lumine.workspace.paneForItem(first);
+    const secondDocument = mainModule.createViewDocument({ fallbackData: { graphics: [{}] } });
+    const second = mainModule.createViewer(new TestSession(OTHER_ANALYSED_MODEL), {
+      title: OTHER_ANALYSED_MODEL.title,
+      viewDocument: secondDocument,
+    });
+    const right = left.splitRight({ items: [second] });
+    await conditionPromise(
+      () => second.renderer != null,
+      "the second Three.js scene to initialize",
+    );
+    left.activateItem(first);
+    left.activate();
+
+    const button = second.element.querySelector('[data-action="results-panel"]');
+    const openMouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    button.dispatchEvent(openMouseDown);
+    expect(openMouseDown.defaultPrevented).toBe(false);
+    // The browser's mousedown default focuses the clicked button, which makes
+    // its split the current one before the click command opens the panel.
+    button.focus();
+    right.activate();
+    button.click();
+    await conditionPromise(
+      () => lumine.workspace.getPaneItems().some((item) => item.getURI?.() === RESULTS_PANEL_URI),
+      "the results panel to open",
+    );
+    const results = mainModule.getResultsPanel();
+    await conditionPromise(() => results.isFocused(), "the results panel to take focus");
+    expect(results.viewer).toBe(second);
+
+    // Leave A as the centre's last item, then focus the shared panel. Clicking
+    // B while it is focused must return to B, not to the viewer the panel used
+    // to describe.
+    left.activate();
+    results.focus();
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(first);
+    expect(results.isFocused()).toBe(true);
+    const returnMouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    button.dispatchEvent(returnMouseDown);
+    expect(returnMouseDown.defaultPrevented).toBe(true);
+    button.click();
+    await conditionPromise(() => !results.isFocused(), "focus to return to the clicked model");
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(second);
+    expect(results.viewer).toBe(second);
   });
 
   it("keeps the toolbar honest about which panel is on screen", async () => {
