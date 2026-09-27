@@ -393,6 +393,14 @@
   background-size: 24px 24px;
 }
 
+/* Building the scene, restoring its saved camera and reading its saved result
+   are one opening operation. Keep all renderer-owned surfaces out of the
+   compositor until that operation has produced its single final frame. */
+.graviss.is-loading .graviss-toolbar,
+.graviss.is-loading .graviss-viewport > :not(.graviss-status) {
+  visibility: hidden;
+}
+
 .graviss-canvas-host,
 .graviss-canvas {
   position: absolute;

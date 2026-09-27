@@ -3809,6 +3809,66 @@ describe("graviss", () => {
       return viewer;
     }
 
+    it("reveals a saved result only after its complete first frame is ready", async () => {
+      const model = analysedModel();
+      const session = new TestSession(model);
+      let releaseLoadCases;
+      let releaseResult;
+      session.getLoadCases = jasmine.createSpy("getLoadCases").and.callFake(
+        () =>
+          new Promise((resolve) => {
+            releaseLoadCases = resolve;
+          }),
+      );
+      session.getResult = jasmine.createSpy("getResult").and.callFake(
+        ({ loadCaseId }) =>
+          new Promise((resolve) => {
+            releaseResult = () => resolve(model.createResult(loadCaseId));
+          }),
+      );
+      const viewDocument = mainModule.createViewDocument({
+        fallbackData: { graphics: [{ results: { loadCaseId: 101 } }] },
+      });
+      const viewer = mainModule.createViewer(session, {
+        title: model.title,
+        viewDocument,
+      });
+      jasmine.attachToDOM(viewer.element);
+      try {
+        await conditionPromise(
+          () => viewer.renderer != null && typeof releaseLoadCases === "function",
+          "the paused renderer to initialize",
+        );
+        const renderer = viewer.renderer;
+        const rendered = spyOn(renderer.canvasRenderer, "render").and.callThrough();
+        expect(viewer.element.classList.contains("is-loading")).toBe(true);
+        expect(renderer.renderSuspended).toBe(true);
+        expect(rendered).not.toHaveBeenCalled();
+
+        releaseLoadCases(model.loadCases);
+        await conditionPromise(
+          () => typeof releaseResult === "function",
+          "the saved result read to begin",
+        );
+        // Geometry and camera are ready here, but showing them would be the
+        // undeformed intermediate step that made opening a .grv file flicker.
+        expect(viewer.element.classList.contains("is-loading")).toBe(true);
+        expect(renderer.renderSuspended).toBe(true);
+        expect(rendered).not.toHaveBeenCalled();
+
+        releaseResult();
+        await conditionPromise(
+          () => !viewer.element.classList.contains("is-loading"),
+          "the complete saved graphic to be revealed",
+        );
+        expect(renderer.renderSuspended).toBe(false);
+        expect(renderer.getDeformation().result.loadCaseId).toBe(101);
+        expect(rendered).toHaveBeenCalled();
+      } finally {
+        viewer.destroy();
+      }
+    });
+
     it("lists what the analysis holds, and shows one case of it", async () => {
       const viewer = await analysedViewer();
       try {
