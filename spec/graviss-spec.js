@@ -113,11 +113,8 @@ describe("graviss", () => {
     expect(overviewNodesButton.getAttribute("aria-label")).toBe("Show nodes");
     expect(item.renderer.hovered).toBeUndefined();
     expect(item.renderer.colors.hover).toBeUndefined();
-    // Fills carry no polygon offset and lose depth ties instead: any sink,
-    // however small, is worth its size over the dihedral wherever two bodies
-    // graze — a tail of foreign mesh lines past the intersection, stretching
-    // as the view flattens along it. Lines draw first and write true depth,
-    // so the strict test is all a fill needs.
+    // Fills carry no polygon offset. Member fills win exact ties; the shell
+    // fill then clears their stencil mark only where it is truly in front.
     // Members alone WIN ties: an eccentric girder's face lies exactly in the
     // slab's plane, where no strict test can put the flange over the slab's
     // mesh lines — and where the tie happens, the member is the physical
@@ -125,13 +122,10 @@ describe("graviss", () => {
     const memberFill = item.renderer.memberMaterial;
     expect(memberFill.polygonOffset).toBe(false);
     expect(memberFill.depthFunc).toBe(item.renderer.THREE.LessEqualDepth);
-    // The visibility chain, resolved with no epsilon anywhere: member fills
-    // draw after the ordinary lines and win their ties, marking the pixels
-    // they visibly claim in the stencil; the shell fill draws after them,
-    // losing ties to its own lines and taking the mark back wherever it wins
-    // a pixel; and the member contours draw last, only on marks that
-    // survived — so an arris finishes exactly where the visible member
-    // surface does, however thin a sliver of the body protrudes.
+    // The visibility chain is resolved with no epsilon anywhere: member fills
+    // mark the pixels they claim; the strict shell fill takes the mark back
+    // wherever it wins; and both contour families draw after every fill at
+    // true depth, gated by the surviving stencil value.
     const memberMeshes = item.renderer.meshes.members.children.filter((child) => child.isMesh);
     expect(memberMeshes.length).toBeGreaterThan(0);
     expect(memberMeshes.every((mesh) => mesh.renderOrder === 2)).toBe(true);
@@ -175,9 +169,8 @@ describe("graviss", () => {
     const graphicCounter = item.element.querySelector(".graviss-graphic-counter");
     const frameRateCounter = item.element.querySelector(".graviss-fps-counter");
     const toolbar = item.element.querySelector(".graviss-toolbar");
-    expect(item.element.querySelector(".graviss-toolbar").classList.contains("btn-toolbar")).toBe(
-      true,
-    );
+    expect(toolbar.getAttribute("role")).toBe("toolbar");
+    expect(toolbar.classList.contains("btn-toolbar")).toBe(false);
     expect(
       [...toolbar.querySelectorAll("button")].every((button) => !button.textContent.trim()),
     ).toBe(true);
@@ -260,30 +253,27 @@ describe("graviss", () => {
       expect(getComputedStyle(face).strokeWidth).toBe("1.75px");
     }
     expect(toolbar.querySelector('[data-view="iso"] .graviss-icon-active-face')).toBeNull();
-    // The bar is split by the scope a control acts at — the set of graphics,
-    // the picture the active graphic composes, the layers inside it — with
-    // everything document- or renderer-wide held apart in the tail.
+    // Every visible group is a direct flex item. The one toolbar gap therefore
+    // spaces every boundary, rather than being supplemented by nested regions
+    // or the core toolbar's child margins.
+    const directGroups = [...toolbar.querySelectorAll(":scope > .btn-group")];
+    expect(directGroups.length).toBe(10);
+    expect(directGroups.every((group) => group.getAttribute("role") === "group")).toBe(true);
     expect(
-      [...toolbar.querySelectorAll(":scope > .graviss-toolbar-region")].map((region) =>
-        region.getAttribute("aria-label"),
-      ),
-    ).toEqual(["Graphics", "Picture", "Layers", "Panels", "Output, document and renderer"]);
-    const regionOf = (selector) =>
-      toolbar.querySelector(selector).closest(".graviss-toolbar-region").getAttribute("aria-label");
-    expect(regionOf('[data-action="add-graphic"]')).toBe("Graphics");
-    expect(regionOf('[data-action="background"]')).toBe("Picture");
-    expect(regionOf('[data-visible="members"]')).toBe("Layers");
-    expect(regionOf('[data-action="toggle-spring-stiffness-scaling"]')).toBe("Layers");
-    expect(regionOf(".graviss-symbol-input")).toBe("Layers");
-    // The panels are their own region rather than part of the tail: a dock
-    // surface is not output, not the document and not the renderer, and the
-    // region is what pushes the whole right-hand run away from the controls
-    // that compose the picture.
-    expect(regionOf('[data-action="filter-panel"]')).toBe("Panels");
-    expect(regionOf('[data-action="results-panel"]')).toBe("Panels");
-    expect(regionOf('[data-action="save-as-image"]')).toBe("Output, document and renderer");
-    expect(regionOf('[data-action="open-source"]')).toBe("Output, document and renderer");
-    expect(toolbar.querySelector(".graviss-toolbar-tail .graviss-fps-counter")).not.toBeNull();
+      [...toolbar.children].every((child) => child.matches(".btn-group, .graviss-symbol-input")),
+    ).toBe(true);
+    expect(symbolInput.parentElement).toBe(toolbar);
+    expect(frameRateCounter.parentElement).toBe(item.element.querySelector(".graviss-viewport"));
+    expect(frameRateCounter.classList.contains("btn")).toBe(false);
+    expect(getComputedStyle(frameRateCounter).position).toBe("absolute");
+    expect(getComputedStyle(frameRateCounter).top).toBe("12px");
+    expect(getComputedStyle(frameRateCounter).left).toBe("12px");
+    const toolbarGap = getComputedStyle(toolbar).columnGap;
+    expect(toolbarGap).toBe("8px");
+    expect(directGroups.every((group) => getComputedStyle(group).marginRight === "0px")).toBe(true);
+    expect(toolbar.querySelector('[data-action="filter-panel"]').closest(".btn-group")).toBe(
+      toolbar.querySelector('[data-action="results-panel"]').closest(".btn-group"),
+    );
     expect(toolbarButtons.every((button) => !button.getAttribute("title"))).toBe(true);
     for (const button of toolbarButtons) {
       const tooltips = lumine.tooltips.findTooltips(button);
@@ -325,7 +315,7 @@ describe("graviss", () => {
     item.updateFrameRate(null);
     expect(frameRateCounter.textContent).toBe("\u2014 FPS");
     expect(frameRateCounter.dataset.active).toBe("false");
-    expect(lumine.tooltips.findTooltips(frameRateCounter).length).toBe(1);
+    expect(lumine.tooltips.findTooltips(frameRateCounter).length).toBe(0);
     item.updateFrameRate(59.6);
     expect(frameRateCounter.textContent).toBe("60 FPS");
     expect(frameRateCounter.dataset.active).toBe("true");
@@ -359,7 +349,7 @@ describe("graviss", () => {
     expect(item.element.dataset.appearance).toBe("paper");
     const backgroundButton = item.element.querySelector('[data-action="background"]');
     expect(
-      backgroundButton.closest(".block").classList.contains("graviss-background-control"),
+      backgroundButton.closest(".btn-group").classList.contains("graviss-background-control"),
     ).toBe(true);
     expect(backgroundButton.querySelector('[data-icon="background"]')).not.toBeNull();
     expect(backgroundButton.dataset.appearance).toBe("paper");
@@ -1462,31 +1452,31 @@ describe("graviss", () => {
       "true",
     );
 
-    // Mesh lines are a layer of their own over the surfaces they describe.
-    // Opaque and depth-writing: a translucent line would render after every
-    // opaque body, where nothing can be drawn back over it — softness comes
-    // from the mixed ink instead, and the depth lets a nearer body cover
-    // exactly the lines it stands in front of.
+    // Mesh lines are a late layer over the surfaces they describe. They carry
+    // no depth offset and do not rewrite depth: LessEqual keeps a line on its
+    // own fill, while the front fill rejects every line behind it. Stencil zero
+    // additionally keeps them off a visible member surface.
     const edges = item.renderer.meshes.shells.userData.gravissEdges;
     expect(item.renderer.meshes.mesh).toBe(edges);
     expect(edges.material.transparent).toBe(false);
-    expect(edges.material.depthWrite).toBe(true);
+    expect(edges.material.depthWrite).toBe(false);
+    expect(edges.material.depthFunc).toBe(item.renderer.THREE.LessEqualDepth);
+    expect(edges.material.stencilWrite).toBe(true);
+    expect(edges.material.stencilWriteMask).toBe(0);
+    expect(edges.material.stencilFunc).toBe(item.renderer.THREE.EqualStencilFunc);
+    expect(edges.material.stencilRef).toBe(0);
     expect(edges.material.linewidth).toBeCloseTo(1.25, 6);
     expect(edges.isLineSegments2).toBe(true);
-    const edgeShader = { vertexShader: "void main() { gl_Position = clip; }" };
-    edges.material.onBeforeCompile(edgeShader);
-    expect(edgeShader.vertexShader).toContain("clip.z -= 0.00002;");
-    expect(edgeShader.vertexShader).not.toContain("clip.z -= 0.00002 * clip.w");
+    expect(edges.material.onBeforeCompile.toString()).not.toContain("clip.z");
     item.renderer.updateLighting();
     const towardCamera = item.renderer.camera.position
       .clone()
       .sub(item.renderer.controls.target)
       .normalize();
     expect(item.renderer.fillLight.position.clone().normalize().dot(towardCamera)).toBeLessThan(0);
-    expect(edges.material.depthWrite).toBe(true);
-    expect(edges.renderOrder).toBe(1);
-    // After the member fills and their contours, whose flush faces and
-    // arrises must claim their band before the tie-losing shell fill arrives.
+    expect(edges.renderOrder).toBe(5);
+    // After the member and shell fills, at the same final contour tier as the
+    // stencil-gated member arrises.
     expect(item.renderer.meshes.shells.renderOrder).toBe(4);
     expect(edges.visible).toBe(true);
     expect(item.setVisibility("mesh", false)).toBe(false);
@@ -2695,6 +2685,26 @@ describe("graviss", () => {
     renderer.host.style.width = "800px";
     renderer.host.style.height = "500px";
     renderer.resize();
+    expect(renderer.camera.isPerspectiveCamera).toBe(true);
+
+    // The loose world box is only a probe under perspective; the frame itself
+    // follows pixels the model actually paints. Rendering that frame once more
+    // leaves the same number of pixels on every side, including left and
+    // bottom where an oblique world box otherwise protrudes furthest.
+    const cameraBeforeBoundary = renderer.captureCameraState();
+    const screenRect = renderer.modelScreenRect();
+    const framedRect = renderer.marginedScreenRect(screenRect);
+    const sample = renderer.rasterizedModelScreenRect(framedRect);
+    const pixelMargins = [
+      sample.rect.x * sample.resolution.width,
+      (1 - sample.rect.x - sample.rect.width) * sample.resolution.width,
+      sample.rect.y * sample.resolution.height,
+      (1 - sample.rect.y - sample.rect.height) * sample.resolution.height,
+    ];
+    expect(Math.min(...pixelMargins)).toBeGreaterThan(0);
+    expect(Math.max(...pixelMargins) - Math.min(...pixelMargins)).toBeLessThanOrEqual(4);
+    expect(renderer.captureCameraState()).toEqual(cameraBeforeBoundary);
+    expect(renderer.camera.view?.enabled).toBeFalsy();
 
     const tight = item.autoSelectPrintRegion();
     expect(item.getPrintRegion()).toEqual(tight);

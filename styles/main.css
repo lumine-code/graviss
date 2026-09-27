@@ -1,5 +1,6 @@
 .graviss {
   --graviss-toolbar-height: 43px;
+  --graviss-toolbar-group-gap: 8px;
   --graviss-glass: color-mix(in srgb, var(--base-background-color) 88%, transparent);
   --graviss-border: color-mix(in srgb, var(--base-border-color) 82%, transparent);
   --graviss-axis-x-color: #e5544c;
@@ -37,53 +38,24 @@
   margin-left: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  gap: 4px var(--graviss-toolbar-group-gap);
   padding: 6px 8px;
   border-bottom: 1px solid var(--graviss-border);
   background: color-mix(in srgb, var(--tool-panel-background-color) 94%, transparent);
 }
 
-/* One region per scope a control acts at: the set of graphics, the picture the
-   active graphic composes, the layers inside that picture — and, held to the
-   far side, what belongs to the document and the renderer rather than to
-   anything a graphic stores. A hairline says where one scope ends; the tail
-   needs none, because the gap before it already does. */
-.graviss-toolbar-region {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-}
-
-/* The blocks space themselves through the gaps above, not through the margins
-   the core toolbar would hand its direct children. */
-.graviss-toolbar-region .block {
-  margin: 0;
-}
-
-.graviss-toolbar-region + .graviss-toolbar-region:not(.graviss-toolbar-tail)::before {
-  content: "";
-  width: 1px;
-  height: 22px;
+/* Every visual control group is a direct flex item. One gap therefore spaces
+   every group equally, with no nested region margins to supplement it. */
+.graviss-toolbar > * {
   flex: none;
-  margin-right: 2px;
-  background: var(--graviss-border);
+  margin: 0;
 }
 
 /* The right-hand run starts at the panels: from here on the bar is about
    surfaces and output rather than about the picture being composed, so it is
-   pushed away from the controls that compose it. Only the first of the two
-   takes the free space — two auto margins would split it and leave a gap in
-   the middle of the run. */
-.graviss-region-panels {
+   pushed away from the controls that compose it. */
+.graviss-panel-actions {
   margin-left: auto;
-}
-
-.graviss-toolbar-block {
-  display: flex;
-  min-width: 0;
-  align-items: center;
 }
 
 .graviss-toolbar-button.btn {
@@ -143,10 +115,6 @@
   text-align: center;
 }
 
-.graviss-symbol-size {
-  flex: none;
-}
-
 /* Everything drawn as a mark rather than as structure is sized from here, so
    the control is one field and not one per kind of mark. It states a length, so
    it is a field rather than a slider — and the wheel over it turns the length,
@@ -157,10 +125,6 @@
   padding: 0 6px;
   font-variant-numeric: tabular-nums;
   line-height: 1.75;
-}
-
-.graviss-background-control {
-  flex: none;
 }
 
 /* Every colour the canvas draws with, as a custom property. The renderer reads
@@ -342,37 +306,20 @@
   cursor: var(--graviss-region-cursor);
 }
 
-/* Everything from here sits at the right end of the toolbar, away from the
-   controls that change what the canvas draws. */
-.graviss-source-control {
-  flex: none;
-  margin-left: auto;
-}
-
-.graviss-performance {
-  flex: none;
-}
-
-.graviss-fps-counter.btn {
-  display: inline-flex;
-  min-width: 56px;
-  height: 28px;
-  padding: 0 7px;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-color-subtle);
-  cursor: default;
+.graviss-fps-counter {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 12px;
+  color: color-mix(in srgb, var(--graviss-cube-text) 72%, transparent);
+  pointer-events: none;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
-  line-height: 1.75;
-  text-align: center;
+  line-height: 1;
 }
 
 .graviss-fps-counter[data-active="true"] {
-  color: var(--text-color);
-}
-
-.graviss-visibility {
-  flex: 1;
+  color: var(--graviss-cube-text);
 }
 
 .graviss-workspace {
