@@ -14,6 +14,7 @@ const {
   CYCLE_IDS,
   defaultCycle,
   phaseOf,
+  positionForPhase,
 } = require("../lib/animation");
 const { STOPS, colorScaleStops, sampleColorScale } = require("../lib/color-scale");
 
@@ -192,6 +193,34 @@ describe("animation cycles", () => {
   });
 });
 
+describe("scrubbing the deformation", () => {
+  it("keeps the direction and reproduces the requested deflection in both cycles", () => {
+    for (const cycle of CYCLE_IDS) {
+      for (const from of [0.1, 0.3, 0.6, 0.9]) {
+        for (const phase of cycle === "pingPong" ? [-1, -0.4, 0, 0.4, 1] : [0, 0.2, 0.8, 1]) {
+          const position = positionForPhase(cycle, phase, from);
+          expect(phaseOf(cycle, position)).toBeCloseTo(phase, 8);
+          if (Math.abs(phase) === 1 || (cycle !== "pingPong" && phase === 0)) continue;
+          const speedBefore = phaseOf(cycle, from + 0.00001) - phaseOf(cycle, from - 0.00001);
+          const speedAfter =
+            phaseOf(cycle, position + 0.00001) - phaseOf(cycle, position - 0.00001);
+          expect(Math.sign(speedAfter)).toBe(Math.sign(speedBefore));
+        }
+      }
+    }
+  });
+
+  it("retains the return-to-zero endpoint and bounds values outside the slider", () => {
+    expect(positionForPhase("thereAndBack", 0, 0.9)).toBe(1);
+    expect(positionForPhase("pingPong", 0, 0.9)).toBe(1);
+    expect(positionForPhase("thereAndBack", -100, 0.1)).toBe(0);
+    expect(positionForPhase("pingPong", -100, 0.1)).toBe(0.75);
+    expect(positionForPhase("thereAndBack", 100, 0.9)).toBe(0.5);
+    expect(positionForPhase("pingPong", 100, 0.9)).toBe(0.25);
+    expect(positionForPhase("pingPong", Number.NaN, 0.3)).toBe(0.3);
+  });
+});
+
 describe("Animation", () => {
   function driver() {
     const frames = [];
@@ -270,6 +299,109 @@ describe("Animation", () => {
     expect(animation.setPeriod(0)).toBe(2000);
     expect(animation.setPeriod(-5)).toBe(2000);
     expect(animation.setPeriod(10)).toBe(50);
+  });
+
+  it("reports the last presented position while the frame clock moves on", () => {
+    const { animation, at } = driver();
+    animation.setPeriod(1000);
+    animation.start();
+    at(200);
+    // Before the first frame there is no presented fraction to report yet.
+    expect(animation.position).toBeCloseTo(0.2, 9);
+    animation.advance(at(250));
+    at(800);
+    expect(animation.fractionAt(800)).toBeCloseTo(0.8, 9);
+    expect(animation.position).toBeCloseTo(0.25, 9);
+    animation.reset();
+    expect(animation.position).toBeCloseTo(0.25, 9);
+    animation.advance(at(800));
+    expect(animation.position).toBe(0);
+  });
+
+  it("freezes the presented frame on stop and resumes from it without an immediate frame", () => {
+    const { animation, at, frames, scheduled } = driver();
+    animation.setPeriod(1000);
+    animation.start();
+    animation.advance(at(250));
+    at(800);
+    animation.stop();
+    expect(animation.position).toBeCloseTo(0.25, 9);
+    at(1500);
+    animation.start();
+    expect(frames).toEqual([0.5]);
+    expect(scheduled()).toBe(3);
+    animation.advance(at(1500));
+    expect(frames.at(-1)).toBe(0.5);
+    animation.advance(at(1750));
+    expect(frames.at(-1)).toBe(1);
+  });
+
+  it("seeks synchronously to a paused pose in either cycle", () => {
+    const { animation, frames, scheduled } = driver();
+    animation.start();
+    expect(animation.seek(0.5)).toBe(animation);
+    expect(animation.running).toBe(false);
+    expect(animation.position).toBe(0.5);
+    expect(frames).toEqual([1]);
+    expect(scheduled()).toBe(1);
+    animation.setCycle("pingPong");
+    animation.seek(0.25);
+    expect(frames.at(-1)).toBe(1);
+    animation.seek(0.75);
+    expect(frames.at(-1)).toBe(-1);
+    expect(animation.position).toBe(0.75);
+  });
+
+  it("clamps seek endpoints while ignoring invalid positions", () => {
+    const { animation, frames } = driver();
+    animation.seek(-2);
+    expect(animation.position).toBe(0);
+    expect(frames.at(-1)).toBe(0);
+    animation.seek(4);
+    expect(animation.position).toBe(1);
+    expect(frames.at(-1)).toBe(0);
+    for (const invalid of [Number.NaN, Infinity, -Infinity, "0.5", null]) {
+      animation.seek(invalid);
+      expect(animation.position).toBe(1);
+    }
+    expect(frames).toEqual([0, 0]);
+  });
+
+  it("keeps the 100 percent endpoint until the first resumed frame wraps the cycle", () => {
+    const { animation, at, frames } = driver();
+    animation.setPeriod(1000);
+    animation.setCycle("pingPong");
+    animation.seek(1);
+    at(250);
+    animation.start();
+    expect(animation.position).toBe(1);
+    expect(frames).toEqual([0]);
+    animation.advance(at(250));
+    expect(animation.position).toBe(0);
+    expect(frames.at(-1)).toBe(0);
+    animation.advance(at(500));
+    expect(animation.position).toBeCloseTo(0.25, 9);
+    expect(frames.at(-1)).toBe(1);
+  });
+
+  it("preserves a sought position across paused and running tempo changes", () => {
+    const { animation, at, frames } = driver();
+    animation.seek(0.25);
+    animation.setPeriod(4000);
+    expect(animation.position).toBe(0.25);
+    expect(frames).toEqual([0.5]);
+    at(500);
+    animation.start();
+    animation.advance(at(1500));
+    expect(animation.position).toBeCloseTo(0.5, 9);
+    expect(frames.at(-1)).toBe(1);
+    at(1900);
+    animation.setPeriod(2000);
+    expect(animation.position).toBeCloseTo(0.5, 9);
+    expect(animation.fractionAt(1900)).toBeCloseTo(0.6, 9);
+    animation.advance(at(2200));
+    expect(animation.position).toBeCloseTo(0.75, 9);
+    expect(frames.at(-1)).toBe(0.5);
   });
 });
 

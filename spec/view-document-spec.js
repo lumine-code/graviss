@@ -473,6 +473,53 @@ describe("GravissViewDocument", () => {
     expect(() => validateViewDocument([])).toThrowError(/must be an object/);
     expect(validateViewDocument({})).toEqual({});
   });
+
+  it("accepts cycle positions including both endpoints without inventing one for older views", () => {
+    for (const cyclePosition of [0, 0.25, 0.5, 0.75, 1]) {
+      const results = { loadCaseId: 101, cycle: "pingPong", cyclePosition, playing: false };
+      expect(normalizeViewDocument({ graphics: [{ results }] }).graphics[0].results).toEqual(
+        results,
+      );
+    }
+    const previous = { loadCaseId: 101, cycle: "thereAndBack", playing: false };
+    expect(
+      normalizeViewDocument({ graphics: [{ results: previous }] }).graphics[0].results,
+    ).toEqual(previous);
+    expect("results" in normalizeViewDocument({}).graphics[0]).toBe(false);
+  });
+
+  it("drops a results block with an invalid cycle position", () => {
+    for (const cyclePosition of [-0.001, 1.001, "0.5", Number.NaN, Infinity]) {
+      const normalized = normalizeViewDocument({
+        graphics: [{ results: { loadCaseId: 101, cyclePosition } }],
+      });
+      expect("results" in normalized.graphics[0]).toBe(false);
+    }
+  });
+
+  it("saves and restores the paused endpoint through document history", async () => {
+    document = GravissViewDocument.load(filePath);
+    const original = document.serialize().data;
+    document.update((data) => {
+      graphicAt(data, 0).results = {
+        loadCaseId: 101,
+        cycle: "pingPong",
+        cyclePosition: 1,
+        playing: false,
+      };
+    });
+    expect(document.getData().graphics[0].results.cyclePosition).toBe(1);
+    document.undo();
+    expect(document.serialize().data).toEqual(original);
+    document.redo();
+    await document.save();
+    expect(JSON.parse(fs.readFileSync(filePath, "utf8")).graphics[0].results.cyclePosition).toBe(1);
+    const saved = document.serialize().data;
+    document.destroy();
+    document = GravissViewDocument.load(filePath);
+    expect(document.getData().graphics[0].results).toEqual(saved.graphics[0].results);
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+  });
 });
 
 function clone(value) {

@@ -4379,7 +4379,8 @@ describe("graviss", () => {
         expect(viewer.renderer.getAnimation().running).toBe(true);
         viewer.toggleAnimation();
         expect(viewer.renderer.getAnimation().running).toBe(false);
-        // Stopping leaves the model at the shape rather than part way through it.
+        // No frame advanced between these clicks, so Pause keeps the full shape
+        // which was displayed when Play began.
         expect(viewer.renderer.getDeformation().phase).toBe(1);
 
         viewer.toggleColorByDisplacement();
@@ -4389,6 +4390,7 @@ describe("graviss", () => {
         expect(viewer.activeGraphic.results).toEqual({
           loadCaseId: 101,
           scale: 100,
+          cyclePosition: 0.5,
           colorByDisplacement: true,
         });
       } finally {

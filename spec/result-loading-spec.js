@@ -1,4 +1,5 @@
 const { CompositeDisposable, Emitter } = require("lumine");
+const { Animation } = require("../lib/animation");
 
 function deferred() {
   let resolve;
@@ -27,7 +28,13 @@ function createViewer() {
   const viewer = Object.create(GravissView.prototype);
   const reads = new Map();
   const metrics = { active: 0, maximum: 0 };
-  const animation = jasmine.createSpyObj("animation", ["setCycle", "setPeriod", "start", "stop"]);
+  const animation = new Animation({
+    onFrame: (phase) => renderer.setDeformationPhase(phase),
+    requestFrame: () => {},
+    now: () => 0,
+  });
+  for (const method of ["setCycle", "setPeriod", "start", "stop", "seek"])
+    spyOn(animation, method).and.callThrough();
   let displayed = null;
   const renderer = {
     setResult: jasmine.createSpy("setResult").and.callFake((result) => {
@@ -55,11 +62,13 @@ function createViewer() {
       scale: "auto",
       cycle: null,
       period: null,
+      cyclePosition: null,
       playing: false,
       colorByDisplacement: false,
     },
     result: null,
     resultsError: null,
+    failedLoadCaseId: null,
     resultRequest: 0,
     resultRead: null,
     resultSelection: null,
@@ -116,7 +125,13 @@ describe("Graviss result loading", () => {
     await flushReads();
     expect(validateOld).not.toHaveBeenCalled();
     expect(renderer.setResult).not.toHaveBeenCalled();
-    expect(changed).not.toHaveBeenCalled();
+    expect(changed).toHaveBeenCalledTimes(3);
+    expect(viewer.getResultLoadState()).toEqual({
+      pendingLoadCaseId: 3,
+      displayedLoadCaseId: null,
+      failedLoadCaseId: null,
+      error: null,
+    });
     expect(reads.has(2)).toBe(false);
     const result = resultFor(3);
     reads.get(3).resolve(result);
@@ -126,7 +141,13 @@ describe("Graviss result loading", () => {
     expect(viewer.resultsState.loadCaseId).toBe(3);
     expect(renderer.setResult.calls.allArgs()).toEqual([[result]]);
     expect(viewer.recordResultsState).toHaveBeenCalledTimes(1);
-    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledTimes(4);
+    expect(viewer.getResultLoadState()).toEqual({
+      pendingLoadCaseId: null,
+      displayedLoadCaseId: 3,
+      failedLoadCaseId: null,
+      error: null,
+    });
   });
 
   it("shares an in-flight case and records only the latest caller's choice", async () => {
@@ -186,21 +207,50 @@ describe("Graviss result loading", () => {
 
   it("reports a current failure and permits a subsequent retry", async () => {
     const { viewer, reads } = fixture;
+    const previous = viewer.selectLoadCase(2);
+    const displayed = resultFor(2);
+    reads.get(2).resolve(displayed);
+    await previous;
     const changed = jasmine.createSpy("did-change-results");
     viewer.onDidChangeResults(changed);
     const failed = viewer.selectLoadCase(1);
+    expect(viewer.getResultLoadState()).toEqual({
+      pendingLoadCaseId: 1,
+      displayedLoadCaseId: 2,
+      failedLoadCaseId: null,
+      error: null,
+    });
     const error = new Error("case failed");
     reads.get(1).reject(error);
     await expectAsync(failed).toBeResolvedTo(null);
     expect(viewer.resultsError).toBe(error);
-    expect(changed).toHaveBeenCalledTimes(1);
-    const retry = viewer.selectLoadCase(1);
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect(viewer.result).toBe(displayed);
+    expect(viewer.getResultLoadState()).toEqual({
+      pendingLoadCaseId: null,
+      displayedLoadCaseId: 2,
+      failedLoadCaseId: 1,
+      error,
+    });
+    const retry = viewer.retryLoadCase();
+    expect(viewer.getResultLoadState()).toEqual({
+      pendingLoadCaseId: 1,
+      displayedLoadCaseId: 2,
+      failedLoadCaseId: null,
+      error: null,
+    });
     const result = resultFor(1);
     reads.get(1).resolve(result);
     await expectAsync(retry).toBeResolvedTo(result);
     expect(viewer.resultsError).toBeNull();
-    expect(viewer.session.getResult).toHaveBeenCalledTimes(2);
-    expect(changed).toHaveBeenCalledTimes(2);
+    expect(viewer.session.getResult).toHaveBeenCalledTimes(3);
+    expect(changed).toHaveBeenCalledTimes(4);
+    expect(viewer.getResultLoadState()).toEqual({
+      pendingLoadCaseId: null,
+      displayedLoadCaseId: 1,
+      failedLoadCaseId: null,
+      error: null,
+    });
   });
 
   it("reports validation errors only for the currently selected field", async () => {
@@ -222,6 +272,8 @@ describe("Graviss result loading", () => {
       expect(viewer.resultsState.loadCaseId).toBe(3);
       expect(viewer.resultsState.playing).toBe(true);
       expect(viewer.result.loadCaseId).toBe(3);
+      expect(viewer.getResultLoadState().pendingLoadCaseId).toBeNull();
+      expect(viewer.getResultLoadState().displayedLoadCaseId).toBe(3);
     });
     viewer.onDidChangeResults(changed);
     reads.get(3).resolve(resultFor(3));
@@ -241,8 +293,15 @@ describe("Graviss result loading", () => {
     await expectAsync(viewer.selectLoadCase(null)).toBeResolvedTo(null);
     expect(viewer.resultsState.loadCaseId).toBeNull();
     expect(viewer.resultsState.playing).toBe(false);
+    expect(viewer.resultsState.cyclePosition).toBeNull();
     expect(viewer.resultsError).toBeNull();
     expect(renderer.setResult.calls.allArgs()).toEqual([[null]]);
+    expect(viewer.getResultLoadState()).toEqual({
+      pendingLoadCaseId: null,
+      displayedLoadCaseId: null,
+      failedLoadCaseId: null,
+      error: null,
+    });
     reads.get(1).resolve(resultFor(1));
     await flushReads();
     await expectAsync(first).toBeResolvedTo(null);
@@ -332,5 +391,88 @@ describe("Graviss result loading", () => {
     await expectAsync(first).toBeResolvedTo(null);
     await expectAsync(latest).toBeResolvedTo(result);
     expect(replacement.setResult.calls.allArgs()).toEqual([[result]]);
+  });
+
+  it("discards a retried index from an adopted session before validation or restoring graphics", async () => {
+    const { viewer, renderer } = fixture;
+    const indexRead = deferred();
+    viewer.description = { capabilities: { results: { loadCases: true } } };
+    viewer.session.getLoadCases = jasmine.createSpy("old index").and.returnValue(indexRead.promise);
+    viewer.graphics = [{ results: { loadCaseId: 3 } }];
+    viewer.activeGraphicIndex = 0;
+    const retried = viewer.retryLoadCase();
+    const session = {
+      describe: async () => ({}),
+      getGeometry: async () => viewer.geometry,
+      getResult: jasmine.createSpy("new result"),
+      dispose: jasmine.createSpy("new dispose"),
+    };
+    spyOn(viewer, "load");
+    viewer.adoptSession(session);
+    const replacement = { ...renderer, setResult: jasmine.createSpy("replacement result") };
+    viewer.renderer = replacement;
+    const loadCases = [{ id: 3, title: "New model", kind: "eigenmode" }];
+    const result = resultFor(3);
+    viewer.loadCases = loadCases;
+    viewer.result = result;
+    const changed = jasmine.createSpy("new session results");
+    viewer.onDidChangeResults(changed);
+    const validateOld = jasmine.createSpy("old index validation").and.throwError("obsolete index");
+    indexRead.resolve([Object.defineProperty({ title: "Old model" }, "id", { get: validateOld })]);
+    await expectAsync(retried).toBeResolvedTo(null);
+    expect(validateOld).not.toHaveBeenCalled();
+    expect(viewer.loadCases).toBe(loadCases);
+    expect(viewer.result).toBe(result);
+    expect(viewer.resultsError).toBeNull();
+    expect(replacement.setResult).not.toHaveBeenCalled();
+    expect(session.getResult).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it("discards an index completed after destruction without validating or notifying", async () => {
+    const { viewer } = fixture;
+    const indexRead = deferred();
+    viewer.description = { capabilities: { results: { loadCases: true } } };
+    viewer.session.getLoadCases = jasmine.createSpy("index").and.returnValue(indexRead.promise);
+    const index = viewer.readLoadCases();
+    const changed = jasmine.createSpy("closed results");
+    viewer.onDidChangeResults(changed);
+    viewer.destroy();
+    const validateLate = jasmine.createSpy("late index validation").and.throwError("closed");
+    indexRead.resolve([
+      Object.defineProperty({ title: "Late model" }, "id", { get: validateLate }),
+    ]);
+    await expectAsync(index).toBeResolvedTo(null);
+    expect(validateLate).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+    expect(viewer.loadCases).toEqual([]);
+  });
+
+  it("keeps the latest index retry when an earlier retry fails after it succeeded", async () => {
+    const { viewer, reads } = fixture;
+    const firstRead = deferred();
+    const latestRead = deferred();
+    viewer.description = { capabilities: { results: { loadCases: true } } };
+    viewer.session.getLoadCases = jasmine
+      .createSpy("index")
+      .and.returnValues(firstRead.promise, latestRead.promise);
+    viewer.graphics = [{ results: { loadCaseId: 3 } }];
+    viewer.activeGraphicIndex = 0;
+    const first = viewer.retryLoadCase();
+    const latest = viewer.retryLoadCase();
+    latestRead.resolve([{ id: 3, title: "Latest index", kind: "eigenmode" }]);
+    await flushReads();
+    const result = resultFor(3);
+    reads.get(3).resolve(result);
+    await expectAsync(latest).toBeResolvedTo(result);
+    const changed = jasmine.createSpy("stale index failure");
+    viewer.onDidChangeResults(changed);
+    firstRead.reject(new Error("obsolete index failure"));
+    await expectAsync(first).toBeResolvedTo(null);
+    expect(viewer.loadCases.map(({ id }) => id)).toEqual([3]);
+    expect(viewer.result).toBe(result);
+    expect(viewer.resultsError).toBeNull();
+    expect(viewer.session.getResult).toHaveBeenCalledTimes(1);
+    expect(changed).not.toHaveBeenCalled();
   });
 });
