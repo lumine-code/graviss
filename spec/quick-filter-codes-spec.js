@@ -141,6 +141,43 @@ describe("quick-filter code registry", () => {
     expect(aliases.has("GT")).toBe(false);
   });
 
+  it("keeps an opaque base id distinct from another dimension's generated panel key", () => {
+    const geometry = {
+      elements: [
+        { kind: "beam", filterValues: { "group|beam": 1, group: 12 } },
+        { kind: "beam", filterValues: { "group|beam": 2, group: 1 } },
+        { kind: "shell", filterValues: { group: 12 } },
+      ],
+      filterTypes: [
+        {
+          id: "group|beam",
+          title: "Opaque dimension",
+          numeric: true,
+          quickFilterCode: "H",
+          kinds: ["beam"],
+        },
+        { id: "group", title: "Group", numeric: true, quickFilterCode: "G" },
+      ],
+    };
+    const subjects = buildSubjects(geometry);
+    expect(subjects.filter(({ key }) => key === "group|beam").length).toBe(2);
+    const aliases = buildQuickFilterAliases(geometry, subjects);
+    expect(aliases.get("H").type).toBe("group|beam");
+    expect(aliases.get("H").title).toBe("Opaque dimension");
+    const opaque = compileStep({ sign: "+", text: "1" }, aliases.get("H"));
+    const scoped = compileStep({ sign: "+", text: "12" }, aliases.get("GB"));
+    expect(geometry.elements.map((element) => opaque.select(element))).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    expect(geometry.elements.map((element) => scoped.select(element))).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
   it("rejects non-ASCII, empty and non-letter codes with their metadata location", () => {
     for (const quickFilterCode of ["", "1", "G1", "G_B", "G B", "Ł", 12, true]) {
       expect(() => validateQuickFilterCodes([{ quickFilterCode }], "filters")).toThrowError(
