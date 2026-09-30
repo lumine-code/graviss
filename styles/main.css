@@ -47,6 +47,108 @@
   margin: 0;
 }
 
+.graviss-toolbar > .graviss-quick-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 18em;
+  min-width: min(16em, 100%);
+  max-width: 32em;
+  padding-left: 6px;
+  border: 1px solid var(--graviss-border);
+  border-radius: var(--component-border-radius, 3px);
+  background: var(--input-background-color, var(--inset-panel-background-color));
+}
+.graviss-quick-filter-icon {
+  flex: none;
+  color: var(--text-color-subtle);
+}
+.graviss-quick-filter.is-active .graviss-quick-filter-icon {
+  color: var(--text-color-info);
+}
+.graviss-quick-filter.is-draft {
+  border-color: var(--text-color-info);
+}
+.graviss-quick-filter-editor[mini] {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0 4px;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-size);
+  user-select: text;
+}
+.graviss-quick-filter-editor[aria-invalid="true"] {
+  box-shadow: inset 0 -1px 0 var(--text-color-error);
+}
+.graviss-quick-filter-clear.btn {
+  flex: none;
+  min-width: 22px;
+  height: 26px;
+  padding: 0 4px;
+  border: 0;
+}
+.graviss-quick-filter-help {
+  flex: none;
+}
+.graviss-quick-filter-help > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 26px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-color-subtle);
+}
+.graviss-quick-filter-help > summary::-webkit-details-marker {
+  display: none;
+}
+.graviss-quick-filter-guide,
+.graviss-quick-filter-error {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  right: 0;
+  padding: 10px;
+  border: 1px solid var(--graviss-border);
+  border-radius: var(--component-border-radius, 3px);
+  background: var(--tool-panel-background-color);
+  box-shadow: 0 3px 12px #0004;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.graviss-quick-filter-guide {
+  width: min(28em, calc(100vw - 32px));
+  max-height: 28em;
+  overflow-y: auto;
+}
+.graviss-quick-filter-guide p {
+  margin: 0 0 8px;
+}
+.graviss-quick-filter-codes {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 10px 0 0;
+}
+.graviss-quick-filter-codes dt {
+  font-family: var(--font-family-monospace);
+}
+.graviss-quick-filter-codes dd {
+  margin: 0;
+}
+.graviss-quick-filter-error {
+  left: 0;
+  color: var(--text-color-error);
+}
+.graviss-quick-filter-error[hidden] {
+  display: none;
+}
+
 /* The right-hand run starts at the panels: from here on the bar is about
    surfaces and output rather than about the picture being composed, so it is
    pushed away from the controls that compose it. */

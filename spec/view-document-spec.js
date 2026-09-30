@@ -520,6 +520,52 @@ describe("GravissViewDocument", () => {
     expect(document.getData().graphics[0].results).toEqual(saved.graphics[0].results);
     expect(document.getFileState()).toBe(FileState.UNMODIFIED);
   });
+
+  it("keeps optional quick filters as strings without requiring provider metadata", () => {
+    for (const quickFilter of ["", "G12-15;-Q1??1*", "GB12;ZZ9", " G12 - 15 ; - Q1??1* "]) {
+      const normalized = normalizeViewDocument({ graphics: [{ quickFilter }] });
+      expect(normalized.graphics[0].quickFilter).toBe(quickFilter);
+    }
+    expect("quickFilter" in normalizeViewDocument({ graphics: [{}] }).graphics[0]).toBe(false);
+  });
+
+  it("drops a quick filter of the wrong type while retaining the graphic's other settings", () => {
+    const filter = { rules: [{ sign: "+", type: "group", text: "12" }] };
+    const results = { loadCaseId: 101, scale: 10 };
+    for (const quickFilter of [12, true, [], {}, { text: "G12" }]) {
+      const normalized = normalizeViewDocument({ graphics: [{ quickFilter, filter, results }] });
+      expect("quickFilter" in normalized.graphics[0]).toBe(false);
+      expect(normalized.graphics[0].filter).toEqual(filter);
+      expect(normalized.graphics[0].results).toEqual(results);
+    }
+  });
+
+  it("saves independent quick filters alongside panel rules and restores them through history", async () => {
+    document = GravissViewDocument.load(filePath);
+    const original = document.serialize().data;
+    const filter = { rules: [{ sign: "+", type: "@number", text: "12-15" }] };
+    document.update((data) => {
+      graphicAt(data, 0).quickFilter = "G12-15;-Q1??1*";
+      graphicAt(data, 0).filter = filter;
+      graphicAt(data, 1).quickFilter = "GB12";
+    });
+    expect(document.getData().graphics[0].quickFilter).toBe("G12-15;-Q1??1*");
+    expect(document.getData().graphics[1].quickFilter).toBe("GB12");
+    document.undo();
+    expect(document.serialize().data).toEqual(original);
+    document.redo();
+    await document.save();
+    const saved = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    expect(saved.graphics[0].quickFilter).toBe("G12-15;-Q1??1*");
+    expect(saved.graphics[0].filter).toEqual(filter);
+    expect(saved.graphics[1].quickFilter).toBe("GB12");
+    document.destroy();
+    document = GravissViewDocument.load(filePath);
+    expect(document.getData().graphics[0].quickFilter).toBe("G12-15;-Q1??1*");
+    expect(document.getData().graphics[0].filter).toEqual(filter);
+    expect(document.getData().graphics[1].quickFilter).toBe("GB12");
+    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+  });
 });
 
 function clone(value) {

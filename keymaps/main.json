@@ -3,7 +3,7 @@
   // is clicked. The root must never carry native-key-bindings: core resolves
   // every arrow under that class to native! at higher specificity than these,
   // which findKeyBindings cannot see — the keys exist and simply never fire.
-  ".graviss": {
+  ".graviss:not(.graviss-editing-quick-filter)": {
     "[": "graviss:previous-graphic",
     "]": "graviss:next-graphic",
     "f": "graviss:fit-view",

@@ -11,7 +11,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state and conflicted-save handling, records every change in a private `TextBuffer` so Undo and Redo cover the whole view document, and exposes its named graphics to the navigation panel.
 - **Live sources**: rebuilds the scene when a source reports that its geometry changed, keeping the camera the view document holds.
 - **Analysis results**: searches load cases by number or name, filters their types, animates a displacement field at an exact or automatic amplification, pauses on the displayed frame, seeks through the cycle, colours elements by displacement, and computes shell deformation on the GPU when available. Hidden views stop drawing until they become visible again.
-- **Model filtering**: browses actual model values with titles and element counts, creates ordered add and subtract rules over element number, element kind, and source dimensions, and keeps each rule reorderable with its own match count.
+- **Model filtering**: browses actual model values with titles and element counts, creates ordered add and subtract rules over element number, element kind, and source dimensions, and combines them with a compact toolbar filter using model selector codes.
 - **Symbols and connectors**: draws axial springs as helices, transverse springs as crossed in-plane helices, rotational springs as rings, and couplings as plain links; sizes every mark with one length in millimetres and can scale springs relative to the stiffest one.
 
 ## Installation
@@ -124,7 +124,7 @@ The narrowest complete document is therefore `{}`, and a useful one is little mo
 { "source": "model.dat" }
 ```
 
-A graphic holds what is being looked at as well as how: `filter` states which elements are drawn and `results` which load case is shown, at what amplification and under which cycle. Both are per graphic rather than per file, so one document can hold an animated mode shape, a static dead-load case and an unfiltered overview side by side.
+A graphic holds what is being looked at as well as how: `filter` states the panel's element rules, `quickFilter` adds an independent toolbar expression, and `results` states which load case is shown, at what amplification and under which cycle. These settings are per graphic rather than per file, so one document can hold an animated mode shape, a static dead-load case and an unfiltered overview side by side.
 
 The **Results** panel follows the active model and graphic. Search by case number or name, narrow the list by case type, or step through it with Previous and Next. **System** shows the undeformed model. The status distinguishes the requested case from the result currently displayed; an unsuccessful read leaves the previous result available and offers **Retry**. Enter an exact non-negative amplification factor, choose a preset, or use **Auto**. **Pause** freezes the displayed frame and **Play** resumes from it. The **Deformation** slider shows the actual deflection factor: `0%` to `100%` for Positive, or `−100%` to `100%` for Swing. Its thumb follows the deformation's smooth acceleration rather than advancing at a constant speed. Dragging pauses at the chosen deformation while preserving the cycle's direction for resuming. The period is entered in seconds; **Colours |u|** uses true displacement magnitudes independently of amplification.
 
@@ -133,6 +133,22 @@ An optional `results.cyclePosition` stores the position as a finite fraction fro
 The **Filter** panel lists rules in order and offers the model's actual values, including declared values that match no elements. Choose a dimension, search its IDs or titles, select one or more values, then use **Add** or **Subtract** to append one rule. Searching and selecting values leave the filter unchanged until that action. **Number** takes an expression such as `1-10, 15, 1*, 11??` instead of listing every element number. **More → Blank rule** opens an expression row for manual entry. Each rule reports its own matches; **In filter** reports the final accepted elements independently of layer visibility. Reorder by the grip or the Up and Down buttons, remove a rule, or use **Show entire model** to clear the list. The last matching rule decides, so successive additions mean either set, rather than their intersection.
 
 Numeric filter expressions support numbers, inclusive ranges, and digit patterns separated by commas or whitespace. Named expressions retain case-insensitive ID or title matching with `*` and `?` patterns. JSON-quoted names select exact, case-sensitive IDs and keep spaces, commas, wildcard characters, and escaped quotes literal; the value picker writes this form automatically. For example, `"Temporary works"` names that one ID, while `temporary*` matches names or titles beginning with that word. An unreadable expression shows its error beside the field and leaves the last valid filter active.
+
+The toolbar's **Quick filter** is an additional condition: an element must pass both it and the Filter panel's rules. Enter applies the draft; Escape restores the applied text. An invalid draft reports its error and leaves the last valid expression active. The × button clears only the quick filter. While it is active, the panel's reset button reads **Clear panel filter** and leaves the toolbar expression active; otherwise it reads **Show entire model**. The `?` help lists the current model's selector codes. Each graphic stores its optional expression as `quickFilter`, for example `"quickFilter": "G12-15;-Q1??1*"`. Restoring an invalid saved expression shows its error and admits no elements until it is corrected or cleared.
+
+Quick-filter clauses are separated by semicolons. Each starts with an optional `+` or `-`, a selector code, and an expression; omitted signs mean addition. The last matching clause decides. A leading subtraction starts from the whole model, while a leading addition starts from nothing. One trailing semicolon is allowed; empty clauses elsewhere are errors. Codes are case-insensitive, and the complete leading run of ASCII letters must be a known code. Unquoted names therefore require a colon, such as `SG:DECK` or `SG:deck*`; quoted exact IDs may follow directly, such as `SG"DECK"`. A semicolon inside a quoted ID remains part of that ID.
+
+All whitespace is removed from quick input, including whitespace inside quotes, and comma-separated terms remain within one clause. Use a JSON escape such as `SG"Temporary\u0020works"` when an exact named ID contains a space. With model codes `G` for groups and `SG` for named sets, `G12-15;-Q1??1*` adds groups 12–15 then subtracts shells matching the number pattern, `GB12` restricts group 12 to beams, and `SG:DECK` selects a named set. A bare provider selector such as `G` admits every element holding that dimension; a bare kind selector admits all members of that kind, including unnumbered ones. Number expressions match only elements that have numbers.
+
+| Core code | Domain        |
+| --------- | ------------- |
+| `N`       | All elements. |
+| `B`       | Beams.        |
+| `Q`       | Shells.       |
+| `T`       | Trusses.      |
+| `C`       | Cables.       |
+| `S`       | Springs.      |
+| `K`       | Couplings.    |
 
 A graphic is identified by where it sits in `graphics`, and by nothing else, so nothing about it can collide or be misspelt. `activeGraphic` names the one to show as a position, counting from zero. It may carry an `id` and be named by that instead, which is easier to write by hand; an `id` is an alias rather than an identity, so two graphics may share one and the first wins.
 

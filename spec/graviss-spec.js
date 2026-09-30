@@ -188,11 +188,14 @@ describe("graviss", () => {
     expect(toolbar.getAttribute("role")).toBe("toolbar");
     expect(toolbar.classList.contains("btn-toolbar")).toBe(false);
     expect(
-      [...toolbar.querySelectorAll("button")].every((button) => !button.textContent.trim()),
+      [...toolbar.querySelectorAll("button[data-command]")].every(
+        (button) => !button.textContent.trim(),
+      ),
     ).toBe(true);
-    // The toolbar takes no free text: every control is a button, a picker, or
-    // the one number that sizes the marks.
-    expect(toolbar.querySelector('input:not([type="number"])')).toBeNull();
+    // The quick filter owns one native mini editor beside the existing model
+    // controls and the number which sizes the marks.
+    expect(toolbar.querySelectorAll("lumine-text-editor[mini]").length).toBe(1);
+    expect(toolbar.querySelector(':scope > input:not([type="number"])')).toBeNull();
     expect(toolbar.querySelector(".graviss-graphic-title")).toBeNull();
     const symbolInput = toolbar.querySelector(".graviss-symbol-input");
     expect(symbolInput).not.toBeNull();
@@ -209,7 +212,7 @@ describe("graviss", () => {
     );
     expect(springScaleButton.getAttribute("aria-pressed")).toBe("false");
     expect(springScaleButton.getAttribute("aria-label")).toBe("Scale springs by stiffness");
-    const toolbarButtons = [...toolbar.querySelectorAll("button")];
+    const toolbarButtons = [...toolbar.querySelectorAll("button[data-command]")];
     const perspectiveButton = toolbar.querySelector('[data-projection="perspective"]');
     const orthographicButton = toolbar.querySelector('[data-projection="orthographic"]');
     const isometricButton = toolbar.querySelector('[data-view="iso"]');
@@ -276,7 +279,9 @@ describe("graviss", () => {
     expect(directGroups.length).toBe(10);
     expect(directGroups.every((group) => group.getAttribute("role") === "group")).toBe(true);
     expect(
-      [...toolbar.children].every((child) => child.matches(".btn-group, .graviss-symbol-input")),
+      [...toolbar.children].every((child) =>
+        child.matches(".btn-group, .graviss-symbol-input, .graviss-quick-filter"),
+      ),
     ).toBe(true);
     expect(symbolInput.parentElement).toBe(toolbar);
     expect(frameRateCounter.parentElement).toBe(item.element.querySelector(".graviss-viewport"));
