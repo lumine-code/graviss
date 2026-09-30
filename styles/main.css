@@ -1024,11 +1024,9 @@
   outline-offset: 2px;
 }
 .graviss-case-row {
-  display: grid;
-  grid-template-columns: 3.6em minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  column-gap: 8px;
-  row-gap: 2px;
+  gap: 8px;
   padding: 7px 8px;
   border-radius: var(--component-border-radius, 3px);
   cursor: default;
@@ -1051,7 +1049,6 @@
   box-shadow: inset 2px 0 0 var(--text-color-error);
 }
 .graviss-case-number {
-  grid-row: 1 / span 2;
   color: var(--text-color-subtle);
   min-width: 3.6em;
   flex: none;
@@ -1061,8 +1058,6 @@
   color: inherit;
 }
 .graviss-case-title {
-  grid-column: 2;
-  grid-row: 1;
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -1070,17 +1065,17 @@
   text-overflow: ellipsis;
 }
 .graviss-case-kind {
-  grid-column: 2;
-  grid-row: 2;
   color: var(--text-color-subtle);
   font-size: 0.9em;
   flex: none;
+  white-space: nowrap;
+  text-align: right;
 }
 .graviss-case-state {
-  grid-column: 3;
-  grid-row: 1 / span 2;
+  flex: none;
   color: var(--text-color-subtle);
   font-size: 0.85em;
+  white-space: nowrap;
 }
 .graviss-case-selected .graviss-case-state {
   color: inherit;
@@ -1101,7 +1096,11 @@
   padding: 8px;
   color: var(--text-color-subtle);
 }
-.graviss-result-status {
+.graviss-results-panel .graviss-result-status {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--text-color-subtle);
   font-size: 0.9em;
 }

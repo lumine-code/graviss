@@ -66,6 +66,12 @@ describe("the Results panel case browser and precise controls", () => {
     field.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
+  function wheel(field, deltaY, shiftKey = false) {
+    const event = new WheelEvent("wheel", { deltaY, shiftKey, bubbles: true, cancelable: true });
+    field.dispatchEvent(event);
+    return event;
+  }
+
   function shownIds() {
     return [...panel.caseList.children].map((row) => row.dataset.caseId);
   }
@@ -178,20 +184,27 @@ describe("the Results panel case browser and precise controls", () => {
     expect(panel.body.hidden).toBe(false);
     expect(nextRow.classList.contains("graviss-case-pending")).toBe(true);
     expect(nextRow.getAttribute("aria-selected")).toBe("true");
+    expect(nextRow.querySelector(".graviss-case-state").textContent).toBe("Loading…");
     expect(oldRow.classList.contains("graviss-case-displayed")).toBe(true);
+    expect(oldRow.querySelector(".graviss-case-state").hidden).toBe(true);
+    expect(oldRow.textContent).not.toContain("Displayed");
     expect(panel.resultStatus.textContent).toContain("still displaying LC 101");
+    expect(panel.resultStatus.title).toBe(panel.resultStatus.textContent);
     reject(new Error("CDB unavailable"));
     await selected;
     expect(panel.body.hidden).toBe(false);
     expect(panel.resultError.hidden).toBe(false);
     expect(panel.resultError.textContent).toContain("CDB unavailable");
     expect(nextRow.classList.contains("graviss-case-failed")).toBe(true);
+    expect(nextRow.querySelector(".graviss-case-state").textContent).toBe("Failed");
     expect(viewer.result.loadCaseId).toBe(101);
     panel.retryButton.click();
     await conditionPromise(() => viewer.result?.loadCaseId === 102, "the failed case to retry");
     expect(panel.resultError.hidden).toBe(true);
     expect(panel.caseRows.get("102")).toBe(nextRow);
-    expect(panel.resultStatus.textContent).toContain("Displayed: LC 102");
+    expect(panel.resultStatus.textContent).toBe("LC 102 · Permanent load");
+    expect(panel.resultStatus.title).toBe(panel.resultStatus.textContent);
+    expect(nextRow.querySelector(".graviss-case-state").hidden).toBe(true);
   });
 
   it("keeps the controls available when the load case index fails and offers Retry", async () => {
@@ -274,6 +287,108 @@ describe("the Results panel case browser and precise controls", () => {
     input(panel.periodInput, "0");
     expect(viewer.getResultsState().period).toBe(3750);
     expect(panel.periodInput.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("adjusts all four result controls under the wheel with or without focus, without scrolling or stealing focus", async () => {
+    await openViewer();
+    await viewer.selectLoadCase(101);
+    const scroller = panel.body.querySelector(".graviss-panel-scroll");
+    const controls = [
+      {
+        field: panel.scaleInput,
+        reset: () => viewer.setDeformationScale(12.375),
+        value: () => viewer.getResultsState().scale,
+        step: 1,
+      },
+      {
+        field: panel.periodInput,
+        reset: () => viewer.setAnimationPeriod(3750),
+        value: () => viewer.getResultsState().period / 1000,
+        step: 0.05,
+      },
+      {
+        field: panel.scaleSlider,
+        reset: () => viewer.setDeformationScale(10),
+        value: () => Number(panel.scaleSlider.value),
+        step: 10,
+      },
+      {
+        field: panel.positionSlider,
+        reset: () => viewer.setAnimationPosition(0.25),
+        value: () => Number(panel.positionSlider.value),
+        step: 1,
+      },
+    ];
+    for (const focused of [false, true]) {
+      for (const control of controls) {
+        control.reset();
+        const focusTarget = focused ? control.field : panel.caseSearch;
+        focusTarget.focus();
+        const initial = control.value();
+        const scroll = scroller.scrollTop;
+        expect(wheel(control.field, -100).defaultPrevented).toBe(true);
+        expect(control.value()).toBeCloseTo(initial + control.step, 8);
+        expect(document.activeElement).toBe(focusTarget);
+        expect(scroller.scrollTop).toBe(scroll);
+        expect(wheel(control.field, 100, true).defaultPrevented).toBe(true);
+        expect(control.value()).toBeCloseTo(initial - 9 * control.step, 8);
+        expect(document.activeElement).toBe(focusTarget);
+        expect(scroller.scrollTop).toBe(scroll);
+      }
+    }
+  });
+
+  it("clamps wheel adjustments to control bounds and pauses a signed deformation on its existing return branch", async () => {
+    await openViewer();
+    await viewer.selectLoadCase(101);
+    panel.caseSearch.focus();
+    viewer.setDeformationScale(0);
+    wheel(panel.scaleInput, 100, true);
+    expect(viewer.getResultsState().scale).toBe(0);
+    viewer.setAnimationPeriod(250);
+    wheel(panel.periodInput, 100, true);
+    expect(viewer.getResultsState().period).toBe(250);
+    input(panel.scaleSlider, panel.scaleSlider.max);
+    wheel(panel.scaleSlider, -100, true);
+    expect(panel.scaleSlider.value).toBe(panel.scaleSlider.max);
+    input(panel.scaleSlider, panel.scaleSlider.min);
+    wheel(panel.scaleSlider, 100, true);
+    expect(panel.scaleSlider.value).toBe(panel.scaleSlider.min);
+    input(panel.positionSlider, "0");
+    wheel(panel.positionSlider, 100, true);
+    expect(panel.positionSlider.value).toBe("0");
+    input(panel.positionSlider, "100");
+    wheel(panel.positionSlider, -100, true);
+    expect(panel.positionSlider.value).toBe("100");
+    await viewer.selectLoadCase(901);
+    input(panel.positionSlider, "-100");
+    wheel(panel.positionSlider, 100, true);
+    expect(panel.positionSlider.value).toBe("-100");
+    input(panel.positionSlider, "100");
+    wheel(panel.positionSlider, -100, true);
+    expect(panel.positionSlider.value).toBe("100");
+    viewer.setAnimationPosition(11 / 12);
+    panel.playButton.click();
+    expect(viewer.getResultsState().playing).toBe(true);
+    const seek = spyOn(viewer, "setAnimationPosition").and.callThrough();
+    wheel(panel.positionSlider, -100);
+    expect(seek.calls.count()).toBe(1);
+    expect(viewer.getResultsState().playing).toBe(false);
+    expect(viewer.renderer.getDeformation().phase).toBeCloseTo(-0.49, 8);
+    expect(viewer.getAnimationPosition()).toBeCloseTo(1 + Math.asin(-0.49) / (2 * Math.PI), 8);
+    expect(document.activeElement).toBe(panel.caseSearch);
+    panel.systemButton.click();
+    for (const field of [
+      panel.scaleInput,
+      panel.periodInput,
+      panel.scaleSlider,
+      panel.positionSlider,
+    ]) {
+      const value = field.value;
+      expect(field.disabled).toBe(true);
+      expect(wheel(field, -100).defaultPrevented).toBe(false);
+      expect(field.value).toBe(value);
+    }
   });
 
   it("follows the eased positive or signed swing deformation, including the default mode shape", async () => {
