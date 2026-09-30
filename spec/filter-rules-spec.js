@@ -74,13 +74,33 @@ describe("parseNameFilter", () => {
     expect(parseNameFilter("p?", subject)("PXYZ")).toBe(false);
   });
 
-  it("never refuses an expression, because every string is a legal name", () => {
-    // Only a numeric dimension can produce a rule nobody can read, which is why
-    // a row over a named dimension never shows the invalid state.
+  it("continues accepting unquoted names and patterns", () => {
     expect(() => parseNameFilter("1-10,beam,,,***", subject)).not.toThrow();
     expect(parseNameFilter("", subject)).toBeNull();
     expect(isReadableExpression("1-10,beam", { numeric: true })).toBe(false);
     expect(isReadableExpression("1-10,beam", { numeric: false })).toBe(true);
+  });
+
+  it("reads JSON-quoted values as exact case-sensitive IDs without matching titles", () => {
+    const ids = ["Pier piles", "PP,QQ", "PP*", "PP?", 'A"B', "A\\B", "\u03c0\nvalue"];
+    for (const id of ids) {
+      const match = parseNameFilter(JSON.stringify(id), subject);
+      expect(match(id)).toBe(true);
+      expect(match("PP")).toBe(false);
+    }
+    const exact = parseNameFilter('"PP"', subject);
+    expect(exact("PP")).toBe(true);
+    expect(exact("pp")).toBe(false);
+    expect(parseNameFilter('"Pier piles"', subject)("PP")).toBe(false);
+    expect(parseNameFilter('"PP" , "QQ" p*', subject)("PX")).toBe(true);
+  });
+
+  it("reports malformed quoted values rather than selecting a different set", () => {
+    for (const text of ['"PP', '"PP"QQ', '"bad\\x"', '"line\nbreak"']) {
+      expect(() => parseNameFilter(text, subject)).toThrowError(RangeError);
+      expect(isReadableExpression(text, subject)).toBe(false);
+    }
+    expect(isReadableExpression('"PP"', subject)).toBe(true);
   });
 });
 
