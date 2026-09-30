@@ -45,13 +45,18 @@ describe("graviss", () => {
       state: options.viewDocumentState,
       fallbackData: model.viewDocument,
     });
-    return mainModule.createViewer(new TestSession(model), {
+    const viewer = mainModule.createViewer(new TestSession(model), {
       uri: model.viewDocumentPath,
       title: model.title,
       restorable: true,
       viewDocument,
       activeGraphic: options.activeGraphic ?? viewDocument.getData().activeGraphic,
     });
+    // A standalone fixture shares the test document with the workspace. Keep
+    // it inside the viewport instead of appending it below the workspace.
+    viewer.element.style.position = "absolute";
+    viewer.element.style.inset = "0";
+    return viewer;
   }
 
   beforeEach(async () => {
@@ -60,6 +65,16 @@ describe("graviss", () => {
     const pack = await lumine.packages.activatePackage("graviss");
     mainModule = pack.mainModule;
     GravissView = require("../lib/graviss-view");
+    // This suite checks the CPU geometry reference directly. GPU deformation
+    // and readback parity have their own integration suite.
+    const { GravissRenderer } = require("../lib/renderer");
+    const createRenderer = GravissRenderer.create;
+    spyOn(GravissRenderer, "create").and.callFake((host, geometry, callbacks, options) =>
+      createRenderer.call(GravissRenderer, host, geometry, callbacks, {
+        ...options,
+        shellDeformationBackend: "cpu",
+      }),
+    );
     sourceProviderDisposable = mainModule.consumeGravissSource({
       id: "spec-models",
       createSession({ filePath }) {
@@ -2817,19 +2832,28 @@ describe("graviss", () => {
   });
 
   it("repaints the canvas in the same task as a resize", async () => {
-    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
-    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
-    const renderer = item.renderer;
+    const item = createFixtureViewer(MAIN_EXAMPLE);
+    jasmine.attachToDOM(item.element);
+    try {
+      await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+      const renderer = item.renderer;
+      await conditionPromise(
+        () => renderer.isViewportDrawable(),
+        "the viewport to be visibly drawable before resizing",
+      );
 
-    // Resizing the drawing buffer clears it on the spot, and the observer
-    // fires before paint: a repaint deferred to the next animation frame
-    // would let the compositor show the empty canvas first, flashing the
-    // pane's bare background on every step of a resize drag.
-    const rendered = spyOn(renderer.canvasRenderer, "render").and.callThrough();
-    renderer.host.style.width = "612px";
-    renderer.host.style.height = "364px";
-    renderer.resize();
-    expect(rendered).toHaveBeenCalled();
+      // Resizing the drawing buffer clears it on the spot, and the observer
+      // fires before paint: a repaint deferred to the next animation frame
+      // would let the compositor show the empty canvas first, flashing the
+      // pane's bare background on every step of a resize drag.
+      const rendered = spyOn(renderer.canvasRenderer, "render").and.callThrough();
+      renderer.host.style.width = "612px";
+      renderer.host.style.height = "364px";
+      renderer.resize();
+      expect(rendered).toHaveBeenCalled();
+    } finally {
+      item.destroy();
+    }
   });
 
   it("frames the whole model without moving the camera", async () => {
@@ -3663,7 +3687,7 @@ describe("graviss", () => {
       expect(lightingNormal.dot(surfaceNormal)).toBeGreaterThan(0.999999);
       // Mesh lines use the same boundary samples as the fill.
       expect(
-        Math.max(...renderer.shellState.edgePositions.filter((unused, at) => at % 3 === 2)),
+        Math.max(...renderer.shellState.edgeBuffer.array.filter((unused, at) => at % 3 === 2)),
       ).toBeGreaterThan(0.1);
       let edge = 0;
       for (const boundary of renderer.shellState.prepared[0].surfaceLayout.boundaries) {
@@ -3671,7 +3695,7 @@ describe("graviss", () => {
           const from = boundary[segment];
           const to = boundary[segment + 1];
           expect(
-            Array.from(renderer.shellState.edgePositions.slice(edge * 6, edge * 6 + 6)),
+            Array.from(renderer.shellState.edgeBuffer.array.slice(edge * 6, edge * 6 + 6)),
           ).toEqual([
             positions.getX(from),
             positions.getY(from),
@@ -3888,17 +3912,43 @@ describe("graviss", () => {
         return box.size;
       };
       expect(area()).toBeGreaterThan(1);
+      const firstRange = shells.userData.gravissEntityRanges[0];
+      const rest = Array.from(
+        positions.array.subarray(firstRange.start * 3, (firstRange.start + firstRange.count) * 3),
+      );
+      const center = renderer.elementCenter(first);
+      const ray = new renderer.THREE.Raycaster(
+        center.clone().add(new renderer.THREE.Vector3(0, 0, 10)),
+        new renderer.THREE.Vector3(0, 0, -1),
+      );
+      shells.updateMatrixWorld(true);
 
-      // Folded onto one of its own corners: every offset it had is still where
-      // it was, and a triangle with no area rasterises to nothing.
+      // Filtering removes the drawn indices and edge instances. Hidden
+      // surfaces retain their coordinates without costing another write pass.
       renderer.setElementFilter(() => false);
-      expect(area()).toBe(1);
+      expect(renderer.shellState.activeElementIndices).toEqual([]);
+      expect(shells.geometry.drawRange.count).toBe(0);
+      expect(renderer.shellState.edgeGeometry.instanceCount).toBe(0);
+      expect(shells.userData.gravissZoomProxy.geometry.drawRange.count).toBe(0);
+      expect(ray.intersectObject(shells, false)).toEqual([]);
+      expect(
+        Array.from(
+          positions.array.subarray(firstRange.start * 3, (firstRange.start + firstRange.count) * 3),
+        ),
+      ).toEqual(rest);
       expect(shells.userData.gravissEntityRanges[0].count).toBeGreaterThan(1);
       expect(renderer.elementCounts().get("shell").shown).toBe(0);
 
       // And it comes back where it was, not somewhere near it.
       renderer.setElementFilter((element) => element.id === first.id);
       expect(area()).toBeGreaterThan(1);
+      expect(renderer.shellState.activeElementIndices).toEqual([0]);
+      expect(shells.geometry.drawRange.count).toBe(renderer.shellState.prepared[0].indexCount);
+      expect(
+        ray
+          .intersectObject(shells, false)
+          .some((hit) => shells.userData.gravissFaceToEntityIndex[hit.faceIndex] === 0),
+      ).toBe(true);
       expect(renderer.elementCounts().get("shell")).toEqual({
         total: renderer.elementCounts().get("shell").total,
         shown: 1,
@@ -4225,6 +4275,8 @@ describe("graviss", () => {
         title: model.title,
         viewDocument,
       });
+      viewer.element.style.position = "absolute";
+      viewer.element.style.inset = "0";
       jasmine.attachToDOM(viewer.element);
       try {
         await conditionPromise(
@@ -4232,6 +4284,10 @@ describe("graviss", () => {
           "the paused renderer to initialize",
         );
         const renderer = viewer.renderer;
+        await conditionPromise(
+          () => renderer.isViewportDrawable(),
+          "the saved-result viewport to be visibly drawable",
+        );
         const rendered = spyOn(renderer.canvasRenderer, "render").and.callThrough();
         expect(viewer.element.classList.contains("is-loading")).toBe(true);
         expect(renderer.renderSuspended).toBe(true);
@@ -4543,21 +4599,26 @@ describe("graviss", () => {
       renderer.setSectionRendering(false);
       const line = renderer.memberLines.geometry.getAttribute("position");
       const range = renderer.memberLines.userData.gravissEntityRanges[first];
-      expect(range.count).toBe(renderer.memberBendSteps * 2);
+      expect(range.count).toBe(renderer.memberLines.userData.gravissLineSteps[first] * 2);
       // Mid-span of the bent member, against the straight line between its own
       // two ends. A cantilever's curve stands above its chord. The endpoint
       // rotation is treated as a finite direction, so this is the Hermite
       // answer to first order and remains bounded when a factor makes the angle
       // large.
-      const middle = range.start + renderer.memberBendSteps;
+      const middle = range.start + range.count / 2;
       const chordZ = (line.getZ(range.start) + line.getZ(range.start + range.count - 1)) / 2;
       expect(line.getZ(middle) - chordZ).toBeCloseTo((1.25 * slope) / Math.hypot(1, slope), 5);
       // And the member the result said nothing about is straight, as it should
       // be: every point of it on the line between its ends.
       const plain = renderer.memberLines.userData.gravissEntityRanges[second];
-      const plainMiddle = plain.start + renderer.memberBendSteps;
-      const plainChord = (line.getZ(plain.start) + line.getZ(plain.start + plain.count - 1)) / 2;
-      expect(line.getZ(plainMiddle) - plainChord).toBeCloseTo(0, 9);
+      expect(plain.count).toBe(2);
+      for (let endpoint = 0; endpoint < 2; endpoint += 1) {
+        const nodeId = renderer.memberLines.userData.gravissEntities[second].nodeIds[endpoint];
+        const node = renderer.nodeIndex(nodeId) * 3;
+        expect(line.getX(plain.start + endpoint)).toBe(renderer.nodePositions[node]);
+        expect(line.getY(plain.start + endpoint)).toBe(renderer.nodePositions[node + 1]);
+        expect(line.getZ(plain.start + endpoint)).toBe(renderer.nodePositions[node + 2]);
+      }
       // A filter reaches the centrelines too. With sections off these are the
       // only members there are, so one that did not would be a filter that
       // worked in one display mode and not the other.
@@ -4601,7 +4662,7 @@ describe("graviss", () => {
       renderer.setSectionRendering(false);
       const stretchedLine = renderer.memberLines.geometry.getAttribute("position");
       const stretchedRange = renderer.memberLines.userData.gravissEntityRanges[first];
-      const stretchedMiddle = stretchedRange.start + renderer.memberBendSteps;
+      const stretchedMiddle = stretchedRange.start + stretchedRange.count / 2;
       const stretchedChordY =
         (stretchedLine.getY(stretchedRange.start) +
           stretchedLine.getY(stretchedRange.start + stretchedRange.count - 1)) /
@@ -4678,9 +4739,10 @@ describe("graviss", () => {
       renderer.setSectionRendering(false);
       const line = renderer.memberLines.geometry.getAttribute("position");
       const range = renderer.memberLines.userData.gravissEntityRanges[0];
+      expect(range.count).toBe(2);
       for (let vertex = range.start; vertex < range.start + range.count; vertex += 1) {
         const local = vertex - range.start;
-        const fraction = (Math.floor(local / 2) + (local % 2)) / renderer.memberBendSteps;
+        const fraction = (Math.floor(local / 2) + (local % 2)) / (range.count / 2);
         expect(line.getX(vertex)).toBeCloseTo(10 * fraction, 6);
         expect(line.getY(vertex)).toBeCloseTo(0, 6);
         expect(line.getZ(vertex)).toBeCloseTo(-0.5 * fraction, 6);

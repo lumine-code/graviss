@@ -59,4 +59,19 @@ describe("Graviss frame-rate meter", () => {
     expect(() => meter.record(1000)).not.toThrow();
     meter.dispose();
   });
+
+  it("starts a fresh measurement after a viewport was hidden", () => {
+    const changes = [];
+    const meter = new FrameRateMeter((fps) => changes.push(fps));
+    meter.record(0);
+    meter.record(16);
+    expect(changes).toEqual([63]);
+    meter.reset();
+    expect(changes).toEqual([63, null]);
+    expect(meter.idleTimer).toBeNull();
+    meter.record(10000);
+    meter.record(10016);
+    expect(changes).toEqual([63, null, 63]);
+    meter.dispose();
+  });
 });

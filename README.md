@@ -10,7 +10,7 @@ Explore finite element models in an interactive engineering viewport.
 - **Multiple graphics**: stores several named graphics in one `.grv` file, added and deleted from the toolbar, each with its own camera, visibility, section rendering, appearance, and print region.
 - **Native documents**: participates in modified tabs, Save and Save As, external reloads, deletion state and conflicted-save handling, records every change in a private `TextBuffer` so Undo and Redo cover the whole view document, and exposes its named graphics to the navigation panel.
 - **Live sources**: rebuilds the scene when a source reports that its geometry changed, keeping the camera the view document holds.
-- **Analysis results**: animates a displacement field over the model at a chosen or automatic amplification, starting from zero or swinging about it, and colours every element by how far it went.
+- **Analysis results**: animates a displacement field over the model at a chosen or automatic amplification, starting from zero or swinging about it, colours every element by how far it went, and computes shell deformation on the GPU when available. Hidden views stop drawing until they become visible again.
 - **Model filtering**: narrows the model with an ordered list of add and subtract rules over element number, element kind, and any dimension the source declares, each rule reorderable and each saying how many elements it names.
 - **Symbols and connectors**: draws axial springs as helices, transverse springs as crossed in-plane helices, rotational springs as rings, and couplings as plain links; sizes every mark with one length in millimetres and can scale springs relative to the stiffest one.
 
