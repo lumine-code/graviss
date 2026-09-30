@@ -294,6 +294,42 @@ describe("the Graviss toolbar quick filter", () => {
     expect(keptIds()).toEqual(["B1"]);
   });
 
+  it("keeps the draft and caret while help opens, updates and closes, and removes the popup on destruction", async () => {
+    await openViewer();
+    viewer.applyQuickFilter("G12");
+    const control = viewer.quickFilterControl;
+    draft("G12-");
+    editor.setCursorBufferPosition([0, 2]);
+    const mousedown = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 });
+    control.help.dispatchEvent(mousedown);
+    expect(mousedown.defaultPrevented).toBe(true);
+    expect(editor.element.contains(document.activeElement)).toBe(true);
+    control.help.click();
+    expect(control.help.getAttribute("aria-expanded")).toBe("true");
+    expect(control.helpView.element.isConnected).toBe(true);
+    expect(control.guide.hidden).toBe(false);
+    const aliases = new Map(viewer.quickFilterAliases);
+    aliases.set("G", { ...aliases.get("G"), title: "Updated group" });
+    viewer.quickFilterAliases = aliases;
+    expect(() => control.sync()).not.toThrow();
+    const group = [...control.codes.querySelectorAll("dt")].find(
+      (node) => node.textContent === "G",
+    );
+    expect(group.nextElementSibling.textContent).toBe("Updated group");
+    press("escape");
+    expect(control.helpView).toBeNull();
+    expect(control.help.getAttribute("aria-expanded")).toBe("false");
+    expect(editor.getText()).toBe("G12-");
+    expect(editor.getCursorBufferPosition().column).toBe(2);
+    expect(viewer.quickFilterText).toBe("G12");
+    expect(keptIds()).toEqual(["B1"]);
+    control.help.click();
+    const popup = control.helpView.element;
+    viewer.destroy();
+    expect(popup.isConnected).toBe(false);
+    expect(editor.isDestroyed()).toBe(true);
+  });
+
   it("lets camera shortcut letters and punctuation be typed without moving the view or toggling layers", async () => {
     await openViewer();
     draft("");

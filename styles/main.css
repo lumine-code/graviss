@@ -48,66 +48,57 @@
 }
 
 .graviss-toolbar > .graviss-quick-filter {
+  --graviss-quick-action-size: calc(var(--component-line-height) + 1px);
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1 1 18em;
-  min-width: min(16em, 100%);
-  max-width: 32em;
-  padding-left: 6px;
-  border: 1px solid var(--graviss-border);
-  border-radius: var(--component-border-radius, 3px);
-  background: var(--input-background-color, var(--inset-panel-background-color));
-}
-.graviss-quick-filter-icon {
-  flex: none;
-  color: var(--text-color-subtle);
-}
-.graviss-quick-filter.is-active .graviss-quick-filter-icon {
-  color: var(--text-color-info);
-}
-.graviss-quick-filter.is-draft {
-  border-color: var(--text-color-info);
+  flex: 0 1 18em;
+  width: 18em;
+  min-width: min(12em, 100%);
+  max-width: 100%;
 }
 .graviss-quick-filter-editor[mini] {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 0 4px;
-  height: 26px;
-  border: 0;
-  background: transparent;
-  font-size: var(--font-size);
+  /* Match select-list's overlaid actions; the editor already reserves one
+     trailing character for the end-of-line caret. */
+  padding-inline-end: calc(var(--graviss-quick-action-size) - 1ch);
   user-select: text;
 }
-.graviss-quick-filter-editor[aria-invalid="true"] {
-  box-shadow: inset 0 -1px 0 var(--text-color-error);
+.graviss-quick-filter.has-clear-action .graviss-quick-filter-editor[mini] {
+  padding-inline-end: calc(2 * var(--graviss-quick-action-size) - 1ch);
 }
-.graviss-quick-filter-clear.btn {
-  flex: none;
-  min-width: 22px;
-  height: 26px;
-  padding: 0 4px;
-  border: 0;
+.graviss .graviss-quick-filter-editor[aria-invalid="true"] {
+  border-color: var(--text-color-error);
 }
-.graviss-quick-filter-help {
-  flex: none;
-}
-.graviss-quick-filter-help > summary {
+.graviss-quick-filter-action {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 1px;
+  inset-inline-end: 1px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 26px;
-  cursor: pointer;
-  list-style: none;
+  width: var(--graviss-quick-action-size);
+  height: var(--graviss-quick-action-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--component-border-radius);
   color: var(--text-color-subtle);
+  background: transparent;
+  opacity: 0.65;
+  cursor: default;
 }
-.graviss-quick-filter-help > summary::-webkit-details-marker {
+.graviss-quick-filter-action:hover {
+  color: var(--text-color-highlight);
+  background: var(--button-background-color-hover);
+  opacity: 1;
+}
+.graviss-quick-filter-action[hidden] {
   display: none;
 }
-.graviss-quick-filter-guide,
+.graviss-quick-filter-clear {
+  inset-inline-end: calc(var(--graviss-quick-action-size) + 1px);
+}
 .graviss-quick-filter-error {
   position: absolute;
   z-index: 5;
@@ -125,6 +116,20 @@
   width: min(28em, calc(100vw - 32px));
   max-height: 28em;
   overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--graviss-border, var(--base-border-color));
+  border-radius: var(--component-border-radius, 3px);
+  background: var(--tool-panel-background-color);
+  color: var(--text-color);
+  box-shadow: 0 3px 12px #0004;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.graviss-quick-filter-help-view .context-view-surface {
+  overflow: auto;
+}
+.graviss-quick-filter-guide[hidden] {
+  display: none;
 }
 .graviss-quick-filter-guide p {
   margin: 0 0 8px;
