@@ -433,6 +433,56 @@ describe("Graviss model validation", () => {
     expect(() => validateGeometry(geometry)).toThrowError(/unknown element kind/);
   });
 
+  it("accepts optional quick-filter codes without changing the provider's spelling or type ids", () => {
+    const geometry = createMain1Geometry();
+    geometry.filterTypes = [
+      { id: "opaque:group|beam", title: "Group", numeric: true, quickFilterCode: "g" },
+      { id: "sets", title: "Secondary groups", multiple: true, quickFilterCode: "sG" },
+      { id: "uncoded", title: "Uncoded" },
+    ];
+    expect(validateGeometry(geometry)).toBe(geometry);
+    expect(geometry.filterTypes[0].id).toBe("opaque:group|beam");
+    expect(geometry.filterTypes[0].quickFilterCode).toBe("g");
+    expect(geometry.filterTypes[1].quickFilterCode).toBe("sG");
+  });
+
+  it("rejects malformed quick-filter codes as standard model-validation errors", () => {
+    const geometry = createMain1Geometry();
+    for (const quickFilterCode of ["", "G1", "G B", "Ł", 12]) {
+      geometry.filterTypes = [{ id: "group", title: "Group", quickFilterCode }];
+      expect(() => validateGeometry(geometry)).toThrowError(
+        TypeError,
+        /Invalid Graviss model: geometry\.filterTypes\[0\]\.quickFilterCode.*ASCII letters/,
+      );
+    }
+    geometry.filterTypes = [{ id: "group", title: "", quickFilterCode: "G1" }];
+    expect(() => validateGeometry(geometry)).toThrowError(/title must be a non-empty string/);
+  });
+
+  it("rejects reserved, duplicate and generated quick-filter code collisions", () => {
+    const geometry = createMain1Geometry();
+    for (const quickFilterCode of ["N", "b", "Q", "T", "C", "S", "K"]) {
+      geometry.filterTypes = [{ id: "group", title: "Group", quickFilterCode }];
+      expect(() => validateGeometry(geometry)).toThrowError(TypeError, /conflicts.*built-in codes/);
+    }
+    for (const codes of [
+      ["G", "g"],
+      ["G", "GB"],
+      ["SG", "sgq"],
+    ]) {
+      geometry.filterTypes = codes.map((quickFilterCode, index) => ({
+        id: `type-${index}`,
+        title: `Type ${index}`,
+        quickFilterCode,
+        kinds: ["shell"],
+      }));
+      expect(() => validateGeometry(geometry)).toThrowError(
+        TypeError,
+        /quickFilterCode.*conflicts/,
+      );
+    }
+  });
+
   it("holds a displacement field to one value a component a node", () => {
     const geometry = createMain1Geometry();
     const nodes = geometry.nodes.length;
