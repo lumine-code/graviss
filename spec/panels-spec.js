@@ -254,6 +254,25 @@ describe("the Graviss dock panels", () => {
     expect(filter.viewer).toBe(viewer);
   });
 
+  it("names the model and graphic in both panels and returns focus from the context header", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    const results = await lumine.workspace.open(RESULTS_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+    for (const panel of [filter, results]) {
+      expect(panel.contextModel.textContent).toBe("Analysed");
+      expect(panel.contextGraphic.textContent).toBe(viewer.activeGraphic.title);
+    }
+    viewer.viewDocument.update((data) => {
+      data.graphics[0].title = "Deck deformation";
+    }, "rename-graphic");
+    for (const panel of [filter, results])
+      expect(panel.contextGraphic.textContent).toBe("Deck deformation");
+    results.focus();
+    results.context.querySelector("button").click();
+    await conditionPromise(() => !results.isFocused(), "the context button to focus the model");
+    expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(viewer);
+  });
+
   it("follows the active item across tabs in the workspace centre", async () => {
     const filter = await lumine.workspace.open(FILTER_PANEL_URI);
     const results = await lumine.workspace.open(RESULTS_PANEL_URI);
@@ -291,8 +310,8 @@ describe("the Graviss dock panels", () => {
     expect(results.viewer).toBe(other);
     expect(results.previewIndex).toBeNull();
     expect(results.previewTimer).toBeNull();
-    expect(results.caseList.children.length).toBe(OTHER_ANALYSED_MODEL.loadCases.length + 1);
-    expect(results.caseList.children[1].textContent).toContain("wind");
+    expect(results.caseList.children.length).toBe(OTHER_ANALYSED_MODEL.loadCases.length);
+    expect(results.caseList.children[0].textContent).toContain("wind");
     const otherRow = filter.rows.get("shared");
     expect(otherRow.field.value).toBe("2");
     expect(otherRow.select.element.querySelector(".select-box-label").textContent).toBe("Storey");
@@ -301,7 +320,7 @@ describe("the Graviss dock panels", () => {
     expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(analysed);
     expect(filter.viewer).toBe(analysed);
     expect(results.viewer).toBe(analysed);
-    expect(results.caseList.children.length).toBe(ANALYSED_MODEL.loadCases.length + 1);
+    expect(results.caseList.children.length).toBe(ANALYSED_MODEL.loadCases.length);
     expect(filter.rows.get("shared").field.value).toBe("1");
     expect(
       filter.rows.get("shared").select.element.querySelector(".select-box-label").textContent,
@@ -310,11 +329,11 @@ describe("the Graviss dock panels", () => {
     // Focused controls are normally protected from incidental rerenders. A
     // viewer switch is not incidental: the new model's value must win.
     lumine.workspace.paneForItem(results).activateItem(results);
-    results.periodSlider.focus();
-    expect(results.periodSlider.value).toBe("1000");
+    results.periodInput.focus();
+    expect(results.periodInput.value).toBe("1");
     pane.activateItem(other);
     expect(lumine.workspace.getActivePaneItem()).toBe(results);
-    expect(results.periodSlider.value).toBe("3000");
+    expect(results.periodInput.value).toBe("3");
     pane.activateItem(analysed);
 
     // Activating either dock tab changes the workspace's global active item,
@@ -381,7 +400,7 @@ describe("the Graviss dock panels", () => {
     expect(lumine.workspace.getCenter().getActivePaneItem()).toBe(second);
     expect(filter.viewer).toBe(second);
     expect(results.viewer).toBe(second);
-    expect(results.caseList.children[1].textContent).toContain("wind");
+    expect(results.caseList.children[0].textContent).toContain("wind");
   });
 
   it("clears both panels when the last centre viewer closes", async () => {
@@ -636,6 +655,22 @@ describe("the Graviss dock panels", () => {
     expect(first.field.selectionStart).toBe(1);
   });
 
+  it("recounts rules only when the model selection changes", async () => {
+    const filter = await lumine.workspace.open(FILTER_PANEL_URI);
+    await openViewer(ANALYSED_MODEL);
+    const id = viewer.addRule({ sign: "+", type: "group", text: "1" });
+    const subject = viewer.subjectForRule(viewer.getFilterState().rules[0]);
+    const read = spyOn(subject, "read").and.callThrough();
+    viewer.toggleVisibility("grid");
+    viewer.setDeformationScale(100);
+    viewer.getRuleCounts();
+    expect(read).not.toHaveBeenCalled();
+    expect(filter.total.textContent).toBe("1 of 2 elements");
+    viewer.updateRule(id, { text: "1, 2" });
+    expect(read).toHaveBeenCalled();
+    expect(filter.total.textContent).toBe("2 of 2 elements");
+  });
+
   it("steps the cases without reading every one it passes", async () => {
     const results = await lumine.workspace.open(RESULTS_PANEL_URI);
     await openViewer(ANALYSED_MODEL);
@@ -643,27 +678,27 @@ describe("the Graviss dock panels", () => {
 
     expect(
       [...results.caseList.querySelectorAll(".graviss-case-title")].map((n) => n.textContent),
-    ).toEqual(["System", "self-weight", "dead-load", "1st mode"]);
-    expect(results.caseList.children[0].classList).toContain("graviss-case-selected");
+    ).toEqual(["self-weight", "dead-load", "1st mode"]);
+    expect(results.systemButton.classList).toContain("graviss-case-selected");
 
     // A preview moves the cursor and reads nothing, because reading a case is
     // thousands of records and a list being stepped through would queue one a
     // row.
+    results.previewBy(1);
+    expect(results.previewIndex).toBe(0);
+    expect(session.lastResultRequest).toBeUndefined();
     results.previewBy(1);
     expect(results.previewIndex).toBe(1);
     expect(session.lastResultRequest).toBeUndefined();
     results.previewBy(1);
     expect(results.previewIndex).toBe(2);
     expect(session.lastResultRequest).toBeUndefined();
-    results.previewBy(1);
-    expect(results.previewIndex).toBe(3);
-    expect(session.lastResultRequest).toBeUndefined();
 
     // What is under the cursor is shown once the stepping stops.
     results.commitPreview();
     await conditionPromise(() => viewer.result != null, "the case under the cursor to be read");
     expect(session.lastResultRequest).toEqual({ loadCaseId: 901, kind: "displacement" });
-    expect(results.caseList.children[3].classList.contains("graviss-case-selected")).toBe(true);
+    expect(results.caseList.children[2].classList.contains("graviss-case-selected")).toBe(true);
 
     // And a cursor moved and then abandoned leaves the model where it was.
     results.previewBy(-1);
@@ -675,7 +710,7 @@ describe("the Graviss dock panels", () => {
   it("lets the wheel scroll the case list without changing the active case", async () => {
     const results = await lumine.workspace.open(RESULTS_PANEL_URI);
     await openViewer(ANALYSED_MODEL);
-    results.caseList.children[1].click();
+    results.caseList.children[0].click();
     await conditionPromise(() => viewer.result != null, "the first case to be read");
 
     const wheel = new WheelEvent("wheel", {
@@ -689,13 +724,13 @@ describe("the Graviss dock panels", () => {
     expect(results.previewIndex).toBeNull();
     expect(results.previewTimer).toBeNull();
     expect(viewer.getResultsState().loadCaseId).toBe(101);
-    expect(results.caseList.children[1].classList).toContain("graviss-case-selected");
+    expect(results.caseList.children[0].classList).toContain("graviss-case-selected");
   });
 
   it("drives the amplification, the animation and the legend", async () => {
     const results = await lumine.workspace.open(RESULTS_PANEL_URI);
     await openViewer(ANALYSED_MODEL);
-    results.caseList.children[1].click();
+    results.caseList.children[0].click();
     await conditionPromise(() => viewer.result != null, "the first case to be read");
 
     // The scale reads back as a factor rather than as a slider position.
@@ -703,7 +738,7 @@ describe("the Graviss dock panels", () => {
     results.scalePresets.querySelector('[data-scale="100"]').click();
     expect(results.scaleValue.textContent).toBe("×100");
     expect(viewer.renderer.getDeformation().scale).toBe(100);
-    results.scalePresets.querySelector(".graviss-scale-auto").click();
+    results.scaleAuto.click();
     expect(viewer.renderer.getDeformation().automatic).toBe(true);
 
     results.playButton.click();
@@ -714,7 +749,7 @@ describe("the Graviss dock panels", () => {
     results.scalePresets.querySelector('[data-scale="100"]').click();
     expect(viewer.renderer.getDeformation().phase).toBe(0.25);
     expect(animation.running).toBe(true);
-    results.scalePresets.querySelector(".graviss-scale-auto").click();
+    results.scaleAuto.click();
     expect(viewer.renderer.getDeformation().phase).toBe(0.25);
     expect(animation.running).toBe(true);
     results.playButton.click();
@@ -736,12 +771,12 @@ describe("the Graviss dock panels", () => {
     expect(results.legend.querySelector(".graviss-legend-max").textContent).toBe("10.0 mm");
 
     // System is the undeformed state, not another result to read.
-    results.caseList.children[0].click();
+    results.systemButton.click();
     expect(viewer.getResultsState().loadCaseId).toBeNull();
     expect(viewer.result).toBeNull();
     expect(viewer.renderer.getDeformation().result).toBeNull();
     expect(viewer.renderer.getAnimation().running).toBe(false);
-    expect(results.caseList.children[0].classList).toContain("graviss-case-selected");
+    expect(results.systemButton.classList).toContain("graviss-case-selected");
   });
 
   it("knows whether it is on screen, not merely whether it is open", async () => {
