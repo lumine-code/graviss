@@ -1,7 +1,6 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { FileState } = require("lumine");
 let GravissView = require("../lib/graviss-view");
 const { APPEARANCE_IDS, appearanceDefinition } = require("../lib/appearance");
 const { CAMERA_VIEW_IDS } = require("../lib/camera-navigation");
@@ -102,7 +101,7 @@ describe("graviss", () => {
         activeGraphic: 0,
         viewDocument: jasmine.objectContaining({
           filePath: MAIN_EXAMPLE.viewDocumentPath,
-          fileState: FileState.UNMODIFIED,
+          fileState: "unmodified",
         }),
       }),
     );
@@ -436,7 +435,7 @@ describe("graviss", () => {
     expect(
       item.element.querySelector('[data-projection="perspective"]').classList.contains("selected"),
     ).toBe(true);
-    expect(item.getFileState()).toBe(FileState.MODIFIED);
+    expect(item.getFileState()).toBe("modified");
     expect(item.shouldPromptToSave()).toBe(true);
     expect(item.serialize().viewDocument.data.activeGraphic).toBe(1);
     expect(item.serialize().viewDocument.data.graphics[1].camera.projection).toBe("perspective");
@@ -446,7 +445,7 @@ describe("graviss", () => {
     expect(restored.getURI()).toBe(MAIN_EXAMPLE_URI);
     expect(restored.activeGraphic.title).toBe("Roof plan");
     expect(restored.serialize().activeGraphic).toBe(1);
-    expect(restored.getFileState()).toBe(FileState.MODIFIED);
+    expect(restored.getFileState()).toBe("modified");
     restored.destroy();
   });
 
@@ -1083,7 +1082,7 @@ describe("graviss", () => {
     add.click();
     expect(counter.textContent).toBe("2/2");
     expect(item.activeGraphic.title).toBe("Graphic 2");
-    expect(item.getFileState()).toBe(FileState.MODIFIED);
+    expect(item.getFileState()).toBe("modified");
     expect(previous.disabled).toBe(false);
     expect(next.disabled).toBe(false);
     expect(remove.disabled).toBe(false);
@@ -1121,12 +1120,12 @@ describe("graviss", () => {
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
     await item.viewDocument.whenWatcherReady();
     const editor = await mainModule.openSource(viewPath);
-    expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(item.getFileState()).toBe("unmodified");
 
     // Camera moves make the canvas modified, exactly like typing in an editor.
     item.renderer.moveCamera("left");
     item.flushPendingCameraHistory();
-    expect(item.getFileState()).toBe(FileState.MODIFIED);
+    expect(item.getFileState()).toBe("modified");
 
     // Saving the source editor changes the file under those pending edits.
     const edited = JSON.parse(editor.getText());
@@ -1134,12 +1133,12 @@ describe("graviss", () => {
     editor.setText(`${JSON.stringify(edited, null, 2)}\n`);
     await editor.save();
     await conditionPromise(
-      () => item.getFileState() === FileState.CONFLICTED,
+      () => item.getFileState() === "conflicted",
       "the canvas to report the conflict",
     );
 
-    expect(item.getFileState()).toBe(FileState.CONFLICTED);
-    expect(item.serialize().viewDocument.fileState).toBe(FileState.CONFLICTED);
+    expect(item.getFileState()).toBe("conflicted");
+    expect(item.serialize().viewDocument.fileState).toBe("conflicted");
 
     // The pane save flow resolves the conflict the way it does for an editor:
     // it asks, cancel aborts the save, and overwrite commits the canvas state.
@@ -1151,11 +1150,11 @@ describe("graviss", () => {
     expect(confirm).toHaveBeenCalled();
     expect(cancelled?.constructor?.name).toBe("SaveConflictedError");
     expect(JSON.parse(fs.readFileSync(viewPath, "utf8")).title).toBe("Edited on disk");
-    expect(item.getFileState()).toBe(FileState.CONFLICTED);
+    expect(item.getFileState()).toBe("conflicted");
 
     confirm.and.resolveTo(0);
     await pane.saveItem(item);
-    expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(item.getFileState()).toBe("unmodified");
     expect(JSON.parse(fs.readFileSync(viewPath, "utf8")).title).toBe(MAIN_EXAMPLE.title);
 
     // Deleting the file keeps the canvas open, like an editor tab, and one
@@ -1163,20 +1162,20 @@ describe("graviss", () => {
     // state arrives with the file-state event, not with the raw filesystem check.
     const deleted = new Promise((resolve) => {
       const subscription = item.onDidChangeFileState((fileState) => {
-        if (fileState !== FileState.REMOVED) return;
+        if (fileState !== "removed") return;
         subscription.dispose();
         resolve();
       });
     });
     fs.rmSync(viewPath);
     await deleted;
-    expect(item.getFileState()).toBe(FileState.REMOVED);
+    expect(item.getFileState()).toBe("removed");
     expect(lumine.workspace.paneForItem(item)).toBe(pane);
     expect(item.shouldPromptToSave()).toBe(true);
 
     await item.save();
     expect(fs.existsSync(viewPath)).toBe(true);
-    expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(item.getFileState()).toBe("unmodified");
     expect(JSON.parse(fs.readFileSync(viewPath, "utf8")).title).toBe(MAIN_EXAMPLE.title);
 
     providerDisposable.dispose();
@@ -1206,14 +1205,14 @@ describe("graviss", () => {
     }
 
     expect(updateCamera).not.toHaveBeenCalled();
-    expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(item.getFileState()).toBe("unmodified");
     await new Promise((resolve) => setTimeout(resolve, 260));
     expect(updateCamera).toHaveBeenCalledTimes(1);
-    expect(item.getFileState()).toBe(FileState.MODIFIED);
+    expect(item.getFileState()).toBe("modified");
     expect(item.canUndo()).toBe(true);
 
     expect(item.undo()).toBe(true);
-    expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(item.getFileState()).toBe("unmodified");
     for (let index = 0; index < 2; index += 1) {
       canvas.dispatchEvent(
         new window.WheelEvent("wheel", {
@@ -1259,18 +1258,18 @@ describe("graviss", () => {
 
     stateStoreConnected.and.returnValue(true);
     const serialized = item.serialize();
-    expect(serialized.viewDocument.fileState).toBe(FileState.MODIFIED);
+    expect(serialized.viewDocument.fileState).toBe("modified");
     expect(serialized.viewDocument.data.graphics[0].appearance).toBe("midnight");
     const restored = mainModule.deserialize(serialized);
-    expect(restored.getFileState()).toBe(FileState.MODIFIED);
+    expect(restored.getFileState()).toBe("modified");
     expect(restored.appearance).toBe("midnight");
     restored.destroy();
 
-    const fileState = spyOn(item, "getFileState").and.returnValue(FileState.CONFLICTED);
+    const fileState = spyOn(item, "getFileState").and.returnValue("conflicted");
     expect(item.shouldPromptToSave({ windowCloseRequested: true, projectHasPaths: true })).toBe(
       true,
     );
-    fileState.and.returnValue(FileState.REMOVED);
+    fileState.and.returnValue("removed");
     expect(item.shouldPromptToSave({ windowCloseRequested: true, projectHasPaths: true })).toBe(
       true,
     );
@@ -1620,7 +1619,7 @@ describe("graviss", () => {
       expect(item.getTitle()).toBe("empty-model.grv");
       expect(item.viewDocument.getData().title).toBeUndefined();
       expect(item.viewDocument.isImplicit()).toBe(true);
-      expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+      expect(item.getFileState()).toBe("unmodified");
       const fitted = item.renderer.modelScreenRect();
       expect(fitted.x + fitted.width / 2).toBeCloseTo(0.5, 1);
       expect(fitted.y + fitted.height / 2).toBeCloseTo(0.5, 1);
@@ -1628,7 +1627,7 @@ describe("graviss", () => {
 
       item.toggleVisibility("grid");
       expect(item.viewDocument.isImplicit()).toBe(false);
-      expect(item.getFileState()).toBe(FileState.MODIFIED);
+      expect(item.getFileState()).toBe("modified");
       // Only what was touched reaches the file: no format, no version, no ids,
       // titles or camera Graviss worked out for itself.
       expect(JSON.parse(item.viewDocument.getSourceBuffer().getText())).toEqual({
@@ -1688,11 +1687,11 @@ describe("graviss", () => {
     item.onDidTerminatePendingState(didTerminate);
 
     expect(pane.getPendingItem()).toBe(item);
-    expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(item.getFileState()).toBe("unmodified");
 
     item.activateGraphic(1);
 
-    expect(item.getFileState()).toBe(FileState.MODIFIED);
+    expect(item.getFileState()).toBe("modified");
     expect(pane.getPendingItem()).toBeNull();
     expect(didTerminate).toHaveBeenCalledTimes(1);
 
@@ -1712,12 +1711,12 @@ describe("graviss", () => {
 
     lumine.commands.dispatch(item.element, "core:undo");
     expect(item.activeGraphic.title).toBe("3D overview");
-    expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(item.getFileState()).toBe("unmodified");
     expect(item.canRedo()).toBe(true);
 
     lumine.commands.dispatch(item.element, "core:redo");
     expect(item.activeGraphic.title).toBe("Roof plan");
-    expect(item.getFileState()).toBe(FileState.MODIFIED);
+    expect(item.getFileState()).toBe("modified");
   });
 
   it("reserves the viewport context menu gesture for right-button panning", async () => {
@@ -5771,7 +5770,7 @@ describe("graviss", () => {
       // Nothing was posed, so the model is framed rather than restored, and the
       // file is left exactly as it was written.
       expect(item.usesFittedCamera()).toBe(true);
-      expect(item.getFileState()).toBe(FileState.UNMODIFIED);
+      expect(item.getFileState()).toBe("unmodified");
     } finally {
       if (item) {
         const pane = lumine.workspace.paneForItem(item);
@@ -5876,7 +5875,7 @@ describe("graviss", () => {
       expect(JSON.parse(viewer.viewDocument.getSourceBuffer().getText())).toEqual({
         source: "[c] main.cdb",
       });
-      expect(viewer.getFileState()).toBe(FileState.MODIFIED);
+      expect(viewer.getFileState()).toBe("modified");
 
       const selectedSession = viewer.session;
       expect(viewer.undo()).toBe(true);
@@ -5885,13 +5884,13 @@ describe("graviss", () => {
       expect(selectedSession.disposed).toBe(true);
       expect(viewer.renderer).toBeNull();
       expect(viewer.viewDocument.getStoredData()).toEqual({});
-      expect(viewer.getFileState()).toBe(FileState.UNMODIFIED);
+      expect(viewer.getFileState()).toBe("unmodified");
 
       expect(viewer.redo()).toBe(true);
       expect(viewer.session).not.toBe(undoneSession);
       expect(undoneSession.disposed).toBe(true);
       expect(viewer.viewDocument.getStoredData()).toEqual({ source: "[c] main.cdb" });
-      expect(viewer.getFileState()).toBe(FileState.MODIFIED);
+      expect(viewer.getFileState()).toBe("modified");
     } finally {
       registration.dispose();
       if (viewer) {
@@ -5930,7 +5929,7 @@ describe("graviss", () => {
       expect(error.hidden).toBe(false);
       expect(viewer.viewDocument.getStoredData()).toEqual({});
       expect(viewer.viewDocument.getSourceBuffer().getText()).toBe(sourceText);
-      expect(viewer.getFileState()).toBe(FileState.UNMODIFIED);
+      expect(viewer.getFileState()).toBe("unmodified");
     } finally {
       if (viewer) {
         const pane = lumine.workspace.paneForItem(viewer);

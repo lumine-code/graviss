@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { FileState, TextBuffer } = require("lumine");
+const { TextBuffer } = require("lumine");
 const { TEST_MODELS: EXAMPLES } = require("./support/test-model");
 const {
   GravissViewDocument,
@@ -44,12 +44,12 @@ describe("GravissViewDocument", () => {
       data.activeGraphic = 1;
     });
 
-    expect(document.getFileState()).toBe(FileState.MODIFIED);
+    expect(document.getFileState()).toBe("modified");
     expect(document.serialize().data.activeGraphic).toBe(1);
     await document.save();
 
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
-    expect(fileStates).toEqual([FileState.MODIFIED, FileState.UNMODIFIED]);
+    expect(document.getFileState()).toBe("unmodified");
+    expect(fileStates).toEqual(["modified", "unmodified"]);
     expect(savedEvents).toEqual([{ path: filePath }]);
 
     // Reordering two filter rules is a REAL change - the rules are applied in
@@ -67,7 +67,7 @@ describe("GravissViewDocument", () => {
     document.update((data) => {
       data.graphics[0].filter.rules.reverse();
     });
-    expect(document.getFileState()).toBe(FileState.MODIFIED);
+    expect(document.getFileState()).toBe("modified");
     expect(JSON.parse(fs.readFileSync(filePath, "utf8")).activeGraphic).toBe(1);
   });
 
@@ -96,7 +96,7 @@ describe("GravissViewDocument", () => {
     document = GravissViewDocument.load(filePath);
 
     expect(document.isImplicit()).toBe(true);
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
     expect(document.getSourceBuffer().getText()).toBe(" \r\n\t");
     // What is read is whole: everything the file did not say, worked out.
     expect(document.getData()).toEqual(
@@ -117,7 +117,7 @@ describe("GravissViewDocument", () => {
     });
 
     expect(document.isImplicit()).toBe(false);
-    expect(document.getFileState()).toBe(FileState.MODIFIED);
+    expect(document.getFileState()).toBe("modified");
     // The whole of what reaches the file is the one thing that was changed.
     // Everything else stays Graviss's to work out, so nothing else is written
     // down and nothing else can go stale against it.
@@ -172,7 +172,7 @@ describe("GravissViewDocument", () => {
     expect(document.getData().graphics[0].appearance).toBe("cloud");
     expect(document.undo()).toBe(true);
     expect(document.getData().activeGraphic).toBe(0);
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
     expect(document.undo()).toBe(false);
 
     expect(document.redo()).toBe(true);
@@ -193,11 +193,11 @@ describe("GravissViewDocument", () => {
     });
     await document.save();
 
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
     expect(document.undo()).toBe(true);
-    expect(document.getFileState()).toBe(FileState.MODIFIED);
+    expect(document.getFileState()).toBe("modified");
     expect(document.redo()).toBe(true);
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
 
     document.undo();
     const state = JSON.parse(JSON.stringify(document.serialize()));
@@ -208,7 +208,7 @@ describe("GravissViewDocument", () => {
     expect(document.canRedo()).toBe(true);
     expect(document.redo()).toBe(true);
     expect(document.getData().activeGraphic).toBe(1);
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
   });
 
   it("reloads external changes while the document is clean", async () => {
@@ -226,7 +226,7 @@ describe("GravissViewDocument", () => {
     );
 
     expect(document.getData().title).toBe("Externally renamed view");
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
     expect(reloaded).toHaveBeenCalled();
   });
 
@@ -242,7 +242,7 @@ describe("GravissViewDocument", () => {
       "the external Graviss view change to reload",
     );
 
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
   });
 
   it("keeps local edits and marks a conflict when disk changes overlap them", async () => {
@@ -252,7 +252,7 @@ describe("GravissViewDocument", () => {
     const warning = spyOn(lumine.notifications, "addWarning");
     const conflictDetected = new Promise((resolve) => {
       const subscription = document.onDidChangeFileState((fileState) => {
-        if (fileState !== FileState.CONFLICTED) return;
+        if (fileState !== "conflicted") return;
         conflicts();
         subscription.dispose();
         resolve();
@@ -269,12 +269,12 @@ describe("GravissViewDocument", () => {
 
     expect(document.getData().title).toBe(EXAMPLES[0].title);
     expect(document.getData().graphics[0].appearance).toBe("midnight");
-    expect(document.getFileState()).toBe(FileState.CONFLICTED);
+    expect(document.getFileState()).toBe("conflicted");
     expect(conflicts).toHaveBeenCalled();
     expect(warning).not.toHaveBeenCalled();
 
     await document.save();
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
     expect(JSON.parse(fs.readFileSync(filePath, "utf8")).graphics[0].appearance).toBe("midnight");
   });
 
@@ -290,7 +290,7 @@ describe("GravissViewDocument", () => {
       setTimeout(resolve, document.getSourceBuffer().fileChangeDelay + 250),
     );
 
-    expect(document.getFileState()).toBe(FileState.MODIFIED);
+    expect(document.getFileState()).toBe("modified");
   });
 
   it("forwards native path, deletion, and save state", async () => {
@@ -307,23 +307,23 @@ describe("GravissViewDocument", () => {
 
     const deleted = new Promise((resolve) => {
       const subscription = document.onDidChangeFileState((fileState) => {
-        if (fileState !== FileState.REMOVED) return;
+        if (fileState !== "removed") return;
         subscription.dispose();
         resolve();
       });
     });
     fs.rmSync(renamedPath);
     await deleted;
-    expect(document.getFileState()).toBe(FileState.REMOVED);
+    expect(document.getFileState()).toBe("removed");
 
     document.update((data) => {
       data.title = "Recreated view";
     });
-    expect(document.getFileState()).toBe(FileState.REMOVED);
+    expect(document.getFileState()).toBe("removed");
 
     await document.save();
     expect(document.getPath()).toBe(renamedPath);
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
     expect(fs.existsSync(renamedPath)).toBe(true);
   });
 
@@ -518,7 +518,7 @@ describe("GravissViewDocument", () => {
     document.destroy();
     document = GravissViewDocument.load(filePath);
     expect(document.getData().graphics[0].results).toEqual(saved.graphics[0].results);
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
   });
 
   it("keeps optional quick filters as strings without requiring provider metadata", () => {
@@ -564,7 +564,7 @@ describe("GravissViewDocument", () => {
     expect(document.getData().graphics[0].quickFilter).toBe("G12-15;-Q1??1*");
     expect(document.getData().graphics[0].filter).toEqual(filter);
     expect(document.getData().graphics[1].quickFilter).toBe("GB12");
-    expect(document.getFileState()).toBe(FileState.UNMODIFIED);
+    expect(document.getFileState()).toBe("unmodified");
   });
 });
 
