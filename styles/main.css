@@ -48,7 +48,7 @@
 }
 
 .graviss-toolbar > .graviss-quick-filter {
-  --graviss-quick-action-size: calc(var(--component-line-height) + 1px);
+  --graviss-quick-action-size: calc(var(--ui-control-height) + 1px);
   position: relative;
   flex: 0 1 18em;
   width: 18em;
@@ -82,7 +82,7 @@
   height: var(--graviss-quick-action-size);
   padding: 0;
   border: 0;
-  border-radius: var(--component-border-radius);
+  border-radius: var(--ui-border-radius);
   color: var(--text-color-subtle);
   background: transparent;
   opacity: 0.65;
@@ -106,7 +106,7 @@
   right: 0;
   padding: 10px;
   border: 1px solid var(--graviss-border);
-  border-radius: var(--component-border-radius, 3px);
+  border-radius: var(--ui-border-radius, 3px);
   background: var(--tool-panel-background-color);
   box-shadow: 0 3px 12px #0004;
   font-size: 0.9em;
@@ -118,7 +118,7 @@
   overflow-y: auto;
   padding: 10px;
   border: 1px solid var(--graviss-border, var(--base-border-color));
-  border-radius: var(--component-border-radius, 3px);
+  border-radius: var(--ui-border-radius, 3px);
   background: var(--tool-panel-background-color);
   color: var(--text-color);
   box-shadow: 0 3px 12px #0004;
@@ -141,7 +141,7 @@
   margin: 10px 0 0;
 }
 .graviss-quick-filter-codes dt {
-  font-family: var(--font-family-monospace);
+  font-family: var(--editor-font-family, monospace);
 }
 .graviss-quick-filter-codes dd {
   margin: 0;
@@ -329,9 +329,9 @@
 .graviss-region-marquee {
   position: absolute;
   z-index: 3;
-  border: 1px solid var(--accent-color);
+  border: 1px solid var(--accent-indicator-color);
   box-shadow: 0 0 0 1px var(--graviss-region-halo);
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-indicator-color) 12%, transparent);
   pointer-events: none;
 }
 
@@ -373,7 +373,7 @@
    its own gestures are claimed from the viewport's capture phase behind the
    command modifier. */
 .graviss-print-region {
-  --graviss-region-line: var(--accent-color);
+  --graviss-region-line: var(--accent-indicator-color);
   --graviss-region-grip: 7px;
 
   position: absolute;
@@ -400,7 +400,7 @@
 }
 
 .graviss-print-region.is-dragging {
-  --graviss-region-line: color-mix(in srgb, var(--accent-color) 80%, white);
+  --graviss-region-line: color-mix(in srgb, var(--accent-indicator-color) 80%, white);
 }
 
 /* The canvas sets its own cursor and sits inside the viewport, so a cursor for
@@ -489,7 +489,7 @@
   gap: 9px;
   padding: 12px 15px;
   border: 1px solid var(--graviss-border);
-  border-radius: var(--component-border-radius);
+  border-radius: var(--ui-border-radius);
   color: var(--text-color-subtle);
   background: var(--graviss-glass);
   box-shadow: 0 10px 32px color-mix(in srgb, black 20%, transparent);
@@ -539,7 +539,7 @@
 }
 
 .graviss-view-cube:focus-visible {
-  outline: 2px solid var(--accent-color);
+  outline: 2px solid var(--accent-indicator-color);
   outline-offset: -2px;
 }
 
@@ -763,7 +763,7 @@
   padding: 10px;
   gap: 8px;
   border: 1px solid var(--graviss-panel-border);
-  border-radius: var(--component-border-radius, 3px);
+  border-radius: var(--ui-border-radius, 3px);
   background: var(--inset-panel-background-color);
 }
 .graviss-rule-main,
@@ -852,10 +852,10 @@
   opacity: 0.5;
 }
 .graviss-drop-above {
-  box-shadow: 0 -2px 0 var(--accent-color);
+  box-shadow: 0 -2px 0 var(--accent-indicator-color);
 }
 .graviss-drop-below {
-  box-shadow: 0 2px 0 var(--accent-color);
+  box-shadow: 0 2px 0 var(--accent-indicator-color);
 }
 .graviss-rule-total {
   text-align: right;
@@ -906,7 +906,7 @@
   padding: 7px 4px;
   min-width: 0;
   border: 0;
-  border-radius: var(--component-border-radius, 3px);
+  border-radius: var(--ui-border-radius, 3px);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -1028,7 +1028,7 @@
   align-items: center;
   gap: 8px;
   padding: 7px 8px;
-  border-radius: var(--component-border-radius, 3px);
+  border-radius: var(--ui-border-radius, 3px);
   cursor: default;
 }
 .graviss-case-row:hover {
@@ -1040,10 +1040,10 @@
 }
 .graviss-case-preview {
   background: var(--background-color-highlight);
-  box-shadow: inset 2px 0 0 var(--accent-color);
+  box-shadow: inset 2px 0 0 var(--accent-indicator-color);
 }
 .graviss-case-pending {
-  box-shadow: inset 2px 0 0 var(--text-color-info, var(--accent-color));
+  box-shadow: inset 2px 0 0 var(--text-color-info, var(--accent-indicator-color));
 }
 .graviss-case-failed {
   box-shadow: inset 2px 0 0 var(--text-color-error);
