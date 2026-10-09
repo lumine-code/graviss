@@ -40,6 +40,8 @@ jobs:
         run: npm run lint
       - name: Check formatting
         run: npm run format:check
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
       - name: Check package contents
         run: npm pack --dry-run
 
