@@ -113,6 +113,23 @@ describe("Graviss GPU shell integration", () => {
     }
   }
 
+  function trackShaderResources(context) {
+    const createShader = context.createShader.bind(context);
+    const deleteShader = context.deleteShader.bind(context);
+    const created = [];
+    const deleted = [];
+    spyOn(context, "createShader").and.callFake((type) => {
+      const shader = createShader(type);
+      created.push(shader);
+      return shader;
+    });
+    spyOn(context, "deleteShader").and.callFake((shader) => {
+      deleted.push(shader);
+      deleteShader(shader);
+    });
+    return { created, deleted };
+  }
+
   it("keeps normal animation on GPU and materializes proxy and exact CPU geometry independently", async () => {
     await models();
     const writer = spyOn(gpu, "writeShellSurface").and.callThrough();
@@ -187,6 +204,116 @@ describe("Graviss GPU shell integration", () => {
     expect(a.min.toArray()).toEqual(b.min.toArray());
     expect(a.max.toArray()).toEqual(b.max.toArray());
     gpu.ensureGpuShellFrame();
+  });
+
+  it("creates programs only for rendered passes and releases each rendered generation once", async () => {
+    await models();
+    const context = gpu.canvasRenderer.getContext();
+    const createProgram = context.createProgram.bind(context);
+    const deleteProgram = context.deleteProgram.bind(context);
+    const created = [];
+    const deleted = [];
+    spyOn(context, "createProgram").and.callFake(() => {
+      const program = createProgram();
+      created.push(program);
+      return program;
+    });
+    spyOn(context, "deleteProgram").and.callFake((program) => {
+      deleted.push(program);
+      deleteProgram(program);
+    });
+    expect(context.getError()).toBe(context.NO_ERROR);
+    gpu.setSectionRendering(false);
+    const intermediate = gpu.shellGpu;
+    expect(intermediate.stats.frames).toBe(0);
+    expect(created.length).toBe(0);
+    const released = deleted.length;
+    gpu.setSectionRendering(true);
+    expect(intermediate.disposed).toBe(true);
+    expect(created.length).toBe(0);
+    expect(deleted.length).toBe(released);
+    expect(context.getError()).toBe(context.NO_ERROR);
+    gpu.ensureGpuShellFrame();
+    expect(created.length).toBeGreaterThan(0);
+    expect(context.getError()).toBe(context.NO_ERROR);
+    const rendered = gpu.shellGpu;
+    rendered.dispose();
+    expect(deleted.length).toBe(released + created.length);
+    expect(new Set(deleted).size).toBe(deleted.length);
+    expect(context.getError()).toBe(context.NO_ERROR);
+    rendered.dispose();
+    expect(deleted.length).toBe(released + created.length);
+    gpu.shellGpu = null;
+  });
+
+  it("reports first-use shader errors and restores the renderer's diagnostic state", async () => {
+    await models();
+    gpu.setSectionRendering(false);
+    const backend = gpu.shellGpu;
+    const canvas = gpu.canvasRenderer;
+    const shaders = trackShaderResources(canvas.getContext());
+    const previousTarget = canvas.getRenderTarget();
+    const onShaderError = jasmine.createSpy("previous shader error callback");
+    canvas.debug.onShaderError = onShaderError;
+    canvas.debug.checkShaderErrors = false;
+    backend.passes[0].material.fragmentShader = "void main() { not_valid_glsl; }";
+    backend.passes[0].material.needsUpdate = true;
+    expect(() => gpu.ensureGpuShellFrame()).toThrowError(/Shell GPU shader failed/);
+    expect(backend.disposed).toBe(true);
+    expect(gpu.shellGpu).toBeNull();
+    expect(gpu.shellState.gpuUnavailable).toMatch(/Shell GPU shader failed/);
+    expect(canvas.getRenderTarget()).toBe(previousTarget);
+    expect(canvas.debug.onShaderError).toBe(onShaderError);
+    expect(canvas.debug.checkShaderErrors).toBe(false);
+    expect(onShaderError).not.toHaveBeenCalled();
+    expect(shaders.created.length).toBe(2);
+    expect(new Set(shaders.deleted)).toEqual(new Set(shaders.created));
+    expect(canvas.getContext().getError()).toBe(canvas.getContext().NO_ERROR);
+  });
+
+  it("checks a tangent shader first needed after the zero-displacement frame", async () => {
+    await models();
+    gpu.setDeformationPhase(0);
+    gpu.setSectionRendering(false);
+    const backend = gpu.shellGpu;
+    const canvas = gpu.canvasRenderer;
+    gpu.ensureGpuShellFrame();
+    expect(backend.stats.frames).toBe(1);
+    expect(backend.passes[2].count).toBeGreaterThan(0);
+    expect(canvas.properties.get(backend.passes[2].material).currentProgram).toBeUndefined();
+    const shaders = trackShaderResources(canvas.getContext());
+    backend.passes[2].material.fragmentShader = "void main() { not_valid_glsl; }";
+    backend.passes[2].material.needsUpdate = true;
+    const previousTarget = canvas.getRenderTarget();
+    const target = new gpu.THREE.WebGLRenderTarget(12, 12, { depthBuffer: false });
+    const previousXr = canvas.xr.enabled;
+    const previousAutoClear = canvas.autoClear;
+    const onShaderError = jasmine.createSpy("previous late shader error callback");
+    canvas.debug.onShaderError = onShaderError;
+    canvas.debug.checkShaderErrors = false;
+    canvas.xr.enabled = true;
+    canvas.autoClear = true;
+    canvas.setRenderTarget(target);
+    try {
+      gpu.setDeformationPhase(0.5);
+      expect(() => gpu.ensureGpuShellFrame()).toThrowError(/Shell GPU shader failed/);
+      expect(backend.disposed).toBe(true);
+      expect(gpu.shellGpu).toBeNull();
+      expect(canvas.getRenderTarget()).toBe(target);
+      expect(canvas.debug.onShaderError).toBe(onShaderError);
+      expect(canvas.debug.checkShaderErrors).toBe(false);
+      expect(canvas.xr.enabled).toBe(true);
+      expect(canvas.autoClear).toBe(true);
+      expect(onShaderError).not.toHaveBeenCalled();
+      expect(shaders.created.length).toBe(2);
+      expect(new Set(shaders.deleted)).toEqual(new Set(shaders.created));
+      expect(canvas.getContext().getError()).toBe(canvas.getContext().NO_ERROR);
+    } finally {
+      canvas.setRenderTarget(previousTarget);
+      canvas.xr.enabled = previousXr;
+      canvas.autoClear = previousAutoClear;
+      target.dispose();
+    }
   });
 
   it("prepares the same GPU phase for crop export and silhouettes without materializing CPU patches", async () => {
