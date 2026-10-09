@@ -54,7 +54,8 @@ describe("Graviss concrete source lifetimes", () => {
     viewport.dispatchEvent(
       new PointerEvent("pointerdown", {
         button: 0,
-        ctrlKey: true,
+        ctrlKey: process.platform !== "darwin",
+        metaKey: process.platform === "darwin",
         bubbles: true,
         cancelable: true,
         clientX: bounds.left + 20,
