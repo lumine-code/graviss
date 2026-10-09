@@ -103,6 +103,7 @@ type Result = {
   components: 3 | 6 | 7;
   nodes: { ids?: Id[]; values: Float32Array | number[] };
   extent?: number;
+  activeElementIds?: Id[];
   elements?: {
     id: Id;
     stations: { x: number; u: Vector3; phi?: Vector3; warping?: number }[];
@@ -239,6 +240,8 @@ A source that has analysis results says so with `capabilities.results` and answe
 The Results panel searches the supplied IDs and titles and filters by `kind`, so a provider needs no additional browsing API. A requested case and the displayed result are separate states: the current field remains displayed while the next one loads or after its read fails, and Retry repeats the failed request. These controls keep `getResult({ loadCaseId, kind })` unchanged.
 
 `getResult()` returns true displacements, never amplified ones. **The scale factor and the animation phase belong to Graviss**, exactly as the symbol size and the camera do: a provider that pre-multiplied its own numbers would make the viewer's scale meaningless and its readout a lie. `nodes.values` runs three, six or seven components a node — translations, then rotations where the source has them, then `d(phi-x)/dx` for a beam model with warping — in `geometry.nodes` order unless `ids` says otherwise. `extent` is the largest resultant translation, and stating it saves Graviss a pass over the whole field to choose an automatic scale.
+
+`activeElementIds` optionally lists the complete set of elements participating in this result's load case, using unique IDs from `geometry.elements`. It applies to every element kind, including springs and couplings. An empty list means no elements participate; omitting the field leaves the complete model available. Graviss intersects this set with the user's element filter for drawing, picking and export, and restores the complete model when the result is cleared. Node and support symbols remain for endpoints of active elements and for standalone nodes that belong to no element. Missing nodal displacement rows never determine activity: a fixed active endpoint still belongs to the model. Animation at zero displacement retains the selected load case's topology.
 
 The graphic's optional `results.cyclePosition` is a normalized fraction from `0` to `1` of a full cycle. It belongs to the `.grv` document, never to a source result. Pause records the displayed cycle position and Play resumes from it. The panel's Deformation slider shows the actual factor instead: `0%` to `100%` for Positive, or `−100%` to `100%` for Swing, following the cycle's smooth acceleration. Dragging pauses at that factor and stores its corresponding cycle position while preserving the direction of motion. Without an explicit stored position, paused graphics continue showing the positive full shape and playing graphics start at zero. The Results panel accepts exact amplification factors and presents the period in seconds; the stored `results.period` uses milliseconds.
 

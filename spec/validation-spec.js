@@ -520,6 +520,38 @@ describe("Graviss model validation", () => {
     expect(() => validateResult(result, geometry)).toThrowError(/non-negative/);
   });
 
+  it("accepts a complete active-element set, including an empty load-case topology", () => {
+    const geometry = { nodes: [], elements: [{ id: 1 }, { id: "1" }] };
+    const result = {
+      kind: "displacement",
+      loadCaseId: 1,
+      components: 3,
+      nodes: { values: [] },
+      activeElementIds: [1, "1"],
+    };
+    expect(validateResult(result, geometry)).toBe(result);
+    result.activeElementIds = [];
+    expect(validateResult(result, geometry)).toBe(result);
+    delete result.activeElementIds;
+    expect(validateResult(result, geometry)).toBe(result);
+  });
+
+  it("rejects malformed, duplicate and unknown active-element identifiers", () => {
+    const geometry = { nodes: [], elements: [{ id: 1 }] };
+    const result = { kind: "displacement", loadCaseId: 1, components: 3, nodes: { values: [] } };
+    for (const [activeElementIds, message] of [
+      ["1", /activeElementIds must be an array/],
+      [Int32Array.of(1), /activeElementIds must be an array/],
+      [[null], /activeElementIds\[0\].*non-empty string or finite number/],
+      [[1, 1], /activeElementIds\[1\] duplicates/],
+      [["1"], /activeElementIds\[0\] references unknown element/],
+      [[2], /activeElementIds\[0\] references unknown element/],
+    ]) {
+      result.activeElementIds = activeElementIds;
+      expect(() => validateResult(result, geometry)).toThrowError(message);
+    }
+  });
+
   it("takes the stations a member bends through, in its own frame", () => {
     const geometry = createMain1Geometry();
     const result = {
