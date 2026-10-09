@@ -92,6 +92,20 @@ jobs:
       - name: Rebuild native modules for Electron
         working-directory: lumine
         run: npm run build
+      - name: Prepare the macOS software Vulkan loader
+        if: runner.os == 'macOS'
+        working-directory: lumine
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_ANALYTICS: "1"
+        run: |
+          node -p "'Electron ' + require('./node_modules/electron/package.json').version"
+          find node_modules/electron/dist/Electron.app/Contents/Frameworks -iname '*vulkan*' -print
+          file -L "node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"
+          brew install vulkan-loader
+          loader_dir="$(brew --prefix vulkan-loader)/lib"
+          file -L "$loader_dir/libvulkan.dylib"
+          printf 'GRAVISS_VULKAN_LIBRARY_DIR=%s\n' "$loader_dir" >> "$GITHUB_ENV"
       - name: Run the Jasmine spec suite
         working-directory: lumine
         timeout-minutes: 20
@@ -105,8 +119,14 @@ jobs:
             xvfb-run --auto-servernum npm start -- --test ../graviss/spec
           elif [ "$RUNNER_OS" = macOS ]; then
             # The headless Intel runner exposes no usable hardware GL device.
-            # Exercise real WebGL through Chromium's bundled software driver.
-            npm start -- --use-gl=angle --use-angle=swiftshader --test ../graviss/spec
+            # ANGLE loads Vulkan dynamically; keep the CI loader external to
+            # the unmodified Electron dependency, then use its software driver.
+            export DYLD_LIBRARY_PATH="$GRAVISS_VULKAN_LIBRARY_DIR${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+            export DYLD_FALLBACK_LIBRARY_PATH="$GRAVISS_VULKAN_LIBRARY_DIR${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
+            node -e "if (!process.env.DYLD_LIBRARY_PATH.includes(process.env.GRAVISS_VULKAN_LIBRARY_DIR)) throw new Error('The owned Vulkan loader path was not preserved'); console.log('Vulkan loader path:', process.env.DYLD_LIBRARY_PATH)"
+            # Invoke Node explicitly so npm's protected system-shell hop cannot
+            # purge the loader variables before the Electron CLI spawns it.
+            node ./node_modules/electron/cli.js --no-sandbox --enable-logging . -f --dev --use-gl=angle --use-angle=swiftshader --test ../graviss/spec
           else
             npm start -- --test ../graviss/spec
           fi
