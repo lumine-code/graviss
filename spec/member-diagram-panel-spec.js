@@ -195,7 +195,7 @@ describe("the Results panel's source-defined member diagrams", () => {
     panel.memberGroupSelect.setValue("Displacements", { emit: true });
     expect(viewer.getResultsState().component).toBe("ux");
     expect(panel.forceComponentSelect.items.map(({ label }) => label)).toEqual([
-      "ux · Axial displacement [mm]",
+      "Axial displacement [mm]",
     ]);
     expect(panel.forceMin.textContent).toBe("0 mm");
     expect(panel.forceMax.textContent).toBe("+4 mm");
