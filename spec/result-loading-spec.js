@@ -1,3 +1,4 @@
+const { memberComponents } = require("./support/member-components");
 const { CompositeDisposable, Emitter } = require("lumine");
 const { Animation } = require("../lib/animation");
 
@@ -130,6 +131,9 @@ describe("Graviss result loading", () => {
       pendingLoadCaseId: 3,
       displayedLoadCaseId: null,
       failedLoadCaseId: null,
+      pendingKind: "displacement",
+      displayedKind: null,
+      failedKind: null,
       error: null,
     });
     expect(reads.has(2)).toBe(false);
@@ -146,14 +150,193 @@ describe("Graviss result loading", () => {
       pendingLoadCaseId: null,
       displayedLoadCaseId: 3,
       failedLoadCaseId: null,
+      pendingKind: null,
+      displayedKind: "displacement",
+      failedKind: null,
       error: null,
     });
+  });
+
+  it("queues quantity changes independently of the same case and preserves the latest kind", async () => {
+    const { viewer, reads, renderer } = fixture;
+    const obsolete = viewer.selectLoadCase(1);
+    const forces = viewer.setResultKind("memberDiagram");
+    expect(viewer.getResultLoadState().pendingKind).toBe("memberDiagram");
+    reads.get(1).resolve(resultFor(1));
+    await flushReads();
+    expect(viewer.session.getResult.calls.mostRecent().args[0]).toEqual({
+      loadCaseId: 1,
+      kind: "memberDiagram",
+    });
+    const field = {
+      kind: "memberDiagram",
+      loadCaseId: 1,
+      components: memberComponents(["My"]),
+      elements: [],
+    };
+    reads.get(1).resolve(field);
+    await expectAsync(forces).toBeResolvedTo(field);
+    await expectAsync(obsolete).toBeResolvedTo(null);
+    expect(viewer.resultsState.kind).toBe("memberDiagram");
+    expect(viewer.resultsState.component).toBe("My");
+    expect(viewer.resultsState.playing).toBe(false);
+    expect(renderer.setResult.calls.allArgs()).toEqual([[field, viewer.memberDiagramOptions()]]);
+  });
+
+  it("keeps the prior field on force failure and retries the failed quantity", async () => {
+    const { viewer, reads } = fixture;
+    const initial = viewer.selectLoadCase(1);
+    const displacement = resultFor(1);
+    reads.get(1).resolve(displacement);
+    await initial;
+    const failed = viewer.setResultKind("memberDiagram");
+    reads.get(1).reject(new Error("force read failed"));
+    await failed;
+    expect(viewer.result).toBe(displacement);
+    expect(viewer.getResultLoadState().failedKind).toBe("memberDiagram");
+    const retry = viewer.retryLoadCase();
+    expect(viewer.session.getResult.calls.mostRecent().args[0].kind).toBe("memberDiagram");
+    reads.get(1).resolve({
+      kind: "memberDiagram",
+      loadCaseId: 1,
+      components: memberComponents(["N"]),
+      elements: [],
+    });
+    await retry;
+    expect(viewer.result.kind).toBe("memberDiagram");
+    expect(viewer.resultsError).toBeNull();
+  });
+
+  it("rejects an otherwise valid field for a different case or quantity", async () => {
+    const { viewer, reads } = fixture;
+    const wrongCase = viewer.selectLoadCase(1);
+    reads.get(1).resolve(resultFor(2));
+    await wrongCase;
+    expect(viewer.resultsError.message).toContain("different quantity or load case");
+    expect(viewer.result).toBeNull();
+    const wrongKind = viewer.setResultKind("memberDiagram");
+    reads.get(1).resolve(resultFor(1));
+    await wrongKind;
+    expect(viewer.resultsError.message).toContain("different quantity or load case");
+    expect(viewer.result).toBeNull();
+  });
+
+  it("keeps a pending quantity when stepping to another case", async () => {
+    const { viewer, reads } = fixture;
+    viewer.resultsState.loadCaseId = 1;
+    const first = viewer.setResultKind("memberDiagram");
+    const latest = viewer.selectLoadCase(2);
+    reads.get(1).resolve({
+      kind: "memberDiagram",
+      loadCaseId: 1,
+      components: memberComponents(["N"]),
+      elements: [],
+    });
+    await flushReads();
+    expect(viewer.session.getResult.calls.mostRecent().args[0]).toEqual({
+      loadCaseId: 2,
+      kind: "memberDiagram",
+    });
+    reads.get(2).resolve({
+      kind: "memberDiagram",
+      loadCaseId: 2,
+      components: memberComponents(["N"]),
+      elements: [],
+    });
+    await latest;
+    await first;
+    expect(viewer.resultsState.kind).toBe("memberDiagram");
+    expect(viewer.resultsState.loadCaseId).toBe(2);
+  });
+
+  it("keeps saved settings and the previous field when the renderer rejects new data", async () => {
+    const { viewer, reads, renderer } = fixture;
+    const initial = viewer.selectLoadCase(1);
+    const displayed = resultFor(1);
+    reads.get(1).resolve(displayed);
+    await initial;
+    const previous = viewer.getResultsState();
+    renderer.setMemberDiagramOptions = jasmine
+      .createSpy("setMemberDiagramOptions")
+      .and.throwError("ordinate overflow");
+    expect(() => viewer.setMemberDiagramOptions({ diagramScale: 1e300 })).toThrowError(
+      "ordinate overflow",
+    );
+    expect(viewer.getResultsState()).toEqual(previous);
+    renderer.setResult.and.throwError("cannot render field");
+    const failed = viewer.setResultKind("memberDiagram");
+    reads.get(1).resolve({
+      kind: "memberDiagram",
+      loadCaseId: 1,
+      components: memberComponents(["N"]),
+      elements: [],
+    });
+    await failed;
+    expect(viewer.result).toBe(displayed);
+    expect(viewer.resultsState).toEqual(previous);
+    expect(viewer.resultsError.message).toBe("cannot render field");
+  });
+
+  it("restores the force kind and options of a saved graphic and resets a later system graphic", async () => {
+    const { viewer, reads, renderer } = fixture;
+    renderer.setMemberDiagramOptions = jasmine.createSpy("setMemberDiagramOptions");
+    const pending = viewer.applyGraphicResults({
+      loadCaseId: 2,
+      kind: "memberDiagram",
+      component: "Mz",
+      diagramScale: 0.002,
+      diagramPlane: "z",
+      diagramFlip: true,
+      diagramLabels: false,
+    });
+    expect(viewer.session.getResult.calls.mostRecent().args[0].kind).toBe("memberDiagram");
+    reads.get(2).resolve({
+      kind: "memberDiagram",
+      loadCaseId: 2,
+      components: memberComponents(["N", "Mz"]),
+      elements: [],
+    });
+    await pending;
+    expect(renderer.setMemberDiagramOptions.calls.mostRecent().args[0]).toEqual({
+      component: "Mz",
+      scale: 0.002,
+      plane: "z",
+      flip: true,
+      filled: true,
+      labels: false,
+    });
+    viewer.applyGraphicResults({});
+    expect(viewer.result).toBeNull();
+    expect(viewer.resultsState.kind).toBe("displacement");
+    expect(viewer.resultsState.diagramScale).toBe("auto");
+  });
+
+  it("keeps typed case identities distinct and rejects unavailable components", async () => {
+    const { viewer, reads } = fixture;
+    viewer.loadCases = [
+      { id: 1, title: "Numeric" },
+      { id: "1", title: "Named" },
+    ];
+    const selected = viewer.selectLoadCase("1", { kind: "memberDiagram" });
+    expect(viewer.session.getResult.calls.mostRecent().args[0].loadCaseId).toBe("1");
+    reads.get("1").resolve({
+      kind: "memberDiagram",
+      loadCaseId: "1",
+      components: memberComponents(["N"]),
+      elements: [],
+    });
+    await selected;
+    expect(viewer.result.loadCaseId).toBe("1");
+    expect(() => viewer.setMemberDiagramOptions({ component: "Mz" })).toThrowError(
+      /does not contain Mz/,
+    );
+    expect(viewer.resultsState.component).toBe("N");
   });
 
   it("shares an in-flight case and records only the latest caller's choice", async () => {
     const { viewer, reads } = fixture;
     const first = viewer.selectLoadCase(1);
-    const same = viewer.selectLoadCase("1", { record: false });
+    const same = viewer.selectLoadCase(1, { record: false });
     expect(viewer.session.getResult).toHaveBeenCalledTimes(1);
     const result = resultFor(1);
     reads.get(1).resolve(result);
@@ -218,6 +401,9 @@ describe("Graviss result loading", () => {
       pendingLoadCaseId: 1,
       displayedLoadCaseId: 2,
       failedLoadCaseId: null,
+      pendingKind: "displacement",
+      displayedKind: "displacement",
+      failedKind: null,
       error: null,
     });
     const error = new Error("case failed");
@@ -230,6 +416,9 @@ describe("Graviss result loading", () => {
       pendingLoadCaseId: null,
       displayedLoadCaseId: 2,
       failedLoadCaseId: 1,
+      pendingKind: null,
+      displayedKind: "displacement",
+      failedKind: "displacement",
       error,
     });
     const retry = viewer.retryLoadCase();
@@ -237,6 +426,9 @@ describe("Graviss result loading", () => {
       pendingLoadCaseId: 1,
       displayedLoadCaseId: 2,
       failedLoadCaseId: null,
+      pendingKind: "displacement",
+      displayedKind: "displacement",
+      failedKind: null,
       error: null,
     });
     const result = resultFor(1);
@@ -249,6 +441,9 @@ describe("Graviss result loading", () => {
       pendingLoadCaseId: null,
       displayedLoadCaseId: 1,
       failedLoadCaseId: null,
+      pendingKind: null,
+      displayedKind: "displacement",
+      failedKind: null,
       error: null,
     });
   });
@@ -300,6 +495,9 @@ describe("Graviss result loading", () => {
       pendingLoadCaseId: null,
       displayedLoadCaseId: null,
       failedLoadCaseId: null,
+      pendingKind: null,
+      displayedKind: null,
+      failedKind: null,
       error: null,
     });
     reads.get(1).resolve(resultFor(1));
@@ -396,7 +594,7 @@ describe("Graviss result loading", () => {
   it("discards a retried index from an adopted session before validation or restoring graphics", async () => {
     const { viewer, renderer } = fixture;
     const indexRead = deferred();
-    viewer.description = { capabilities: { results: { loadCases: true } } };
+    viewer.description = { capabilities: { results: { loadCases: true, displacement: true } } };
     viewer.session.getLoadCases = jasmine.createSpy("old index").and.returnValue(indexRead.promise);
     viewer.graphics = [{ results: { loadCaseId: 3 } }];
     viewer.activeGraphicIndex = 0;
@@ -432,7 +630,7 @@ describe("Graviss result loading", () => {
   it("discards an index completed after destruction without validating or notifying", async () => {
     const { viewer } = fixture;
     const indexRead = deferred();
-    viewer.description = { capabilities: { results: { loadCases: true } } };
+    viewer.description = { capabilities: { results: { loadCases: true, displacement: true } } };
     viewer.session.getLoadCases = jasmine.createSpy("index").and.returnValue(indexRead.promise);
     const index = viewer.readLoadCases();
     const changed = jasmine.createSpy("closed results");
@@ -452,7 +650,7 @@ describe("Graviss result loading", () => {
     const { viewer, reads } = fixture;
     const firstRead = deferred();
     const latestRead = deferred();
-    viewer.description = { capabilities: { results: { loadCases: true } } };
+    viewer.description = { capabilities: { results: { loadCases: true, displacement: true } } };
     viewer.session.getLoadCases = jasmine
       .createSpy("index")
       .and.returnValues(firstRead.promise, latestRead.promise);

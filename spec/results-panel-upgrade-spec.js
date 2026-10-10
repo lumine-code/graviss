@@ -73,7 +73,9 @@ describe("the Results panel case browser and precise controls", () => {
   }
 
   function shownIds() {
-    return [...panel.caseList.children].map((row) => row.dataset.caseId);
+    return [...panel.caseList.children].map(
+      (row) => row.querySelector(".graviss-case-number").textContent,
+    );
   }
 
   it("searches case numbers and names with types derived from the model, without reading results", async () => {
@@ -95,6 +97,30 @@ describe("the Results panel case browser and precise controls", () => {
     input(panel.caseSearch, "");
     expect(shownIds()).not.toContain("901");
     expect(read).not.toHaveBeenCalled();
+  });
+
+  it("keeps numeric and string load case identities separate when selecting rows", async () => {
+    await openViewer(
+      new TestSession({
+        ...MODEL,
+        loadCases: [
+          { id: 1, title: "Numeric case", kind: "linear", hasResults: true },
+          { id: "1", title: "Named case", kind: "linear", hasResults: true },
+        ],
+      }),
+    );
+    const numeric = panel.caseRows.get("number:1");
+    const named = panel.caseRows.get("string:1");
+    expect(numeric).not.toBe(named);
+    numeric.click();
+    await conditionPromise(() => viewer.result?.loadCaseId === 1, "the numeric case to load");
+    expect(numeric.getAttribute("aria-selected")).toBe("true");
+    expect(named.getAttribute("aria-selected")).toBe("false");
+    named.click();
+    await conditionPromise(() => viewer.result?.loadCaseId === "1", "the string case to load");
+    expect(numeric.getAttribute("aria-selected")).toBe("false");
+    expect(named.getAttribute("aria-selected")).toBe("true");
+    expect(panel.resultStatus.textContent).toBe("LC 1 · Named case · Displacement");
   });
 
   it("steps only matching cases and debounces keyboard preview before reading", async () => {
@@ -178,8 +204,8 @@ describe("the Results panel case browser and precise controls", () => {
       }
       return Promise.resolve(MODEL.createResult(loadCaseId));
     });
-    const oldRow = panel.caseRows.get("101");
-    const nextRow = panel.caseRows.get("102");
+    const oldRow = panel.caseRows.get("number:101");
+    const nextRow = panel.caseRows.get("number:102");
     const selected = viewer.selectLoadCase(102);
     expect(panel.body.hidden).toBe(false);
     expect(nextRow.classList.contains("graviss-case-pending")).toBe(true);
@@ -201,8 +227,8 @@ describe("the Results panel case browser and precise controls", () => {
     panel.retryButton.click();
     await conditionPromise(() => viewer.result?.loadCaseId === 102, "the failed case to retry");
     expect(panel.resultError.hidden).toBe(true);
-    expect(panel.caseRows.get("102")).toBe(nextRow);
-    expect(panel.resultStatus.textContent).toBe("LC 102 · Permanent load");
+    expect(panel.caseRows.get("number:102")).toBe(nextRow);
+    expect(panel.resultStatus.textContent).toBe("LC 102 · Permanent load · Displacement");
     expect(panel.resultStatus.title).toBe(panel.resultStatus.textContent);
     expect(nextRow.querySelector(".graviss-case-state").hidden).toBe(true);
   });

@@ -1217,6 +1217,102 @@
   font-variant-numeric: tabular-nums;
 }
 
+.graviss-result-kind,
+.graviss-member-group,
+.graviss-force-component,
+.graviss-force-plane {
+  width: 100%;
+  min-width: 0;
+}
+.graviss-force-extrema {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.graviss-force-extrema > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+.graviss-force-extrema strong,
+.graviss-force-stations {
+  font-variant-numeric: tabular-nums;
+}
+.graviss-force-extrema small,
+.graviss-force-count,
+.graviss-force-label-notice,
+.graviss-force-hint,
+.graviss-force-empty {
+  color: var(--text-color-subtle);
+  font-size: 0.9em;
+}
+.graviss-force-scale-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.graviss-force-scale-input {
+  width: 6em;
+  min-width: 0;
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+}
+.graviss-force-scale-unit {
+  white-space: nowrap;
+  color: var(--text-color-subtle);
+}
+.graviss-force-scale-error {
+  color: var(--text-color-error);
+  font-size: 0.9em;
+}
+.graviss-force-scale-input[aria-invalid="true"] {
+  border-color: var(--text-color-error);
+}
+.graviss-force-scale-label,
+.graviss-force-plane-label {
+  margin: 0;
+}
+.graviss-force-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+}
+.graviss-force-options > label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+}
+.graviss-force-selected {
+  border-top: 1px solid var(--graviss-panel-border);
+  padding-top: 8px;
+}
+.graviss-force-station-scroll {
+  max-height: 220px;
+  overflow: auto;
+}
+.graviss-force-stations {
+  width: 100%;
+  border-collapse: collapse;
+}
+.graviss-force-stations th,
+.graviss-force-stations td {
+  padding: 3px 5px;
+  text-align: right;
+}
+.graviss-force-stations th {
+  color: var(--text-color-subtle);
+  font-weight: normal;
+}
+.graviss-station-unavailable {
+  color: var(--text-color-subtle);
+  font-style: italic;
+}
+.graviss-force-stations tr + tr {
+  border-top: 1px solid var(--graviss-panel-border);
+}
+
 @container (max-width: 300px) {
   .graviss-rule-type {
     flex-basis: 100%;

@@ -375,7 +375,9 @@ describe("Graviss model validation", () => {
 
     // Stated as true, never as a boolean: a source that cannot answer is silent.
     description.capabilities.results.displacement = false;
-    expect(() => validateDescription(description)).toThrowError(/displacement must be true/);
+    expect(() => validateDescription(description)).toThrowError(
+      /must support displacement or memberDiagram/,
+    );
     description.capabilities.results = { displacement: true };
     expect(() => validateDescription(description)).toThrowError(/loadCases must be true/);
     delete description.capabilities.results;

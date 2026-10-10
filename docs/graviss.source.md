@@ -77,9 +77,10 @@ type ModelDescription = {
           localAxes?: boolean;
         };
     results?: {
-      displacement: true;
+      displacement?: boolean;
       loadCases: true;
       beamStations?: boolean;
+      memberDiagram?: boolean;
     };
     filterTypes?: true;
   };
@@ -95,9 +96,11 @@ type LoadCase = {
   hasResults?: boolean;
 };
 
-type ResultRequest = { loadCaseId: Id; kind: "displacement" };
+type ResultRequest = { loadCaseId: Id; kind: "displacement" | "memberDiagram" };
 
-type Result = {
+type Result = DisplacementResult | MemberDiagramResult;
+
+type DisplacementResult = {
   kind: "displacement";
   loadCaseId: Id;
   components: 3 | 6 | 7;
@@ -108,6 +111,28 @@ type Result = {
     id: Id;
     stations: { x: number; u: Vector3; phi?: Vector3; warping?: number }[];
   }[];
+};
+
+type MemberQuantity = {
+  id: string; // unique, stable source-defined identifier
+  title: string;
+  group: string; // source-defined category in the Results panel
+  unit: string; // SI unit of the values
+  displayUnit: string;
+  displayFactor: number; // positive multiplier from SI to display units
+  plane: "y" | "z"; // automatic diagram plane
+  directionSign: 1 | -1; // positive ordinate direction within that plane
+  interpolation?: "linear" | "point"; // defaults to linear
+};
+type MemberDiagramResult = {
+  kind: "memberDiagram";
+  loadCaseId: Id;
+  components: MemberQuantity[];
+  elements: {
+    id: Id;
+    stations: { x: number; values: (number | null)[] | Float32Array | Float64Array }[];
+  }[];
+  activeElementIds?: Id[];
 };
 
 type FilterType = {
@@ -188,6 +213,22 @@ type Section = {
 ```
 
 `id` and `createSession` are the required provider fields. `describe`, `getGeometry`, and `dispose` are the required session methods; `onDidChange`, `getLoadCases` and `getResult` are optional, and a session that answers only the three required ones is a whole provider.
+
+### Member result diagrams
+
+A result-capable source declares `loadCases: true` and at least one of `displacement: true` and `memberDiagram: true`. These capabilities are independent. The load-case index includes cases with either kind of data. `getResult` must return the exact requested `kind` and typed `loadCaseId`; a different result is an error and cannot replace the previously displayed field.
+
+The source owns the quantity catalogue. Each component descriptor supplies a unique string ID, title, category, SI unit, display unit, positive display multiplier and automatic local drawing direction. Graviss does not contain a fixed list of six force components: a source can supply forces, moments, bimoments, translations, rotations, bedding forces, stresses or other scalar member results without changing the viewer. Distinct material, stress-point or other result qualifiers must have distinct component IDs and descriptive titles. For example, a bending moment uses SI N·m and display kN·m with factor 0.001, a bimoment uses N·m² and kN·m², a displacement uses m and mm with factor 1000, and stress uses Pa and MPa with factor 0.000001. Quantity IDs and values must never disguise one physical dimension as another.
+
+Every station's `values` follows the descriptor order. Values are signed, finite SI numbers; null means that this quantity is unavailable at this station. Null never means zero and breaks an interpolated curve. Typed numerical arrays are permitted only when every value is known; NaN is not a missing-value marker. Converted display values must also be finite. An empty `elements` array means no member data for that case; measured zeroes remain valid data. Quantities may be listed even when unavailable in a particular case, so the panel can state that absence explicitly.
+
+Each entry references a unique existing beam, truss or cable with explicit orthogonal, right-handed `localAxes`; local x must point from its first node to its second. Stations are measured in metres along that undeformed chord, ordered by nondecreasing x within the member length. Float32 endpoint roundoff up to `max(1e-7, length * 1e-6)` is accepted. Exactly two coincident stations represent left and right limits, in that order; more than two are ambiguous and rejected. A single known station is drawn as an ordinate without inventing a span. `activeElementIds` follows the construction-stage mask used by displacement results.
+
+Linear quantities join consecutive known station values, split fills at zero crossings, and preserve jumps without smoothing. A source supplies sufficient stations for nonlinear distributions; the viewer cannot reconstruct distributed loads or analytical extrema from endpoints alone. Partial station spans remain partial; no end extrapolation or averaging across neighbouring elements occurs. A point quantity, such as a discrete hinge reaction, sets `interpolation: "point"`: every station is drawn independently, without connecting or filling between unrelated points. When combining source record families on different grids, providers must preserve each quantity's own piecewise interpolation and gaps rather than treating absent grid entries as zeroes.
+
+Diagrams stand on the undeformed model and are independent of displacement amplification and animation. Automatic orientation follows the descriptor's local plane and direction sign. For positive-face, right-handed section forces, N is positive in tension; positive My produces tension on local +z and positive Mz on local −y. A provider can encode those tension-side directions in the descriptors. An explicit y or z plane uses its positive local direction; flipping changes only the drawn side, never the reported sign. One scale is used across the visible result-bearing members. Filtering, layer visibility and the activity mask also narrow the reported extrema. Extrema refer to supplied samples; member IDs and positions appear alongside the selected member's station table.
+
+Per-graphic `results` stores `kind: "memberDiagram"`, `component` (the source quantity ID), `diagramScale` (`"auto"` or a positive number in model metres per SI unit), `diagramPlane` (`"auto"`, `"y"` or `"z"`), and boolean `diagramFlip`, `diagramFilled` and `diagramLabels`. The panel converts manual scale to metres per displayed unit. Labels prioritize the selected member and global extrema, with a 300-label budget and an explicit count when reduced; the station table retains every value. Export includes drawn diagrams and labels.
 
 ### Line elements
 
