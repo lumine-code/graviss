@@ -200,10 +200,59 @@ describe("Graviss member-diagram result rendering", () => {
       expect(model.visibleModelBounds().containsPoint(point)).toBe(true);
       corners += 1;
     });
-    expect(corners).toBe(model.memberDiagram.labels.length * 4);
+    expect(corners).toBe(model.getMemberDiagramSummary().labelsShown * 4);
     model.setMemberDiagramOptions({ labels: false });
     expect(dispose).toHaveBeenCalled();
     expect(model.memberDiagram.labels.length).toBe(0);
+  });
+
+  it("culls overlapping labels by selection priority without rebuilding textures or fitting feedback", () => {
+    const model = create();
+    model.camera = new model.THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 100);
+    model.camera.position.set(0, 0, 10);
+    model.camera.lookAt(0, 0, 0);
+    const field = result();
+    field.elements.forEach((row) => {
+      row.stations = [
+        { x: 0, values: [1000, 0] },
+        { x: 4, values: [1000, 0] },
+      ];
+    });
+    model.setResult(field, { labels: true });
+    expect(model.getMemberDiagramSummary().labelsTotal).toBe(4);
+    expect(model.getMemberDiagramSummary().labelsShown).toBe(3);
+    const bounds = model.visibleModelBounds();
+    model.memberDiagram.select("b");
+    model.updateMemberDiagramLabels();
+    expect(
+      model.memberDiagram.labels.find(
+        (sprite) =>
+          sprite.userData.gravissMemberId === "b" && sprite.userData.gravissMemberStation === 0,
+      ).visible,
+    ).toBe(true);
+    expect(
+      model.memberDiagram.labels.find(
+        (sprite) =>
+          sprite.userData.gravissMemberId === "a" && sprite.userData.gravissMemberStation === 4,
+      ).visible,
+    ).toBe(false);
+    expect(model.visibleModelBounds().equals(bounds)).toBe(true);
+    let corners = 0;
+    model.memberDiagram.forEachLabelCorner(model.camera, () => {
+      corners += 1;
+    });
+    expect(corners).toBe(12);
+    const textures = model.memberDiagram.labels.map((sprite) => sprite.material.map);
+    const createLabels = spyOn(model.memberDiagram, "createLabels").and.callThrough();
+    model.camera.position.set(10, 0, 0);
+    model.camera.lookAt(0, 0, 0);
+    model.updateMemberDiagramLabels();
+    model.updateMemberDiagramLabels();
+    expect(model.getMemberDiagramSummary().labelsShown).toBe(1);
+    expect(createLabels).not.toHaveBeenCalled();
+    expect(
+      model.memberDiagram.labels.every((sprite, index) => sprite.material.map === textures[index]),
+    ).toBe(true);
   });
 
   it("preserves typed element and node ids and normalizes supplied axis lengths", () => {
@@ -613,7 +662,9 @@ describe("Graviss member-diagram WebGL export", () => {
     renderer.setVisibility("axes", false);
     renderer.setAppearance("cloud");
     renderer.resumeRendering();
+    const viewportVisibility = renderer.memberDiagram.labels.map((label) => label.visible);
     const image = renderer.renderPrintImage(null, { maxEdge: 1000 });
+    expect(renderer.memberDiagram.labels.map((label) => label.visible)).toEqual(viewportVisibility);
     expect(image.dataUrl.startsWith("data:image/png;base64,")).toBe(true);
     expect(image.width).toBeGreaterThan(0);
     const png = Buffer.from(image.dataUrl.split(",")[1], "base64");
