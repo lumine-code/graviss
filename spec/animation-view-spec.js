@@ -96,6 +96,9 @@ function createViewer(
       dispose: jasmine.createSpy("disposeSession"),
     },
   });
+  viewer.sessionOwnership = require("../lib/session-ownership").retainSession(viewer.session);
+  viewer.cameraStates = new Map();
+  viewDocument.retain();
   viewer.subscriptions.add(
     viewDocument.onDidChange(({ data }) => {
       viewer.graphics = data.graphics;

@@ -346,7 +346,7 @@ A source that can notice its own data moving on implements `onDidChange`. `geome
 
 ## Teardown
 
-Graviss revokes the provider when the providing package deactivates, so a provider disposes nothing itself. Graviss calls the active session's `dispose()` when its pane closes, unsubscribes from `onDidChange` at the same time, and destroys a supplied view document with the pane.
+Graviss revokes the provider when the providing package deactivates, so a provider disposes nothing itself. Split copies share a retained source session and writable view document, while each owns its renderer, camera, selection and subscriptions. A session may receive concurrent reads from those views. Closing a view removes its subscriptions; the final view releasing a session calls its `dispose()`, and the final view releasing a document destroys it. Adopting a replacement session releases only that view's hold on the previous one.
 
 ## Versioning
 

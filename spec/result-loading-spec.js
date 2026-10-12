@@ -90,6 +90,8 @@ function createViewer() {
       dispose: jasmine.createSpy("disposeSession"),
     },
   });
+  viewer.sessionOwnership = require("../lib/session-ownership").retainSession(viewer.session);
+  viewer.cameraStates = new Map();
   return { viewer, renderer, animation, reads, metrics };
 }
 
