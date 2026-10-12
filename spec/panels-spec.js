@@ -205,6 +205,7 @@ describe("the Graviss dock panels", () => {
       destroyed: false,
       getTitle: () => "Results",
       getURI: () => RESULTS_PANEL_URI,
+      getAllowedLocations: () => ["right"],
       destroy() {
         this.destroyed = true;
         this.element.remove();
