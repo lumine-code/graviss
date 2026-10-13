@@ -8,11 +8,15 @@
           "submenu": [
             {
               "label": "Graviss Filter",
-              "command": "graviss:toggle-filter-panel"
+              "command": "graviss:toggle-filter-panel",
+              "group": "panels",
+              "order": 10
             },
             {
               "label": "Graviss Results",
-              "command": "graviss:toggle-results-panel"
+              "command": "graviss:toggle-results-panel",
+              "group": "panels",
+              "order": 10
             }
           ]
         }
