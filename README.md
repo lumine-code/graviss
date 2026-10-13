@@ -14,6 +14,8 @@ Explore finite element models in an interactive engineering viewport.
 - **Model filtering**: browses actual model values with titles and element counts, creates ordered add and subtract rules over element number, element kind, and source dimensions, and combines them with a compact toolbar filter using model selector codes.
 - **Symbols and connectors**: draws axial springs as helices, transverse springs as crossed in-plane helices, rotational springs as rings, and couplings as plain links; sizes every mark with one length in millimetres and can scale springs relative to the stiffest one.
 
+![Explore a sample portal-frame model in the Graviss engineering viewport.](.github/demo.png)
+
 ## Installation
 
 To install `graviss` search for it in the Install pane of the Lumine settings, or run the command `lumine --install lumine-code/graviss`.

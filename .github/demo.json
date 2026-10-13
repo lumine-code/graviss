@@ -1,0 +1,17 @@
+{
+  "title": "graviss",
+  "description": "Explore a sample portal-frame model in the Graviss engineering viewport.",
+  "recordedOn": "2026-10-13",
+  "sourceRevision": "c6a5a961bf13f433ed2f1caecb3bb40f2f2a01c0",
+  "mode": "normal",
+  "fontSettings": "default",
+  "themeSourceRevision": "6564a9e21899b5541e9c8f8006f9be6d6d72e6ad",
+  "images": [
+    {
+      "file": "demo.png",
+      "label": "Explore a sample portal-frame model in the Graviss engineering viewport.",
+      "width": 1200,
+      "height": 800
+    }
+  ]
+}
