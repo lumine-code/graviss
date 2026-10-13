@@ -27,7 +27,7 @@ module.exports = [
   {
     files: ["eslint.config.js", "spec/**"],
     languageOptions: {
-      globals: { ...globals.jasmine, conditionPromise: "readonly" },
+      globals: { ...globals.jasmine, conditionPromise: "readonly", waitForFrames: "readonly" },
     },
     rules: {
       "n/no-unpublished-require": "off",

@@ -137,11 +137,10 @@ describe("Graviss renderer viewport lifecycle", () => {
     const { renderer, host, paints, advances, animation } = fixture;
     const startedAt = animation.startedAt;
     host.style.display = "none";
-    await conditionPromise(
-      () => !renderer.viewportVisible,
-      "the display-none viewport to suspend",
-      2000,
-    );
+    await waitForFrames(() => !renderer.viewportVisible, {
+      frames: 120,
+      description: "the display-none viewport to suspend",
+    });
     const paintCount = paints.calls.count();
     const advanceCount = advances.calls.count();
     const hiddenPhase = renderer.getDeformation().phase;
@@ -157,10 +156,9 @@ describe("Graviss renderer viewport lifecycle", () => {
     expect(renderer.getDeformation().phase).toBe(hiddenPhase);
 
     host.style.display = "";
-    await conditionPromise(
+    await waitForFrames(
       () => renderer.isViewportDrawable() && advances.calls.count() > advanceCount,
-      "the shown viewport to resume timed frames",
-      2000,
+      { frames: 120, description: "the shown viewport to resume timed frames" },
     );
     expect(paints.calls.count()).toBeGreaterThan(paintCount);
     expectCurrentClock(fixture, startedAt);
