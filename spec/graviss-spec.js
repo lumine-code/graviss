@@ -1,7 +1,8 @@
 const fs = require("node:fs");
+const { createRequire } = require("node:module");
 const os = require("node:os");
 const path = require("node:path");
-let GravissView = require("../lib/graviss-view");
+let GravissView;
 const { APPEARANCE_IDS, appearanceDefinition } = require("../lib/appearance");
 const { CAMERA_VIEW_IDS } = require("../lib/camera-navigation");
 const {
@@ -63,10 +64,11 @@ describe("graviss", () => {
     jasmine.attachToDOM(lumine.workspace.getElement());
     const pack = await lumine.packages.activatePackage("graviss");
     mainModule = pack.mainModule;
-    GravissView = require("../lib/graviss-view");
+    const currentRequire = createRequire(__filename);
+    GravissView = currentRequire("../lib/graviss-view");
     // This suite checks the CPU geometry reference directly. GPU deformation
     // and readback parity have their own integration suite.
-    const { GravissRenderer } = require("../lib/renderer");
+    const { GravissRenderer } = currentRequire("../lib/renderer");
     const createRenderer = GravissRenderer.create;
     spyOn(GravissRenderer, "create").and.callFake((host, geometry, callbacks, options) =>
       createRenderer.call(GravissRenderer, host, geometry, callbacks, {
