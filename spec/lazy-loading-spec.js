@@ -1,5 +1,5 @@
 const { createRendererLoader } = require("../lib/renderer-loader");
-const { createThreeRuntimeLoader } = require("../lib/three-runtime");
+const { createThreeRuntimeLoader, loadThreeRuntime } = require("../lib/three-runtime");
 
 describe("lazy rendering dependencies", () => {
   it("does not request the renderer module until a model is ready", async () => {
@@ -39,5 +39,18 @@ describe("lazy rendering dependencies", () => {
     await expectAsync(firstLoad).toBeResolvedTo({ THREE, OrbitControls });
     expect(importThree).toHaveBeenCalledTimes(1);
     expect(importOrbitControls).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads every addon against the same native ESM Three.js constructors", async () => {
+    const [{ THREE, OrbitControls, LineSegments2, LineSegmentsGeometry, LineMaterial }, imported] =
+      await Promise.all([loadThreeRuntime(), import("three")]);
+
+    expect(THREE.Object3D).toBe(imported.Object3D);
+    expect(Object.getPrototypeOf(OrbitControls.prototype)).toBe(THREE.Controls.prototype);
+    expect(Object.getPrototypeOf(LineSegments2.prototype)).toBe(THREE.Mesh.prototype);
+    expect(Object.getPrototypeOf(LineSegmentsGeometry.prototype)).toBe(
+      THREE.InstancedBufferGeometry.prototype,
+    );
+    expect(Object.getPrototypeOf(LineMaterial.prototype)).toBe(THREE.ShaderMaterial.prototype);
   });
 });
