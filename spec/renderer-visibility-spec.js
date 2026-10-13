@@ -98,6 +98,40 @@ describe("Graviss renderer viewport lifecycle", () => {
     expect(fixture.renderer.getDeformation().phase).toBeCloseTo(phase, 9);
   }
 
+  it("retains the WebGL renderer and animation while rebinding a native presentation", async () => {
+    jasmine.attachToDOM(lumine.workspace.getElement());
+    const fixture = await createFixture();
+    const renderer = fixture.renderer;
+    const canvasRenderer = renderer.canvasRenderer;
+    const camera = renderer.camera;
+    const item = {
+      canCopy: () => false,
+      getTitle: () => "Graviss native renderer",
+      element: fixture.element,
+      didAttachToWindow: ({ document }) => renderer.bindDocument(document),
+    };
+    await lumine.workspace.open(item);
+    const extra = await lumine.workspace.detachItem(item);
+    try {
+      expect(renderer.canvasRenderer).toBe(canvasRenderer);
+      expect(renderer.camera).toBe(camera);
+      expect(renderer.domWindow).toBe(extra.getDocument().defaultView);
+      expect(renderer.viewportVisibility.document).toBe(extra.getDocument());
+      const before = fixture.advances.calls.count();
+      await conditionPromise(
+        () => fixture.advances.calls.count() > before,
+        "the auxiliary viewport to paint animation frames",
+        5000,
+      );
+      await lumine.workspace.attachWindow(extra);
+      expect(renderer.domWindow).toBe(window);
+      expect(renderer.canvasRenderer).toBe(canvasRenderer);
+      expect(renderer.camera).toBe(camera);
+    } finally {
+      await lumine.workspace.discardEditorWindows();
+    }
+  });
+
   it("suspends hidden paints and resumes the running animation on its existing clock", async () => {
     const fixture = await createFixture();
     const { renderer, host, paints, advances, animation } = fixture;
