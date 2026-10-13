@@ -2914,6 +2914,9 @@ describe("graviss", () => {
   it("declares its workspace commands and tree-view context menu", () => {
     const manifest = require("../package.json");
     const menus = require("../menus/main.json");
+    const packageItems = menus.menu
+      .find(({ label }) => label === "Packages")
+      .submenu.find(({ label }) => label === "Graviss").submenu;
     const contextItems = menus["context-menu"]['.tree-view .file[data-path$=".grv"]'];
     const commands = lumine.commands
       .findCommands({ target: lumine.workspace.getElement() })
@@ -2922,10 +2925,10 @@ describe("graviss", () => {
     expect(manifest.consumedServices["tree-view.selection"]).toBeDefined();
     expect(commands).toContain("graviss:open-source");
     expect(commands).toContain("graviss:open-source-on-right");
-    expect(menus.menu[0].submenu[0].submenu).toContain(
+    expect(packageItems).toContain(
       jasmine.objectContaining({ label: "Open Source", command: "graviss:open-source" }),
     );
-    expect(menus.menu[0].submenu[0].submenu).toContain(
+    expect(packageItems).toContain(
       jasmine.objectContaining({
         label: "Open Source on Right",
         command: "graviss:open-source-on-right",
