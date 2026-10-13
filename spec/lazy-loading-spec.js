@@ -1,5 +1,6 @@
+const { createRequire } = require("node:module");
 const { createRendererLoader } = require("../lib/renderer-loader");
-const { createThreeRuntimeLoader, loadThreeRuntime } = require("../lib/three-runtime");
+const { createThreeRuntimeLoader } = require("../lib/three-runtime");
 
 describe("lazy rendering dependencies", () => {
   it("does not request the renderer module until a model is ready", async () => {
@@ -42,6 +43,9 @@ describe("lazy rendering dependencies", () => {
   });
 
   it("loads every addon against the same native ESM Three.js constructors", async () => {
+    // Earlier lifecycle suites may have unloaded the module generation used
+    // while this spec was declared. Resolve the runtime that is active now.
+    const { loadThreeRuntime } = createRequire(__filename)("../lib/three-runtime");
     const [{ THREE, OrbitControls, LineSegments2, LineSegmentsGeometry, LineMaterial }, imported] =
       await Promise.all([loadThreeRuntime(), import("three")]);
 
