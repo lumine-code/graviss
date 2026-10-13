@@ -106,6 +106,9 @@ jobs:
           loader_dir="$(brew --prefix vulkan-loader)/lib"
           file -L "$loader_dir/libvulkan.dylib"
           printf 'GRAVISS_VULKAN_LIBRARY_DIR=%s\n' "$loader_dir" >> "$GITHUB_ENV"
+      - name: Install declared spec packages
+        working-directory: lumine
+        run: node script/install-spec-packages.js --package ../graviss --home "$RUNNER_TEMP/graviss-home" --github-env "$GITHUB_ENV"
       - name: Run the Jasmine spec suite
         working-directory: lumine
         timeout-minutes: 20

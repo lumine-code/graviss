@@ -99,8 +99,6 @@ Commands available in `.graviss`:
 
 Commands available in `lumine-workspace`:
 
-- `graviss:open-source`: open the active or selected `.grv` document as JSON source,
-- `graviss:open-source-on-right`: the same, split to the right of the canvas,
 - `graviss:toggle-filter-panel`: show or hide the panel that narrows which elements are drawn,
 - `graviss:toggle-results-panel`: show or hide the panel that shows the analysis results,
 - `graviss:toggle-focus-filter-panel`: focus the filter panel, or hand focus back to the model,
@@ -114,7 +112,7 @@ Commands available in `.graviss-panel`:
 
 ## Usage
 
-A `.grv` document stores view configuration and an optional source path. When the source is omitted, registered providers can resolve a supported model with the same basename. Graviss opens the view as a canvas; **Open Source** opens the same file in a normal JSON editor.
+A `.grv` document stores view configuration and an optional source path. When the source is omitted, registered providers can resolve a supported model with the same basename. Graviss opens the view as a canvas; choose **Text Editor** from **Open With…** in the tree view to edit the same file as JSON.
 
 These files are meant to be written by hand and by other tools, so everything in one is optional — the extension is what makes it a view — and a file holds only what someone set. What is left out is worked out: a pane is named after its file, a graphic after its position, a view with no camera frames the model. A change writes down itself and nothing else, so a file kept short stays short.
 
@@ -195,7 +193,6 @@ Override the public custom properties in your `styles.css` to adjust the toolbar
 
 - [`graviss.source`](docs/graviss.source.md): consumed to discover, open, and read FEM models supplied by source packages.
 - `navigation.adapter`: provided to expose named graphics to the navigation panel.
-- `tree-view.selection`: consumed to resolve selected `.grv` files for **Open Source**.
 
 ## Contributing
 

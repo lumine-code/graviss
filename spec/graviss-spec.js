@@ -264,7 +264,6 @@ describe("graviss", () => {
       "results-panel",
       "save-image",
       "copy-image",
-      "open-source",
     ]);
     for (const view of ["top", "front", "right"]) {
       const face = toolbar.querySelector(`[data-view="${view}"] .graviss-icon-active-face`);
@@ -1121,7 +1120,7 @@ describe("graviss", () => {
     const item = await lumine.workspace.open(viewPath, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
     await item.viewDocument.whenWatcherReady();
-    const editor = await mainModule.openSource(viewPath);
+    const editor = await lumine.workspace.open(viewPath, { opener: "text-editor" });
     expect(item.getFileState()).toBe("unmodified");
 
     // Camera moves make the canvas modified, exactly like typing in an editor.
@@ -1322,8 +1321,6 @@ describe("graviss", () => {
     expect(viewerCommandNames).toContain("graviss:toggle-projection");
     expect(viewerCommandNames).toContain("graviss:activate-graphic");
     expect(workspaceCommandNames).not.toContain("graviss-meshio:open-example");
-    expect(workspaceCommandNames).toContain("graviss:open-source");
-    expect(workspaceCommandNames).toContain("graviss:open-source-on-right");
     expect(workspaceCommandNames).not.toContain("graviss:fit-view");
     expect(workspaceCommandNames).not.toContain("graviss:next-graphic");
 
@@ -1751,70 +1748,23 @@ describe("graviss", () => {
     }
   });
 
-  it("opens a selected .grv source in a JSON editor without invoking the canvas opener", async () => {
+  it("keeps the canvas and Text Editor separate when opening the same view document", async () => {
     await lumine.packages.activatePackage("language-json");
-    const canvas = await lumine.workspace.open(MAIN_EXAMPLE.viewDocumentPath, {
+    const filePath = MAIN_EXAMPLE.viewDocumentPath;
+    const canvas = await lumine.workspace.open(filePath, { searchAllPanes: true });
+    const editor = await lumine.workspace.open(filePath, {
+      opener: "text-editor",
       searchAllPanes: true,
     });
-    const tree = document.createElement("div");
-    tree.className = "tree-view";
-    const file = document.createElement("div");
-    file.className = "file";
-    file.dataset.path = MAIN_EXAMPLE.viewDocumentPath;
-    tree.appendChild(file);
-    const treeDisposable = mainModule.consumeTreeViewSelection({
-      selectedPaths: () => [MAIN_EXAMPLE.viewDocumentPath],
-    });
-
-    const editor = await mainModule.openSourceCommand({ target: file });
-
-    expect(canvas instanceof GravissView).toBe(true);
+    expect(canvas).toBeInstanceOf(GravissView);
     expect(lumine.workspace.isTextEditor(editor)).toBe(true);
-    expect(editor).not.toBe(canvas);
-    expect(editor.getPath()).toBe(MAIN_EXAMPLE.viewDocumentPath);
     expect(editor.getGrammar().scopeName).toBe("source.json");
-    expect(editor.getText()).toContain('"format": "graviss-view"');
-    const reopen = spyOn(lumine.workspace, "open").and.callThrough();
-    expect(await mainModule.openSource(MAIN_EXAMPLE.viewDocumentPath)).toBe(editor);
-    expect(reopen.calls.mostRecent().args[0]).toBe(editor);
-    expect(reopen.calls.mostRecent().args[1]).toEqual({ searchAllPanes: true });
-
-    treeDisposable.dispose();
-    await lumine.workspace.paneForItem(editor).destroyItem(editor, true);
-  });
-
-  it("opens the source of the canvas the toolbar button belongs to", async () => {
-    await lumine.packages.activatePackage("language-json");
-    const canvas = await lumine.workspace.open(MAIN_EXAMPLE.viewDocumentPath, {
-      searchAllPanes: true,
-    });
-    const button = canvas.element.querySelector('[data-action="open-source"]');
-    expect(button).not.toBeNull();
-    expect(button.dataset.command).toBe("graviss:open-source-on-right");
-    expect(button.closest(".graviss-source-control")).not.toBeNull();
-
-    // The command lives on the workspace, so a dispatch from inside the canvas
-    // has to reach it by bubbling rather than by a second registration.
+    expect(await lumine.workspace.open(filePath, { opener: "graviss", searchAllPanes: true })).toBe(
+      canvas,
+    );
     expect(
-      lumine.commands
-        .findCommands({ target: button })
-        .some(({ name }) => name === "graviss:open-source-on-right"),
-    ).toBe(true);
-
-    // Resolved from the dispatch target, so the button opens its own canvas's
-    // source even when the active pane item is something else entirely.
-    const other = await lumine.workspace.open(SHELL_EXAMPLE_URI, { searchAllPanes: true });
-    expect(lumine.workspace.getActivePaneItem()).toBe(other);
-
-    const editor = await mainModule.openSourceCommand({ target: button }, { split: "right" });
-
-    expect(lumine.workspace.isTextEditor(editor)).toBe(true);
-    expect(editor.getPath()).toBe(MAIN_EXAMPLE.viewDocumentPath);
-    expect(editor.getGrammar().scopeName).toBe("source.json");
-    // The button splits: the source stands beside the canvas, not over it.
-    expect(lumine.workspace.paneForItem(editor)).not.toBe(lumine.workspace.paneForItem(canvas));
-
-    await lumine.workspace.paneForItem(editor).destroyItem(editor, true);
+      await lumine.workspace.open(filePath, { opener: "text-editor", searchAllPanes: true }),
+    ).toBe(editor);
   });
 
   it("covers the whole model when a print is requested without a region", async () => {
@@ -2909,40 +2859,6 @@ describe("graviss", () => {
     // Printing from the viewport must not disturb it.
     expect(renderer.captureCameraState()).toEqual(before);
     expect(renderer.canvasRenderer.getSize(new renderer.THREE.Vector2())).toEqual(beforeSize);
-  });
-
-  it("declares its workspace commands and tree-view context menu", () => {
-    const manifest = require("../package.json");
-    const menus = require("../menus/main.json");
-    const packageItems = menus.menu
-      .find(({ label }) => label === "Packages")
-      .submenu.find(({ label }) => label === "Graviss").submenu;
-    const contextItems = menus["context-menu"]['.tree-view .file[data-path$=".grv"]'];
-    const commands = lumine.commands
-      .findCommands({ target: lumine.workspace.getElement() })
-      .map(({ name }) => name);
-
-    expect(manifest.consumedServices["tree-view.selection"]).toBeDefined();
-    expect(commands).toContain("graviss:open-source");
-    expect(commands).toContain("graviss:open-source-on-right");
-    expect(packageItems).toContain(
-      jasmine.objectContaining({ label: "Open Source", command: "graviss:open-source" }),
-    );
-    expect(packageItems).toContain(
-      jasmine.objectContaining({
-        label: "Open Source on Right",
-        command: "graviss:open-source-on-right",
-      }),
-    );
-    expect(contextItems).toContain(
-      jasmine.objectContaining({
-        label: "Open Source on Right",
-        command: "graviss:open-source-on-right",
-      }),
-    );
-    expect(contextItems).toContain(
-      jasmine.objectContaining({ label: "Open Source", command: "graviss:open-source" }),
-    );
   });
 
   it("consumes source providers and owns viewer creation itself", () => {
