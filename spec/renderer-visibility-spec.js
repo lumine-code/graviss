@@ -116,6 +116,9 @@ describe("Graviss renderer viewport lifecycle", () => {
       expect(renderer.canvasRenderer).toBe(canvasRenderer);
       expect(renderer.camera).toBe(camera);
       expect(renderer.domWindow).toBe(extra.getDocument().defaultView);
+      const clock = spyOn(extra.getDOMWindow().performance, "now").and.returnValue(151515);
+      expect(fixture.animation.now()).toBe(151515);
+      clock.and.callThrough();
       expect(renderer.viewportVisibility.document).toBe(extra.getDocument());
       const before = fixture.advances.calls.count();
       await conditionPromise(
