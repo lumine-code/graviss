@@ -39,7 +39,12 @@ describe("graviss package conventions", () => {
     expect(readme).toContain("## Customization");
     expect(readme).toContain("## Services");
     expect(readme).not.toMatch(/keymaps|keybindings/i);
-    expect(readme).not.toMatch(/!\[/);
+    const features = readme.match(/## Features\r?\n([\s\S]*?)(?=\r?\n## )/)?.[1] || "";
+    for (const [image, imagePath] of readme.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
+      expect(features).toContain(image);
+      expect(imagePath).toMatch(/\.png$/);
+      expect(fs.existsSync(path.join(root, imagePath))).toBe(true);
+    }
     expect(manifest.files).toContain("docs");
     const contract = fs.readFileSync(path.join(root, "docs", "graviss.source.md"), "utf8");
     for (const heading of [
