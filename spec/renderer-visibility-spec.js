@@ -120,6 +120,12 @@ describe("Graviss renderer viewport lifecycle", () => {
       expect(fixture.animation.now()).toBe(151515);
       clock.and.callThrough();
       expect(renderer.viewportVisibility.document).toBe(extra.getDocument());
+      spyOnProperty(extra.getDOMWindow(), "devicePixelRatio", "get").and.returnValue(3);
+      renderer.viewCube.resize();
+      expect(renderer.viewCube.renderer.getPixelRatio()).toBe(3);
+      expect(
+        renderer.viewCube.resizeObserver instanceof extra.getDOMWindow().ResizeObserver,
+      ).toBeTrue();
       const before = fixture.advances.calls.count();
       await conditionPromise(
         () => fixture.advances.calls.count() > before,
