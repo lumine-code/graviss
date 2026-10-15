@@ -965,7 +965,9 @@ describe("graviss", () => {
     const box = renderer.computeSceneBox();
     const middle = box.getCenter(new renderer.THREE.Vector3());
     renderer.controls.target.copy(middle);
+    renderer.camera.up.set(0, 1, 0);
     renderer.camera.position.set(middle.x, middle.y, box.max.z + 5);
+    renderer.camera.lookAt(middle);
     renderer.updateDepthRange();
     let distance = renderer.camera.position.distanceTo(renderer.controls.target);
     expect(renderer.camera.far).toBeCloseTo(distance + renderer.bounds.radius * 20, 5);
@@ -974,6 +976,7 @@ describe("graviss", () => {
     // Far out the ride is held under a third of far, so the camera-centred sky
     // keeps a shell between the planes to sit in.
     renderer.camera.position.set(middle.x, middle.y, box.max.z + 500);
+    renderer.camera.lookAt(middle);
     renderer.updateDepthRange();
     distance = renderer.camera.position.distanceTo(renderer.controls.target);
     expect(renderer.camera.near).toBeCloseTo((distance + renderer.bounds.radius * 20) / 3, 5);
@@ -981,6 +984,7 @@ describe("graviss", () => {
 
     // Inside the box nothing rides: the old floor keeps close work unclipped.
     renderer.camera.position.set(middle.x + 0.2, middle.y, middle.z);
+    renderer.camera.lookAt(middle);
     renderer.updateDepthRange();
     const inside = renderer.camera.position.distanceTo(renderer.controls.target);
     const insideFar = inside + renderer.bounds.radius * 20;
