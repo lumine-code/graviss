@@ -10,6 +10,14 @@ module.exports = {
     if (!source)
       throw new Error("Set LUMINE_DEMO_CDB to a real SOFiSTiK CDB file approved for screenshots");
     const fs = require("node:fs");
+    const digest = require("node:crypto")
+      .createHash("sha256")
+      .update(fs.readFileSync(source))
+      .digest("hex");
+    if (digest !== "0c5e09cb24b0313a1dff55383b1ac296ca500ec166b75c679d618acceb2a1275")
+      throw new Error(
+        "Use the reviewed truss-model CDB; see demo/sofistik-model/notes.txt for its checksum.",
+      );
     fs.copyFileSync(source, fixture("sofistik-model/model.cdb"));
     state.editor = await open("sofistik-model/notes.txt");
     await lumine.project.setPaths([fixture("sofistik-model")]);
@@ -18,7 +26,7 @@ module.exports = {
     {
       id: "scene-1",
       file: "demo.png",
-      caption: "Explore a real structural model in the Graviss viewport.",
+      caption: "Explore a truss model with section profiles in an orthographic overview.",
       timeout: 60000,
       async run(context) {
         const { lumine, state, waitFor, fixture } = context;
@@ -27,20 +35,37 @@ module.exports = {
           await lumine.workspace.paneForItem(state.editor).destroyItem(state.editor, true);
           await waitFor(
             () =>
-              Boolean(document.querySelector(".graviss canvas")) &&
+              Boolean(state.graviss.renderer && state.graviss.geometry && !state.graviss.loading) &&
               !document.body.innerText.includes("Unable to") &&
               !document.body.innerText.includes("No model"),
-            "step 1",
+            "complete structural geometry",
             60000,
           );
         }
         {
-          lumine.commands.dispatch(lumine.views.getView(state.graviss), "graviss:view-isometric");
-          lumine.commands.dispatch(lumine.views.getView(state.graviss), "graviss:fit-view");
+          const renderer = state.graviss.renderer;
+          renderer.setProjection("orthographic");
+          for (const name of [
+            "nodes",
+            "supports",
+            "springs",
+            "couplings",
+            "mesh",
+            "grid",
+            "axes",
+            "localAxes",
+          ])
+            state.graviss.setVisibility(name, false);
+          renderer.fitView(new renderer.THREE.Vector3(0.55, -1, -0.7), renderer.worldUp);
+          await state.graviss.save();
         }
       },
-      ready() {
-        return Boolean(document.querySelector(".graviss canvas"));
+      ready({ state }) {
+        return Boolean(
+          state.graviss?.renderer &&
+          !state.graviss.loading &&
+          document.querySelector(".graviss canvas"),
+        );
       },
     },
   ],

@@ -1,18 +1,18 @@
 {
   "title": "graviss",
-  "description": "Explore a real structural model in the Graviss viewport.",
-  "recordedOn": "2026-10-14",
-  "sourceRevision": "bb4fb91f1c9739a7a06549476286f5c5f9d7b559",
-  "themeSourceRevision": "7fbd047a87ecf1367c896b19ff270cdc28d319f7",
+  "description": "Explore a truss model with section profiles in an orthographic overview.",
+  "recordedOn": "2026-10-15",
+  "sourceRevision": "743efca8556879ae64338780f3a6bdac5d75718c",
+  "themeSourceRevision": "828c35ac1816466699effa6f7cf7eedccc930ff9",
   "mode": "normal",
   "fontSettings": "default",
   "scenario": "demo.js",
-  "recipeHash": "986dbddb67e8ac2a5c0ca3327f52c7a0ed5db05e7f4300b5f94f58e95c85a5b1",
+  "recipeHash": "35419349d909d2539b2eae63ddb7096f2097097619ddbd04df9dd4d7b8a1a72d",
   "environment": {
     "platform": "win32",
     "arch": "x64",
-    "electron": "44.7.0",
-    "chrome": "152.0.7977.130",
+    "electron": "44.7.1",
+    "chrome": "152.0.7977.149",
     "devicePixelRatio": 1,
     "locale": "en-GB",
     "fontFamily": "Fira Code, Menlo, DejaVu Sans Mono, Consolas, monospace",
@@ -21,29 +21,30 @@
   },
   "viewport": { "width": 1200, "height": 820 },
   "cornerRadius": 10,
+  "privacy": { "version": 1, "location": "neutral", "textChecked": true },
   "sources": {
     "editor": {
-      "revision": "f843acddbced9b8bd7bbe0a96005bb55429694ce",
+      "revision": "55fc1c9334cb5f5c5f2d3fa916bbb396ff635b70",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "package": {
-      "revision": "bb4fb91f1c9739a7a06549476286f5c5f9d7b559",
-      "dirty": false,
-      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      "revision": "743efca8556879ae64338780f3a6bdac5d75718c",
+      "dirty": true,
+      "workingTreeHash": "ca1f6cb1cacff63b091a640e67689b5e05cca880574d465e488df275bbf48743"
     },
     "graviss": {
-      "revision": "bb4fb91f1c9739a7a06549476286f5c5f9d7b559",
-      "dirty": false,
-      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      "revision": "743efca8556879ae64338780f3a6bdac5d75718c",
+      "dirty": true,
+      "workingTreeHash": "ca1f6cb1cacff63b091a640e67689b5e05cca880574d465e488df275bbf48743"
     },
     "graviss-sofistik": {
-      "revision": "57c5da5d524858c74a43e1eb5ad1aeb29fe8a5aa",
-      "dirty": false,
-      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      "revision": "0ffa1a6a13039e963e7335dc4e3f444642607f59",
+      "dirty": true,
+      "workingTreeHash": "a9d05d9a1110e5168860b3b8677c7a74395b712ba04166f3066f6533e6f449d6"
     },
     "one-theme": {
-      "revision": "7fbd047a87ecf1367c896b19ff270cdc28d319f7",
+      "revision": "828c35ac1816466699effa6f7cf7eedccc930ff9",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     }
@@ -55,11 +56,11 @@
     },
     {
       "file": "sofistik-model/model.grv",
-      "sha256": "470051029b173361ef21313741627c2852b87073f10baca7e6c6c0a4b0a6e9ad"
+      "sha256": "86ff6a4ab7c4041d40e5d55115bee7871fbca38c90579097412aaa554a230697"
     },
     {
       "file": "sofistik-model/notes.txt",
-      "sha256": "5ea8363277acbccddd892d61fcbf6ea9f6af64a2d7762058b14a80712996b180"
+      "sha256": "920c31ec3c74bd9c7ce2d2fd94f99250d6fdaf601f743b5b74d4d247cd06e60f"
     },
     {
       "file": "sofistik-model/sofistik.def",
@@ -69,10 +70,10 @@
   "images": [
     {
       "file": "demo.png",
-      "label": "Explore a real structural model in the Graviss viewport.",
+      "label": "Explore a truss model with section profiles in an orthographic overview.",
       "width": 1200,
       "height": 820,
-      "sha256": "4eb3ab9850b1c634d4cc7b98d784a0c91c81f0459fd0554772d1bbc2b92a82e8"
+      "sha256": "19e142f0acb6c9fedb3bf5de5e8d6ad9739d27848cb939e8f53ef4aee72a92fb"
     }
   ]
 }
