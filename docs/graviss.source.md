@@ -31,7 +31,7 @@ Return the provider object from that method. Graviss revokes it when the package
 
 ## Contract
 
-The following TypeScript-style block describes the service, provider sessions, and normalized model data. IDs are stable non-empty strings or finite numbers.
+The following TypeScript-style block describes the service, provider sessions, and normalized model data. IDs are stable non-empty strings or finite numbers. `filePath` is `null` for an unsaved view; in that case Graviss asks providers only after the user chooses an absolute `source` path. A provider must not infer a same-basename model without a view path. Once saved, the view path supplies the document's context as usual.
 
 ```ts
 type Id = string | number;
@@ -40,7 +40,7 @@ type Vector3 = [number, number, number];
 type SourceProvider = {
   id: Id;
   createSession(context: {
-    filePath: string;
+    filePath: string | null;
     viewDocument: GravissViewDocument;
   }): ModelSession | null | undefined;
 };

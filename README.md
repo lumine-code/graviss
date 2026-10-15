@@ -114,7 +114,7 @@ Commands available in `.graviss-panel`:
 
 ## Usage
 
-A `.grv` document stores view configuration and an optional source path. When the source is omitted, registered providers can resolve a supported model with the same basename. Graviss opens the view as a canvas; choose **Text Editor** from **Open With…** in the tree view to edit the same file as JSON.
+A `.grv` document stores view configuration and an optional source path. When the source is omitted, registered providers can resolve a supported model with the same basename. Graviss opens the view as a canvas; choose **Text Editor** from **Open…** in the tree view to edit the same file as JSON. Choose **Graviss** from **New…** to create an unsaved view, then use **Open Model Source** to select an existing model. New views contain no model data.
 
 These files are meant to be written by hand and by other tools, so everything in one is optional — the extension is what makes it a view — and a file holds only what someone set. What is left out is worked out: a pane is named after its file, a graphic after its position, a view with no camera frames the model. A change writes down itself and nothing else, so a file kept short stays short.
 
@@ -195,6 +195,7 @@ Override the public custom properties in your `styles.css` to adjust the toolbar
 
 - [`graviss.source`](docs/graviss.source.md): consumed to discover, open, and read FEM models supplied by source packages.
 - `navigation.adapter`: provided to expose named graphics to the navigation panel.
+- `launcher.provider` version `1.0.0`: provided through `provideLauncher()` to create an unsaved Graviss center item. Its `create({signal})` factory returns the live item without opening it or changing focus; the launcher owns placement.
 
 ## Contributing
 

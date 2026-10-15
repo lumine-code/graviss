@@ -71,6 +71,11 @@
     }
   },
   "providedServices": {
+    "launcher.provider": {
+      "versions": {
+        "1.0.0": "provideLauncher"
+      }
+    },
     "navigation.adapter": {
       "description": "Lists and activates named Graviss graphics in navigation-panel.",
       "versions": {
