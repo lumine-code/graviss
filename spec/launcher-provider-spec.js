@@ -193,4 +193,32 @@ describe("Graviss launcher provider", () => {
     const replacement = create();
     expect(main.viewers.has(replacement)).toBe(true);
   });
+
+  it("attaches the model-source chooser to a new view's auxiliary presentation", async () => {
+    const item = create();
+    const workspace = lumine.workspace;
+    const extra = await workspace.openEditorWindow({ show: false });
+    const mainDialog = spyOn(workspace.getMainWindow(), "showOpenDialog");
+    const extraDialog = spyOn(extra, "showOpenDialog").and.resolveTo({
+      canceled: true,
+      filePaths: [],
+    });
+    try {
+      await workspace.open(item, {
+        pane: extra.getEditorContainer().getActivePane(),
+        activatePane: false,
+        activateItem: false,
+      });
+      expect(workspace.getWindowForElement(item.element)).toBe(extra);
+      expect(await main.openModelSource(item)).toBe(false);
+      expect(extraDialog).toHaveBeenCalledOnceWith({
+        title: "Open FEM Model Source",
+        properties: ["openFile"],
+      });
+      expect(mainDialog).not.toHaveBeenCalled();
+      expect(item.viewDocument.getStoredData()).toEqual({});
+    } finally {
+      await workspace.discardEditorWindows();
+    }
+  });
 });
