@@ -40,6 +40,8 @@ describe("Graviss launcher provider", () => {
       await conditionPromise(() => !item.loading);
       expect(item.getPath()).toBeNull();
       expect(item.getTitle()).toBe("Untitled");
+      expect(item.getFileState()).toBe("unmodified");
+      expect(item.shouldPromptToSave()).toBe(false);
       expect(item.getSaveDialogOptions().defaultPath).toMatch(/Untitled\.grv$/);
       expect(item.getAllowedLocations()).toEqual(["center"]);
       expect(item.getDefaultLocation()).toBe("center");
@@ -85,12 +87,13 @@ describe("Graviss launcher provider", () => {
     expect(item.getURI()).toBe(filePath);
     expect(item.getTitle()).toBe("analysis.grv");
     expect(item.getFileState()).toBe("unmodified");
-    expect(JSON.parse(fs.readFileSync(filePath, "utf8"))).toEqual({});
+    expect(fs.readFileSync(filePath, "utf8")).toBe("");
     const restored = main.deserialize(item.serialize());
     items.push(restored);
     expect(restored.getPath()).toBe(filePath);
     expect(restored.getTitle()).toBe("analysis.grv");
     expect(restored.viewDocument.getStoredData()).toEqual({});
+    expect(restored.viewDocument.isImplicit()).toBe(true);
 
     restored.viewDocument.update((data) => {
       data.title = "Saved view";
@@ -103,12 +106,40 @@ describe("Graviss launcher provider", () => {
     expect(JSON.parse(fs.readFileSync(secondPath, "utf8"))).toEqual({ title: "Saved view" });
   });
 
+  it("restores an untouched new document without making it modified", () => {
+    const item = create();
+    const restored = main.deserialize(JSON.parse(JSON.stringify(item.serialize())));
+    items.push(restored);
+
+    expect(restored.getPath()).toBeNull();
+    expect(restored.getFileState()).toBe("unmodified");
+    expect(restored.shouldPromptToSave()).toBe(false);
+    expect(restored.viewDocument.isImplicit()).toBe(true);
+    expect(restored.viewDocument.getStoredData()).toEqual({});
+    expect(restored.canUndo()).toBe(false);
+  });
+
+  it("marks user changes modified and returns to clean when they are undone", () => {
+    const item = create();
+    item.viewDocument.update((data) => {
+      data.title = "Working view";
+    });
+    expect(item.getFileState()).toBe("modified");
+    expect(item.shouldPromptToSave()).toBe(true);
+    expect(item.undo()).toBe(true);
+    expect(item.getFileState()).toBe("unmodified");
+    expect(item.shouldPromptToSave()).toBe(false);
+    expect(item.viewDocument.isImplicit()).toBe(true);
+    expect(item.redo()).toBe(true);
+    expect(item.getFileState()).toBe("modified");
+  });
+
   it("restores an unsaved document with its edits and undo history", () => {
     const item = create();
     item.viewDocument.update((data) => {
       data.title = "Working view";
     });
-    const state = item.serialize();
+    const state = JSON.parse(JSON.stringify(item.serialize()));
     expect(state.viewDocument.filePath).toBeNull();
     const restored = main.deserialize(state);
     items.push(restored);
@@ -116,10 +147,20 @@ describe("Graviss launcher provider", () => {
     expect(restored.getURI()).toBe(item.getURI());
     expect(restored.getTitle()).toBe("Working view");
     expect(restored.viewDocument.getStoredData()).toEqual({ title: "Working view" });
+    expect(restored.getFileState()).toBe("modified");
     expect(restored.undo()).toBe(true);
     expect(restored.viewDocument.getStoredData()).toEqual({});
+    expect(restored.getFileState()).toBe("unmodified");
+    expect(restored.shouldPromptToSave()).toBe(false);
+    const undone = main.deserialize(JSON.parse(JSON.stringify(restored.serialize())));
+    items.push(undone);
+    expect(undone.getFileState()).toBe("unmodified");
+    expect(undone.redo()).toBe(true);
+    expect(undone.viewDocument.getStoredData()).toEqual({ title: "Working view" });
+    expect(undone.getFileState()).toBe("modified");
     expect(restored.redo()).toBe(true);
     expect(restored.viewDocument.getStoredData()).toEqual({ title: "Working view" });
+    expect(restored.getFileState()).toBe("modified");
   });
 
   it("shares a new document between pane copies and releases it after the final copy", async () => {

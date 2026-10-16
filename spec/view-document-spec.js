@@ -71,6 +71,27 @@ describe("GravissViewDocument", () => {
     expect(JSON.parse(fs.readFileSync(filePath, "utf8")).activeGraphic).toBe(1);
   });
 
+  it("keeps populated new documents and explicitly restored file states dirty", () => {
+    document = GravissViewDocument.restore({ data: { title: "Prepared view" } });
+    expect(document.getFileState()).toBe("modified");
+    expect(document.isImplicit()).toBe(false);
+    document.destroy();
+
+    for (const fileState of ["modified", "conflicted", "removed"]) {
+      document = GravissViewDocument.restore({ data: {}, fileState });
+      expect(document.getFileState()).toBe(fileState);
+      document.destroy();
+    }
+
+    document = GravissViewDocument.restore({
+      data: {},
+      fileState: "modified",
+      sourceHistory: { text: "{}\n" },
+    });
+    expect(document.getSourceBuffer().getText()).toBe("{}\n");
+    expect(document.getFileState()).toBe("modified");
+  });
+
   it("keeps its history buffer private and out of every editor registry", () => {
     const buildEditor = spyOn(lumine.workspace, "buildTextEditor").and.callThrough();
     const registerEditor = spyOn(lumine.textEditors, "add").and.callThrough();
