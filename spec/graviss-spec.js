@@ -90,6 +90,29 @@ describe("graviss", () => {
     await lumine.packages.deactivatePackage("graviss");
   });
 
+  it("previews repeated model backgrounds while its picker stays open", async () => {
+    const item = createFixtureViewer(MAIN_EXAMPLE);
+    try {
+      item.showBackgroundList();
+      await item.backgroundList.runAction("select-list:toggle-keep-open");
+      const button = item.element.querySelector('[data-action="background"]');
+
+      for (const appearance of ["white", "midnight", "paper"]) {
+        await item.backgroundList.selectItemById(appearance);
+        await item.backgroundList.confirmSelection();
+        expect(item.appearance).toBe(appearance);
+        expect(item.backgroundListHost.isVisible()).toBe(true);
+        expect(button.dataset.appearance).toBe(appearance);
+        expect(button.getAttribute("aria-expanded")).toBe("true");
+      }
+
+      item.backgroundListHost.cancel();
+      expect(button.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      item.destroy();
+    }
+  });
+
   it("opens a provider-backed view document", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     expect(item instanceof GravissView).toBe(true);
