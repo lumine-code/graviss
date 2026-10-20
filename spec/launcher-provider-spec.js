@@ -17,7 +17,13 @@ describe("Graviss launcher provider", () => {
     for (const item of items) item.destroy();
     await lumine.packages.deactivatePackage("graviss");
     await lumine.fileWatchClient.settlePendingTeardown();
-    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    // Let pending I/O and IPC teardown progress between Windows retry attempts.
+    await fs.promises.rm(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 50,
+    });
   });
 
   function create() {
