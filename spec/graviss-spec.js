@@ -1663,7 +1663,12 @@ describe("graviss", () => {
       registration.dispose();
       if (item) await lumine.workspace.paneForItem(item)?.destroyItem(item, true);
       await lumine.fileWatchClient.settlePendingTeardown();
-      fs.rmSync(directory, { recursive: true, force: true });
+      await fs.promises.rm(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 50,
+      });
     }
   });
 
@@ -3117,8 +3122,19 @@ describe("graviss", () => {
       }
       providerDisposable.dispose();
       await lumine.fileWatchClient.settlePendingTeardown();
-      fs.rmSync(directory, { recursive: true, force: true });
-      if (other) fs.rmSync(other, { recursive: true, force: true });
+      await fs.promises.rm(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 50,
+      });
+      if (other)
+        await fs.promises.rm(other, {
+          recursive: true,
+          force: true,
+          maxRetries: 20,
+          retryDelay: 50,
+        });
     }
   });
 
@@ -5727,7 +5743,12 @@ describe("graviss", () => {
       }
       providerDisposable.dispose();
       await lumine.fileWatchClient.settlePendingTeardown();
-      fs.rmSync(directory, { recursive: true, force: true });
+      await fs.promises.rm(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 50,
+      });
     }
   });
 
@@ -5847,7 +5868,12 @@ describe("graviss", () => {
         else if (!viewer.destroyed) viewer.destroy();
       }
       await lumine.fileWatchClient.settlePendingTeardown();
-      fs.rmSync(directory, { recursive: true, force: true });
+      await fs.promises.rm(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 50,
+      });
     }
   });
 
@@ -5885,7 +5911,12 @@ describe("graviss", () => {
         else if (!viewer.destroyed) viewer.destroy();
       }
       await lumine.fileWatchClient.settlePendingTeardown();
-      fs.rmSync(directory, { recursive: true, force: true });
+      await fs.promises.rm(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 50,
+      });
     }
   });
 

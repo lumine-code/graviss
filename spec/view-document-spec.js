@@ -25,7 +25,7 @@ describe("GravissViewDocument", () => {
   afterEach(async () => {
     document?.destroy();
     await lumine.fileWatchClient.disposeAll();
-    fs.rmSync(directory, {
+    await fs.promises.rm(directory, {
       recursive: true,
       force: true,
       maxRetries: 20,
