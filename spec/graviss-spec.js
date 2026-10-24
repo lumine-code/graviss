@@ -202,7 +202,7 @@ describe("graviss", () => {
     expect(viewCube.dataset.selectedView).toBe("");
     const axisGizmo = item.element.querySelector(".graviss-axis-gizmo");
     expect(item.renderer.axes.position.toArray()).toEqual([0, 0, 0]);
-    expect(axisGizmo.dataset.cameraOrientation).toMatch(/.+/);
+    expect(axisGizmo.dataset.cameraOrientation).toBeUndefined();
     expect(axisGizmo.hidden).toBe(true);
     const previousGraphic = item.element.querySelector('[data-action="previous-graphic"]');
     const nextGraphic = item.element.querySelector('[data-action="next-graphic"]');
@@ -2107,6 +2107,29 @@ describe("graviss", () => {
     expect(overlay.hidden).toBe(true);
   });
 
+  it("updates the screen axes only while the world axes are out of view", async () => {
+    const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
+    await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
+    const renderer = item.renderer;
+    const gizmo = renderer.orientationGizmo;
+    spyOn(renderer, "isViewportDrawable").and.returnValue(true);
+    const update = spyOn(gizmo, "update").and.callThrough();
+    renderer.paintFrame();
+    expect(gizmo.element.hidden).toBe(true);
+    expect(update).not.toHaveBeenCalled();
+
+    renderer.axes.position.set(1e8, 1e8, 1e8);
+    renderer.paintFrame();
+    expect(gizmo.element.hidden).toBe(false);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(gizmo.element.dataset.cameraOrientation).toMatch(/.+/);
+
+    renderer.setVisibility("axes", false);
+    renderer.paintFrame();
+    expect(gizmo.element.hidden).toBe(true);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it("turns the model about the element under the pointer", async () => {
     const item = await lumine.workspace.open(MAIN_EXAMPLE_URI, { searchAllPanes: true });
     await conditionPromise(() => item.renderer != null, "the Three.js scene to initialize");
@@ -2150,6 +2173,7 @@ describe("graviss", () => {
     const distanceBefore = positionBefore.distanceTo(targetBefore);
     const updateCamera = spyOn(item, "updateCamera").and.callThrough();
     const cameraBefore = item.serialize().viewDocument.data.graphics[0].camera;
+    const paintPivot = spyOn(renderer, "paintOrbitPivot").and.callThrough();
 
     // Pressing pins the pivot and moves nothing at all.
     send("pointerdown", over);
@@ -2167,6 +2191,14 @@ describe("graviss", () => {
     expect(Number.parseFloat(marker.style.left)).toBeCloseTo(pinned.x, 2);
     expect(Number.parseFloat(marker.style.top)).toBeCloseTo(pinned.y, 2);
     send("pointermove", { x: over.x + 120, y: over.y + 50 });
+    expect(paintPivot).toHaveBeenCalledTimes(1);
+    // A pinned point stays at the same pixel throughout the drag. Repainting
+    // it on every input event invalidates layout before the controls read it.
+    // Resizing still paints the marker against the new viewport dimensions.
+    renderer.resize();
+    expect(paintPivot).toHaveBeenCalledTimes(2);
+    expect(Number.parseFloat(marker.style.left)).toBeCloseTo(screenOf(pivot).x, 2);
+    expect(Number.parseFloat(marker.style.top)).toBeCloseTo(screenOf(pivot).y, 2);
     send("pointerup", { x: over.x + 120, y: over.y + 50 });
     expect(marker.hidden).toBe(true);
     expect(renderer.orbitPivot).toBeNull();
