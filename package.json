@@ -105,5 +105,13 @@
     "eslint-plugin-n": "^18.5.0",
     "globals": "^17.14.0",
     "prettier": "^3.9.10"
+  },
+  "overrides": {
+    "eslint@^10.14.0": {
+      "minimatch": "11.0.4"
+    },
+    "@eslint/config-array@0.23.5": {
+      "minimatch": "11.0.4"
+    }
   }
 }
