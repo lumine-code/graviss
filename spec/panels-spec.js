@@ -230,8 +230,10 @@ describe("the Graviss dock panels", () => {
     // Nothing open at all.
     expect(results.empty.hidden).toBe(false);
     expect(results.empty.textContent).toBe("The active item is not supported.");
-    expect(results.empty.tagName).toBe("BACKGROUND-TIPS");
-    expect(results.empty.querySelector("ul.centered.background-message")).not.toBeNull();
+    expect(results.empty.matches("div.graviss-panel-empty.panel-empty-state")).toBeTrue();
+    expect(
+      results.empty.querySelector("background-tips > ul.centered.background-message"),
+    ).not.toBeNull();
     expect(getComputedStyle(results.body).display).toBe("none");
 
     // A model, but one that carries no analysis - which is the ordinary case,
@@ -241,6 +243,17 @@ describe("the Graviss dock panels", () => {
     expect(results.empty.textContent).toMatch(/no analysis results/);
     expect(results.body.hidden).toBe(true);
     expect(getComputedStyle(results.body).display).toBe("none");
+    await results.show();
+    results.element.style.height = "240px";
+    results.element.style.width = "320px";
+    const header = results.context.getBoundingClientRect();
+    const empty = results.empty.getBoundingClientRect();
+    const tips = results.empty.querySelector("background-tips").getBoundingClientRect();
+    expect(results.context.hidden).toBeFalse();
+    expect(empty.height).toBeGreaterThan(0);
+    expect(empty.top).toBeGreaterThanOrEqual(header.bottom);
+    expect(tips.top).toBeGreaterThanOrEqual(header.bottom);
+    expect(empty.bottom).toBeLessThanOrEqual(results.element.getBoundingClientRect().bottom);
   });
 
   it("follows the model in the centre, and does not let go of it when clicked", async () => {
