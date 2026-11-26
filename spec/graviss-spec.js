@@ -247,12 +247,15 @@ describe("graviss", () => {
       toolbarButtons.every(
         (button) =>
           button.classList.contains("graviss-toolbar-button") &&
+          button.classList.contains("icon-button") &&
           button.querySelector(":scope > svg.icon.graviss-toolbar-icon[aria-hidden='true']"),
       ),
     ).toBe(true);
     expect(
       toolbarButtons.every((button) =>
-        [...button.classList].every((className) => !className.startsWith("icon-")),
+        [...button.classList].every(
+          (className) => className === "icon-button" || !className.startsWith("icon-"),
+        ),
       ),
     ).toBe(true);
     expect(
