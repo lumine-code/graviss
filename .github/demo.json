@@ -75,5 +75,11 @@
       "height": 820,
       "sha256": "1691ad14e93ef722a65992000f3888763e0616eb34797afdfbdd998784904e4a"
     }
+  ],
+  "externalInputs": [
+    {
+      "kind": "sofistik-cdb",
+      "sha256": "2c615ee7697b120bbd198e4b7c7b88b432eb61dbf300481c8bcf1b448449e7e3"
+    }
   ]
 }
